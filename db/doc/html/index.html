@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+    <title>Руководство разработчика базы данных</title>
+
+    <link rel="stylesheet" type="text/css" href="./files/js/bootstrap/3.3.7/css/bootstrap.min.css">
+    <link rel="stylesheet" type="text/css" href="./css/bootstrap-docs.css">
+    <link rel="stylesheet" type="text/css" href="./css/fonts.css">
+    <link rel="stylesheet" type="text/css" href="./css/main.css">
+    <link rel="stylesheet" type="text/css" href="./css/docs.css">
+    <link rel="stylesheet" type="text/css" href="./css/prettify.css">
+  </head>
+
+  <body>
+    <div id="wrapper">
+      <div class="container ny_bg">
+        <div class="hidden-print visible-xs">
+          <div class="navbar navbar-default grme" role="navigation">
+
+            <div class="navbar-header visible-xs">
+              <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".clps2">
+                <span class="sr-only">Переключатель навигации</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+              </button>
+              <a class="navbar-brand" data-toggle="collapse" data-target=".clps2">Руководство разработчика</a>
+            </div>
+
+            <div class="navbar-collapse collapse clps2">
+              <ul class="nav nav-justified" id="main-menu">
+                <li><a href="#Ref1">1. Описание</a></li>
+                <li><a href="#Ref11">1.1. Структура каталогов</a></li>
+                <li><a href="#Ref12">1.2. Требования</a></li>
+                <li><a href="#Ref2">2. Установка</a></li>
+                <li><a href="#Ref21">2.1. Windows</a></li>
+                <li><a href="#Ref22">2.2. Linux</a></li>
+                <li><a href="#Ref3">3. Настройка</a></li>
+                <li><a href="#Ref31">3.1. Windows</a></li>
+                <li><a href="#Ref32">3.2. Linux</a></li>
+                <li><a href="#Ref4">4. База данных</a></li>
+                <li><a href="#Ref41">4.1. Введение</a></li>
+                <li><a href="#Ref42">4.2. Таблицы</a></li>
+                <li><a href="#Ref43">4.3. Представления</a></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <h1 class="title"><span class="glyphicon glyphicon-book" aria-hidden="true"></span> Руководство разработчика</h1>
+        <div class="row">
+          <div class="col-xs-12 col-md-9">
+
+            <h1 class="title" style="margin-top: 0" id="Ref1"><strong class="text-number">1.</strong> Описание</h1>
+
+            <p class="indent">База данных написана для <strong>СУБД PosrgeSQL</strong>.</p>
+
+            <h1 class="title" id="Ref11"><strong class="text-number">1.1.</strong> Структура каталогов</h1>
+            <pre class="prettyprint linenums highlight prettyprinted"><ol class="linenums"><li class="L0"><span class="com">bin/        содержит исполняемые файлы для автоматизации установки</span></li><li class="L1"><span class="com">doc/        содержит роководство разработчика</span></li><li class="L2"><span class="com">log/        содержит файлы с отчетами (логами) установки</span></li><li class="L3"><span class="com">scripts/    содержит скрипты для автоматизации установки</span></li><li class="L4"><span class="com">sql/        содержит sql файлы для создания базы данных</span></li></ol></pre>
+
+            <h1 class="title" id="Ref12"><strong class="text-number">1.2.</strong> Требования</h1>
+
+            <p class="indent">Минимальные требования, чтобы на сервере была установлена СУБД PostgreSQL версии 9.4 и выше.</p>
+
+            <h1 class="title" id="Ref2"><strong class="text-number">2.</strong> Установка</h1>
+
+            <h1 class="title" id="Ref21"><strong class="text-number">2.1.</strong> Операционная система семейства Windows</h1>
+
+            <p class="indent">Запустите командный файл <code class="gray">install.cmd</code> и следуйте указаниям:</p>
+
+            <pre class="prettyprint linenums highlight prettyprinted"><ol class="linenums"><li class="L0"><span class="com">install.cmd</span></li></ol></pre>
+
+            <div class="bs-callout bs-callout-danger" style="margin-bottom: 8px">
+              <h4>Внимание</h4>
+              <p>Для работы командного файла нужен файл bin/Choice.exe.</p>
+            </div>
+
+            <h1 class="title" id="Ref22"><strong class="text-number">2.2.</strong> Операционная система семейства Linux</h1>
+
+            <h4>Настройки:</h4>
+            <p class="indent">Прописать наименование базы данных в файле <code class="gray">sql/dbname.conf</code></p>
+
+            <h4>Команды:</h4>
+            <p class="indent">Для создания НОВОЙ базы данных, пользователей (kernel, daemon и admin), таблиц, функций и прочего, выполнить:</p>
+            <pre class="prettyprint linenums highlight prettyprinted"><ol class="linenums"><li class="L0"><span class="com">cd sql/</span></li><li class="L1"><span class="com">sudo -u postgres -H psql -d template1 -f make.conf 2>'../log/error.log'</span></li></ol></pre>
+
+            <p class="indent">Для создания, в уже созданной базе данных, только таблиц, функций и прочего, выполнить:</p>
+            <pre class="prettyprint linenums highlight prettyprinted"><ol class="linenums"><li class="L0"><span class="com">cd sql/</span></li><li class="L1"><span class="com">sudo -u postgres -H psql -d template1 -f kernel.conf 2>'../log/error.log'</span></li></ol></pre>
+
+            <h1 class="title" id="Ref3"><strong class="text-number">3.</strong> Настройка</h1>
+
+            <h1 class="title" id="Ref31"><strong class="text-number">3.1.</strong> Операционная система семейства Windows</h1>
+
+            <p class="indent">Внесите необходимые изменения в файле <code class="gray">scripts/sets.cmd</code></p>
+
+            <p class="indent">Указать в файле настроек <code class="gray">&lt;%INSTALLPATH%&gt;\PostgreSQL\&lt;version&gt;\data\postgresql.conf</code>:</p>
+            <ol type="1">
+              <li>
+                <p>Пути поиска схемы <code class="gray">kernel</code>:</p>
+                <pre class="prettyprint linenums highlight prettyprinted"><ol class="linenums"><li class="L0"><span class="com">search_path = '"$user", kernel, public'	# schema names</span></li></ol></pre>
+              </li>
+              <li>
+                <p>Секретный ключ, для шифровния ключа сесии:</p>
+                <pre class="prettyprint linenums highlight prettyprinted"><ol class="linenums"><li class="L0"><span class="com"># Add settings for extensions here</span></li><li class="L1"><span class="com">token.secret_key = 'произвольная комбинация 20-ти символов'</span></li></ol></pre>
+              </li>
+            </ol>
+
+            <h1 class="title" id="Ref32"><strong class="text-number">3.2.</strong> Операционная система семейства Linux</h1>
+
+            <p class="indent">Прописать наименование базы данных в файле <code class="gray">sql/dbname.conf</code></p>
+
+            <p class="indent">Указать в файле настроек <code class="gray">/etc/postgresql/&lt;version&gt;/main/postgresql.conf</code>:</p>
+            <ol type="1">
+              <li>
+                <p>Пути поиска схемы <code class="gray">kernel</code>:</p>
+                <pre class="prettyprint linenums highlight prettyprinted"><ol class="linenums"><li class="L0"><span class="com">search_path = '"$user", kernel, public'	# schema names</span></li></ol></pre>
+              </li>
+              <li>
+                <p>Секретный ключ, для шифровния ключа сесии:</p>
+                <pre class="prettyprint linenums highlight prettyprinted"><ol class="linenums"><li class="L0"><span class="com"># Add settings for extensions here</span></li><li class="L1"><span class="com">token.secret_key = 'произвольная комбинация 20-ти символов'</span></li></ol></pre>
+              </li>
+            </ol>
+
+            <p class="indent">Указать в файле настроек <code class="gray">/etc/postgresql/&lt;version&gt;/main/pg_hba.conf</code>:</p>
+            <pre class="prettyprint linenums highlight prettyprinted"><ol class="linenums"><li class="L0"><span class="com"># TYPE  DATABASE        USER            ADDRESS                 METHOD</span></li><li class="L1"><span class="com">local	all		kernel					md5</span></li><li class="L2"><span class="com">local	all		admin					md5</span></li><li class="L3"><span class="com">local	all		daemon					md5</span></li><li class="L4"><span class="com"> </span></li><li class="L5"><span class="com">host	all		kernel		127.0.0.1/32		md5</span></li><li class="L6"><span class="com">host	all		admin		127.0.0.1/32		md5</span></li><li class="L7"><span class="com">host	all		daemon		127.0.0.1/32		md5</span></li></ol></pre>
+
+            <h1 class="title" id="Ref4"><strong class="text-number">4.</strong> База данных</h1>
+
+            <p class="indent">База данных условно разделена на следующие модули:</p>
+
+            <ol type="1">
+              <li>Ядро системы;</li>
+              <li>Модуль безопасности;</li>
+              <li>Генератор отчётов;</li>
+            </ol>
+
+            <h1 class="title" id="Ref41"><strong class="text-number">4.1.</strong> Введение</h1>
+
+            <p class="indent">Прежде чем понять, как устроено ядро системы, нужно дать определение двум понятиям это - <b><i>«Объект»</i></b> и <b><i>«Документооборот»</i></b>.</p>
+
+            <div class="bs-callout bs-callout-info" style="margin-bottom: 16px">
+              <h4>Объект</h4>
+              <p>Это физическая или логическая сущность, которую можно представить в виде единого целого. Заявка - это объект, клиент - это объект, договор - это объект, Лицевой счёт, на котором отражается финансовая информация клиента это тоже объект и даже адрес клиента также можно представить в виде объекта.</p>
+            </div>
+
+            <p class="indent">Объект обладает рядом характеристик, таких как: <b><i>«класс»</i></b>, <b><i>«тип»</i></b>, <b><i>«свойство»</i></b> и <b><i>«состояние»</i></b>. <mark>Объект в системе разделён на два класса <b>документ</b> и <b>справочник</b></mark>.</p>
+            <p class="indent">Документ обладает свойством <b><i>«подразделение»</i></b>. <b>Подразделение</b> ограничивает область видимости документа. Справочник не обладает таким свойством следовательно, доступен всем подразделениям.</p>
+            <p class="indent">Над объектом можно совершать <b><i>«действия»</i></b>, которые вызывают в системе <b><i>«события»</i></b>, которые, в свою очередь, могут привести к изменению <b><i>«состояния»</i></b> объекта. Всё это и является механизмом работы документооборота системы.</p>
+
+            <div class="bs-callout bs-callout-info" style="margin-bottom: 8px">
+              <h4>Документооборот системы</h4>
+              <p>Это последовательность совершаемых над объектом действий, приводящих к возникновению событий, способных повлиять на состояние объекта. Последовательность переходов из одного состояния объекта в другое называется «жизненным циклом».</p>
+            </div>
+
+            <div class="bs-callout bs-callout-info" style="margin-bottom: 16px">
+              <h4>Тип класса объекта</h4>
+              <p>Это характеристика определяющая принадлежность объекта к той или иной логической сущности.</p>
+            </div>
+
+            <p class="indent"><strong>Тип класса объекта</strong> задаётся разработчиком системы и в отличие от других характеристик объекта не может быть изменен пользователем системы. На данный момент система обладает следующим списком типов класса объекта:</p>
+            <ul> 
+              <li><code>obj</code> Объект;<code class="gray"> -- абстрактный</code></li>
+              <li><code>doc</code> Документ;<code class="gray"> -- абстрактный</code></li>
+              <li><code>dic</code> Справочник;<code class="gray"> -- абстрактный</code></li>
+              <li><code>cln</code> Клиент;</li>
+            </ul>
+
+            <p class="indent">Тип класса объекта может быть <i>абстрактным</i>, создать документ с абстрактным типом класса объекта невозможно. Абстрактные типы класса объекта необходимы для создания групп типов класса объекта, и введены для внутреннего использования.</p>
+
+            <div class="bs-callout bs-callout-info" style="margin-bottom: 16px">
+              <h4>Класс объекта</h4>
+              <p>Это условное разделение объекта по тем или иным признакам.</p>
+            </div>
+
+            <p class="indent"><strong>Класс объекта</strong> характеризует сам объект. На примере заявки это выглядит так: Заявка — это объект и её условно можно разделить на заявку, выезд, заказ, отзыв и запрос. Клиентов можно разделить на обычных и VIP. Все эти условные деления и являются классами объекта. Класс объекта в отличие от типа класса объекта может быть создан и пользователем системы по его собственному усмотрению.</p>
+            <p class="indent">Классы объекта создаются в виде дерева, т.е. имеют иерархическую структуру. Для каждого не абстрактного типа класса объекта существует как минимум один класс объекта. Для каждого класса объекта настраиваются своя собственная схема документооборота, т.е. формируется список, в каких именно состояниях может находиться объект. Для каждого состояния создается список доступных действий, для каждого действия создается список событий и настраивается таблица переходов из одного состояния в другое т.е. «жизненный цикл».</p>
+            <p class="indent">Класс объекта так же как и тип класса объекта может быть <i>абстрактным</i>, создать документ с абстрактным классом объекта невозможно.</p>
+            <p class="indent">После создания базы данных в системе будут доступны следующие классы объектов:</p>
+
+            <ul> 
+              <li>
+                <code>obj</code> Объекты: <code class="gray"> -- абстрактный</code>
+                <ul>
+                  <li>
+                    <code>doc</code> Документы: <code class="gray"> -- абстрактный</code>
+                    <ul>
+                      <li>
+                        <code>cln</code> Клиент: <code class="gray"> -- абстрактный</code>
+                        <ul>
+                          <li><code>cln:leg</code> Юридическое лицо;</li>
+                          <li><code>cln:nat</code> Физическое лицо;</li>
+                          <li><code>cln:ind</code> Индивидуальный предприниматель;</li>
+                        </ul>
+                      </li>
+                    </ul>
+                  </li>
+                </ul>
+                <ul>
+                  <li>
+                    <code>dic</code> Справочники: <code class="gray"> -- абстрактный</code>
+                    <ul>
+                      <li>
+                        <code>adr</code> Адреса: <code class="gray"> -- абстрактный</code>
+                        <ul>
+                          <li><code>adr:adr</code> Адрес;</li>
+                        </ul>
+                      </li>
+                      <li>
+                        <code>pcl</code> Календарь: <code class="gray"> -- абстрактный</code>
+                        <ul>
+                          <li><code>pcl:wrk</code> Календарь рабочих дней;</li>
+                        </ul>
+                      </li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+
+            <p class="indent">Каждый объект в системе находиться в том или ином состоянии. Состояние объекта привязывается к классу объекта. Список состояний для каждого класса объектов индивидуален и может быть настроен пользователем по своему собственному усмотрению.</p>
+
+            <div class="bs-callout bs-callout-info" style="margin-bottom: 16px">
+              <h4>Тип состояния объекта</h4>
+              <p>Тип для состояний объекта.</p>
+            </div>
+
+            <p class="indent">В системе всего четыре типа состояния объекта:</p>
+
+            <ul>
+              <li><code>created</code> Создан;</li>
+              <li><code>enabled</code> Включен;</li>
+              <li><code>disabled</code> Отключен;</li>
+              <li><code>deleted</code> Удалён.</li>
+            </ul>
+
+            <div class="bs-callout bs-callout-info" style="margin-bottom: 16px">
+              <h4>Состояние объекта</h4>
+              <p>Это промежуточное звено в цепи документооборота системы.</p>
+            </div>
+
+            <p class="indent">Каждому из типов состояния должно соответствовать как минимум одно состояние объекта из чего следует, что каждый объект может находиться как минимум в четырех состояниях. Типы состояний объекта недоступны для изменения пользователю системы, но на базе этих типов пользователь может создать сколько угодно собственных состояний объекта. Первоначальное состояние любого нового объекта в системе это – «Создан». Для каждого состояния объекта задается определенный список действий. Переход из одного состояния объекта в другое происходить только при совершении над ним определенного действия.</p>
+
+            <div class="bs-callout bs-callout-info" style="margin-bottom: 16px">
+              <h4>Действия</h4>
+              <p>Это визуальная часть в цепи документооборота системы. Именно действия отображаются в интерфейсе пользователя в виде кнопок и элементов меню.</p>
+            </div>
+
+            <p class="indent"><strong>Действие</strong>, совершаемое над объектом также, как и состояния объекта задается для каждого класса объекта и формируется из заданного разработчиком системы списка.</p>
+            <p class="indent">На данный момент список действий выглядит следующим образом:</p>
+
+            <ul>
+              <li><code>anything</code> Ничто;
+              <li><code>create</code> Создать;
+              <li><code>open</code> Открыть;
+              <li><code>edit</code> Изменить;
+              <li><code>save</code> Сохранить;
+              <li><code>enable</code> Включить;
+              <li><code>disable</code> Отключить;
+              <li><code>delete</code> Удалить;
+              <li><code>restore</code> Восстановить;
+              <li><code>drop</code> Уничтожить;
+              <li><code>start</code> Запустить;
+              <li><code>stop</code> Остановить;
+              <li><code>check</code> Проверить;
+              <li><code>cancel</code> Отменить;
+            </ul>
+
+            <p class="indent">На основе заданных действий путем добавления новых или переопределения уже имеющихся действий, для каждого класса объектов, пользователь системы формирует свой собственный список действий, совершаемых над этим объектом. Для каждого действия создается список <b>событий</b>.</p>
+
+            <div class="bs-callout bs-callout-info" style="margin-bottom: 16px">
+              <h4>Событие объекта</h4>
+              <p>Это реакция на совершаемое над объектом действие.</p>
+            </div>
+
+            <p class="indent">К каждому событию объекта привязывается написанные на языке PL/pgSQL процедуры. При возникновении события ядро системы начинает поочередно выполнять код в привязанных к событию процедурах. Выполняемый код может быть абсолютно любым, и иметь разную смысловую нагрузку будь то проверка объекта на переход из одного состояния в другое или информирование пользователя о неправильно заполненных полях.</p>
+            <p class="indent">Переход объекта из одного состояния в другое, согласно настроенного документооборота, происходит при вызове функции <code class="gray">ChangeObjectState()</code>.</p>
+
+            <p class="indent">Для того, чтобы совершить действие над объектом (включить, выключить, удалить, уничтожить) необходимо вызвать функцию <code class="gray">ExecuteObjectAction(pObject, pAction)</code>.</p>
+
+            <h1 class="title" id="Ref42"><strong class="text-number">4.2.</strong> Таблицы</h1>
+
+            <table class="table table-bordered table-condensed table-header" style="font-size: 85%">
+              <thead>
+                <tr>
+                  <th style="width:20%;">Наименование</th>
+                  <th style="width:60%;">Описание</th>
+                  <th style="width:20%;">Файл</th>
+                </tr>
+              </thead>
+              <tbody>
+              </tbody>
+            </table>
+
+            <h1 class="title" id="Ref43"><strong class="text-number">4.3.</strong> Представления</h1>
+
+            <table class="table table-bordered table-condensed table-header" style="font-size: 85%">
+              <thead>
+                <tr>
+                  <th style="width:20%;">Наименование</th>
+                  <th style="width:60%;">Описание</th>
+                  <th style="width:20%;">Файл</th>
+                </tr>
+              </thead>
+              <tbody>
+              </tbody>
+            </table>
+            <a href="#top" class="back-to-top">Наверх</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="footer">
+      <div class="container">
+        <hr>
+        <div class="row">
+          <div class="col-xs-12 text-center text-muted">
+            <div class="pull-left">
+              <a href="#" class="btn btn-default btn-xs scroll-top"><span class="glyphicon glyphicon-chevron-up"></span> Наверх</a>
+            </div>
+            <div class="pull-right">
+              <a href="#" class="btn btn-default btn-xs scroll-top">Наверх <span class="glyphicon glyphicon-chevron-up"></span></a>
+            </div>
+            <div style="margin-top: 1px">
+              <div class="footera"><small>&copy; 2017 ООО &laquo;Байт-Энерго&raquo;</small></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add jQuery lib -->
+    <script type="text/javascript" src="./files/js/jquery.min.js"></script>
+
+    <!-- Add BootStrap -->
+    <script type="text/javascript" src="./files/js/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+
+    <!-- Add Docs -->
+    <script type="text/javascript" src="./files/js/docs.min.js"></script>
+  </body>
+</html>

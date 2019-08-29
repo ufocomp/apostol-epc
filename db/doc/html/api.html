@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+    <title>API базы данных</title>
+
+    <link rel="stylesheet" type="text/css" href="./files/js/bootstrap/3.3.7/css/bootstrap.min.css">
+    <link rel="stylesheet" type="text/css" href="./css/bootstrap-docs.css">
+    <link rel="stylesheet" type="text/css" href="./css/fonts.css">
+    <link rel="stylesheet" type="text/css" href="./css/main.css">
+    <link rel="stylesheet" type="text/css" href="./css/docs.css">
+    <link rel="stylesheet" type="text/css" href="./css/prettify.css">
+  </head>
+
+  <body>
+    <div id="wrapper">
+      <div class="container ny_bg">
+        <div class="hidden-print visible-xs">
+          <div class="navbar navbar-default grme" role="navigation">
+
+            <div class="navbar-header visible-xs">
+              <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".clps2">
+                <span class="sr-only">Переключатель навигации</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+              </button>
+              <a class="navbar-brand" data-toggle="collapse" data-target=".clps2">Руководство разработчика</a>
+            </div>
+
+            <div class="navbar-collapse collapse clps2">
+              <ul class="nav nav-justified" id="main-menu">
+                <li><a href="#Ref01">1. Маршруты</a></li>
+                <li><a href="#Ref011">1.1. Подключение</a></li>
+                <li><a href="#Ref0111">1.1.1. /login</a></li>
+                <li><a href="#Ref0112">1.1.2. /logout</a></li>
+                <li><a href="#Ref0113">1.1.3. /whoami</a></li>
+                <li><a href="#Ref012">1.2. Текущие значения</a></li>
+                <li><a href="#Ref0121">1.2.1. /cur/session</a></li>
+                <li><a href="#Ref0122">1.2.2. /cur/user</a></li>
+                <li><a href="#Ref0123">1.2.3. /cur/userid</a></li>
+                <li><a href="#Ref0124">1.2.4. /cur/username</a></li>
+                <li><a href="#Ref0125">1.2.5. /cur/operdate</a></li>
+                <li><a href="#Ref0126">1.2.6. /cur/language</a></li>
+                <li><a href="#Ref013">1.3. Справочники</a></li>
+                <li><a href="#Ref0131">1.3.1. /dic/class</a></li>
+                <li><a href="#Ref0132">1.3.2. /dic/state</a></li>
+                <li><a href="#Ref014">1.4. Реестр</a></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <h1 class="title"><span class="glyphicon glyphicon-book" aria-hidden="true"></span> API базы данных</h1>
+        <div class="row">
+          <div class="col-xs-12 col-md-9">
+
+            <div class="bs-callout bs-callout-danger" style="margin-bottom: 8px">
+              <h4>Внимание</h4>
+              <p>Доступ к API функциям есть только у пользователя <code>daemon</code>.</p>
+            </div>
+
+            <h1 class="title" style="margin-top: 0" id="Ref01"><strong class="text-number">1.</strong> Маршруты</h1>
+
+            <h1 class="title" style="margin-top: 0" id="Ref011"><strong class="text-number">1.1.</strong> Подключение</h1>
+
+            <h1 class="title" style="margin-top: 0" id="Ref0111"><strong class="text-number">1.1.1.</strong> /login</h1>
+
+            <p class="indent">Аутентификация пользователя в системе.</p>
+
+            <div style="padding-bottom: 20px">
+              <table class="table" style="font-size: 85%">
+                <thead>
+                  <tr>
+                    <th colspan="2">Входящий параметр</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>JSON объект:</td>
+                    <td align="center">Да</td>
+                  </tr>
+                  <tr>
+                    <td>Массив JSON объектов:</td>
+                    <td align="center">Нет</td>
+                  </tr>
+                  <tr>
+                    <td>Может быть пустым или отсутствовать:</td>
+                    <td align="center">Нет</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <table class="table table-bordered table-condensed table-header" style="font-size: 85%">
+              <thead>
+                <tr>
+                  <th colspan="4">Расшифровка входящего JSON объекта</th>
+                </tr>
+              </thead>
+              <thead>
+                <tr>
+                  <th style="width:20%;">Ключ</th>
+                  <th style="width:20%;">Тип</th>
+                  <th style="width:20%;">Обязательный</th>
+                  <th style="width:40%;">Описание</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>username</td>
+                  <td align="center">Строка</td>
+                  <td align="center">Да/Нет</td>
+                  <td>Имя пользователя. Игнорируется если указан ключ "session".</td>
+                </tr>
+                <tr>
+                  <td>password</td>
+                  <td align="center">Строка</td>
+                  <td align="center">Да/Нет</td>
+                  <td>Пароль. Обязательный если указан ключ "username".</td>
+                </tr>
+                <tr>
+                  <td>session</td>
+                  <td align="center">Строка</td>
+                  <td align="center">Да/Нет</td>
+                  <td>Ключ сессии. Если указан, то ключи "username" и "password" игнорируются.</td>
+                </tr>
+                <tr>
+                  <td>host</td>
+                  <td align="center">Строка</td>
+                  <td align="center">Да</td>
+                  <td>IP-адрес клиента.</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h1 class="title" style="margin-top: 0" id="Ref0112"><strong class="text-number">1.1.2.</strong> /logout</h1>
+
+            <p class="indent">Выход из системы.</p>
+
+            <div style="padding-bottom: 20px">
+              <table class="table" style="font-size: 85%">
+                <thead>
+                  <tr>
+                    <th colspan="2">Входящий параметр</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>JSON объект:</td>
+                    <td align="center">Да</td>
+                  </tr>
+                  <tr>
+                    <td>Массив JSON объектов:</td>
+                    <td align="center">Нет</td>
+                  </tr>
+                  <tr>
+                    <td>Может быть пустым или отсутствовать:</td>
+                    <td align="center">Нет</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <table class="table table-bordered table-condensed table-header" style="font-size: 85%">
+              <thead>
+                <tr>
+                  <th colspan="4">Расшифровка входящего JSON объекта</th>
+                </tr>
+              </thead>
+              <thead>
+                <tr>
+                  <th style="width:20%;">Ключ</th>
+                  <th style="width:20%;">Тип</th>
+                  <th style="width:20%;">Обязательный</th>
+                  <th style="width:40%;">Описание</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>session</td>
+                  <td align="center">Строка</td>
+                  <td align="center">Да</td>
+                  <td>Ключ сессии.</td>
+                </tr>
+                <tr>
+                  <td>logoutall</td>
+                  <td align="center">Логический</td>
+                  <td align="center">Нет</td>
+                  <td>Если "true", то будет произведён выход из всех открытых сессий пользователя.</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h1 class="title" style="margin-top: 0" id="Ref0113"><strong class="text-number">1.1.3.</strong> /whoami</h1>
+
+            <p class="indent">Возвращает данные авторизированного пользователя системы.</p>
+
+            <div style="padding-bottom: 20px">
+              <table class="table" style="font-size: 85%">
+                <thead>
+                  <tr>
+                    <th colspan="2">Входящий параметр</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Может быть пустым или отсутствовать:</td>
+                    <td align="center">Да</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h1 class="title" style="margin-top: 0" id="Ref012"><strong class="text-number">1.2.</strong> Текущие значения</h1>
+
+            <h1 class="title" style="margin-top: 0" id="Ref0121"><strong class="text-number">1.2.1</strong> /cur/session</h1>
+            <h1 class="title" style="margin-top: 0" id="Ref0122"><strong class="text-number">1.2.2</strong> /cur/user</h1>
+            <h1 class="title" style="margin-top: 0" id="Ref0123"><strong class="text-number">1.2.3</strong> /cur/userid</h1>
+            <h1 class="title" style="margin-top: 0" id="Ref0124"><strong class="text-number">1.2.4</strong> /cur/username</h1>
+            <h1 class="title" style="margin-top: 0" id="Ref0125"><strong class="text-number">1.2.5</strong> /cur/operdate</h1>
+            <h1 class="title" style="margin-top: 0" id="Ref0126"><strong class="text-number">1.2.6</strong> /cur/department</h1>
+            <h1 class="title" style="margin-top: 0" id="Ref0127"><strong class="text-number">1.2.7</strong> /cur/workplace</h1>
+            <h1 class="title" style="margin-top: 0" id="Ref0128"><strong class="text-number">1.2.8</strong> /cur/language</h1>
+
+            <h1 class="title" style="margin-top: 0" id="Ref013"><strong class="text-number">1.3.</strong> Справочники</h1>
+
+            <h1 class="title" style="margin-top: 0" id="Ref0131"><strong class="text-number">1.3.1.</strong> /dic/action</h1>
+            <h1 class="title" style="margin-top: 0" id="Ref0132"><strong class="text-number">1.3.2.</strong> /dic/class</h1>
+            <h1 class="title" style="margin-top: 0" id="Ref0133"><strong class="text-number">1.3.3.</strong> /dic/type</h1>
+            <h1 class="title" style="margin-top: 0" id="Ref0134"><strong class="text-number">1.3.4.</strong> /dic/state</h1>
+
+            <h1 class="title" style="margin-top: 0" id="Ref014"><strong class="text-number">1.4.</strong> Действия (методы)</h1>
+
+            <h1 class="title" style="margin-top: 0" id="Ref0141"><strong class="text-number">1.4.1.</strong> /action/run</h1>
+            <h1 class="title" style="margin-top: 0" id="Ref0142"><strong class="text-number">1.4.2.</strong> /method/get</h1>
+            <h1 class="title" style="margin-top: 0" id="Ref0143"><strong class="text-number">1.4.3.</strong> /method/run</h1>
+
+            <h1 class="title" style="margin-top: 0" id="Ref015"><strong class="text-number">1.5.</strong> Объект</h1>
+
+            <h1 class="title" style="margin-top: 0" id="Ref0151"><strong class="text-number">1.5.1.</strong> /object/class</h1>
+            <h1 class="title" style="margin-top: 0" id="Ref0152"><strong class="text-number">1.5.2.</strong> /object/type</h1>
+            <h1 class="title" style="margin-top: 0" id="Ref0153"><strong class="text-number">1.5.3.</strong> /object/state</h1>
+            <h1 class="title" style="margin-top: 0" id="Ref0154"><strong class="text-number">1.5.4.</strong> /object/file</h1>
+
+            <h1 class="title" style="margin-top: 0" id="Ref016"><strong class="text-number">1.6.</strong> Клиент</h1>
+
+            <h1 class="title" style="margin-top: 0" id="Ref0161"><strong class="text-number">1.6.1.</strong> /client/type/lst</h1>
+            <h1 class="title" style="margin-top: 0" id="Ref0162"><strong class="text-number">1.6.2.</strong> /client/method</h1>
+            <h1 class="title" style="margin-top: 0" id="Ref0163"><strong class="text-number">1.6.3.</strong> /client/count</h1>
+
+            <p class="indent">Количество.</p>
+
+            <div style="padding-bottom: 20px">
+              <table class="table" style="font-size: 85%">
+                <thead>
+                  <tr>
+                    <th colspan="2">Входящий параметр</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>JSON объект:</td>
+                    <td align="center">Да</td>
+                  </tr>
+                  <tr>
+                    <td>Массив JSON объектов:</td>
+                    <td align="center">Да</td>
+                  </tr>
+                  <tr>
+                    <td>Может быть пустым или отсутствовать:</td>
+                    <td align="center">Да</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <table class="table table-bordered table-condensed table-header" style="font-size: 85%">
+              <thead>
+                <tr>
+                  <th colspan="4">Расшифровка входящего JSON объекта</th>
+                </tr>
+              </thead>
+              <thead>
+                <tr>
+                  <th style="width:20%;">Ключ</th>
+                  <th style="width:20%;">Тип</th>
+                  <th style="width:20%;">Обязательный</th>
+                  <th style="width:40%;">Описание</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>search</td>
+                  <td align="center">Массив JSON объектов</td>
+                  <td align="center">Нет</td>
+                  <td>Позволяет формировать условия для отбора данных.</td>
+                </tr>
+                <tr>
+                  <td>filter</td>
+                  <td align="center">JSON объект</td>
+                  <td align="center">Нет</td>
+                  <td>Фильтр для отбора данных в виде пары ключ/значение. В качестве ключа указывается имя поля. "filter" является краткой формой "search".</td>
+                </tr>
+                <tr>
+                  <td>reclimit</td>
+                  <td align="center">Число</td>
+                  <td align="center">Нет</td>
+                  <td>Если указывается число "reclimit", в результате возвращается не больше заданного числа строк (меньше может быть, если сам запрос выдал меньшее количество строк).</td>
+                </tr>
+                <tr>
+                  <td>recoffset</td>
+                  <td align="center">Число</td>
+                  <td align="center">Нет</td>
+                  <td>"recoffset" указывает пропустить указанное число строк, прежде чем начать выдавать строки.</td>
+                </tr>
+                <tr>
+                  <td>orderby</td>
+                  <td align="center">Массив JSON строк</td>
+                  <td align="center">Нет</td>
+                  <td>Указывает порядок сортировки полей.</td>
+                </tr>
+                <tr>
+                  <td>usecache</td>
+                  <td align="center">Логический</td>
+                  <td align="center">Нет</td>
+                  <td>Использовать кеш.</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div style="padding-top: 20px">
+              <table class="table table-bordered table-condensed table-header" style="font-size: 85%">
+                <thead>
+                  <tr>
+                    <th colspan="4">Расшифровка параметра "search"</th>
+                  </tr>
+                </thead>
+                <thead>
+                  <tr>
+                    <th style="width:20%;">Ключ</th>
+                    <th style="width:20%;">Тип</th>
+                    <th style="width:20%;">Обязательный</th>
+                    <th style="width:40%;">Описание</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>condition</td>
+                    <td align="center">Строка</td>
+                    <td align="center">Нет</td>
+                    <td>Условие. Может принимать только два занчения AND (по умолчанию) или OR.</td>
+                  </tr>
+                  <tr>
+                    <td>field</td>
+                    <td align="center">Строка</td>
+                    <td align="center">Да</td>
+                    <td>Наименование поля, к которому применяется условие.</td>
+                  </tr>
+                  <tr>
+                    <td>compare</td>
+                    <td align="center">Строка</td>
+                    <td align="center">Нет</td>
+                    <td>Сравнение. Может принимать только одно из следующих значений: (EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN).<br>Где:<br>EQL - равно (по умолчанию);<br>NEQ - не равно;<br>LSS - меньше;<br>LEQ - меньше или равно;<br>GTR - больше;<br>GEQ - больше или равно;<br>GIN - для поиска вхождений JSON;<br>LKE - LIKE - Значение ключа (value) должно передаваться вместе со знаком '%' в нужном вам месте;<br>ISN - IS NULL - Ключ "value" должен быть опушен;<br>INN - IS NOT NULL - Ключ "value" должен быть опушен;</td>
+                  </tr>
+                  <tr>
+                    <td>value</td>
+                    <td align="center">Строка</td>
+                    <td align="center">Да/Нет</td>
+                    <td>Искомое значение.</td>
+                  </tr>
+                  <tr>
+                    <td>valarr</td>
+                    <td align="center">Массив JSON</td>
+                    <td align="center">Да/Нет</td>
+                    <td>Искомые значения в виде массива. Если указан ключ "valarr", то ключи "compare" и "value" игнорируются.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h1 class="title" style="margin-top: 0" id="Ref0164"><strong class="text-number">1.6.4.</strong> /client/add</h1>
+            <h1 class="title" style="margin-top: 0" id="Ref0165"><strong class="text-number">1.6.5.</strong> /client/upd</h1>
+
+            <h1 class="title" style="margin-top: 0" id="Ref0166"><strong class="text-number">1.6.6.</strong> /client/get</h1>
+
+            <p class="indent">Возвращает клиента по указанному идентификатору.</p>
+
+            <div style="padding-bottom: 20px">
+              <table class="table" style="font-size: 85%">
+                <thead>
+                  <tr>
+                    <th colspan="2">Входящий параметр</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>JSON объект:</td>
+                    <td align="center">Да</td>
+                  </tr>
+                  <tr>
+                    <td>Массив JSON объектов:</td>
+                    <td align="center">Да</td>
+                  </tr>
+                  <tr>
+                    <td>Может быть пустым или отсутствовать:</td>
+                    <td align="center">Нет</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <table class="table table-bordered table-condensed table-header" style="font-size: 85%">
+              <thead>
+                <tr>
+                  <th colspan="4">Расшифровка входящего JSON объекта</th>
+                </tr>
+              </thead>
+              <thead>
+                <tr>
+                  <th style="width:20%;">Ключ</th>
+                  <th style="width:20%;">Тип</th>
+                  <th style="width:20%;">Обязательный</th>
+                  <th style="width:40%;">Описание</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>id</td>
+                  <td align="center">Число</td>
+                  <td align="center">Да</td>
+                  <td>Идентификатор клиента.</td>
+                </tr>
+                <tr>
+                  <td>fields</td>
+                  <td align="center">JSON массив</td>
+                  <td align="center">Нет</td>
+                  <td>С помощью этого параметра можно указать список желаемых полей. Список полей передаётся в виде массива JSON строк. Если не указан, вернёт все доступные поля.</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h1 class="title" style="margin-top: 0" id="Ref0167"><strong class="text-number">1.6.7.</strong> /client/lst</h1>
+
+            <p class="indent">Возвращает клиентов в виде списка.</p>
+
+            <div style="padding-bottom: 20px">
+              <table class="table" style="font-size: 85%">
+                <thead>
+                  <tr>
+                    <th colspan="2">Входящий параметр</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>JSON объект:</td>
+                    <td align="center">Да</td>
+                  </tr>
+                  <tr>
+                    <td>Массив JSON объектов:</td>
+                    <td align="center">Нет</td>
+                  </tr>
+                  <tr>
+                    <td>Может быть пустым или отсутствовать:</td>
+                    <td align="center">Да</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <table class="table table-bordered table-condensed table-header" style="font-size: 85%">
+              <thead>
+                <tr>
+                  <th colspan="4">Расшифровка входящего JSON объекта</th>
+                </tr>
+              </thead>
+              <thead>
+                <tr>
+                  <th style="width:20%;">Ключ</th>
+                  <th style="width:20%;">Тип</th>
+                  <th style="width:20%;">Обязательный</th>
+                  <th style="width:40%;">Описание</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>fields</td>
+                  <td align="center">JSON массив</td>
+                  <td align="center">Нет</td>
+                  <td>С помощью этого параметра можно указать список желаемых полей. Список полей передаётся в виде массива JSON строк. Если не указан, вернёт все доступные поля.</td>
+                </tr>
+                <tr>
+                  <td>compact</td>
+                  <td align="center">Логический</td>
+                  <td align="center">Нет</td>
+                  <td>Влияет на формат данных. Если "compact" истина, то данные, которые можно связать по идентификатору формируются в виде JSON объектов второго уровня.</td>
+                </tr>
+                <tr>
+                  <td>search</td>
+                  <td align="center">Массив JSON объектов</td>
+                  <td align="center">Нет</td>
+                  <td>Позволяет формировать условия для отбора данных.</td>
+                </tr>
+                <tr>
+                  <td>filter</td>
+                  <td align="center">JSON объект</td>
+                  <td align="center">Нет</td>
+                  <td>Фильтр для отбора данных в виде пары ключ/значение. В качестве ключа указывается имя поля. "filter" является краткой формой "search".</td>
+                </tr>
+                <tr>
+                  <td>reclimit</td>
+                  <td align="center">Число</td>
+                  <td align="center">Нет</td>
+                  <td>Если указывается число "reclimit", в результате возвращается не больше заданного числа строк (меньше может быть, если сам запрос выдал меньшее количество строк).</td>
+                </tr>
+                <tr>
+                  <td>recoffset</td>
+                  <td align="center">Число</td>
+                  <td align="center">Нет</td>
+                  <td>"recoffset" указывает пропустить указанное число строк, прежде чем начать выдавать строки.</td>
+                </tr>
+                <tr>
+                  <td>orderby</td>
+                  <td align="center">Массив JSON строк</td>
+                  <td align="center">Нет</td>
+                  <td>Указывает порядок сортировки полей.</td>
+                </tr>
+                <tr>
+                  <td>usecache</td>
+                  <td align="center">Логический</td>
+                  <td align="center">Нет</td>
+                  <td>Использовать кеш.</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div style="padding-top: 20px">
+              <table class="table table-bordered table-condensed table-header" style="font-size: 85%">
+                <thead>
+                  <tr>
+                    <th colspan="4">Расшифровка параметра "search"</th>
+                  </tr>
+                </thead>
+                <thead>
+                  <tr>
+                    <th style="width:20%;">Ключ</th>
+                    <th style="width:20%;">Тип</th>
+                    <th style="width:20%;">Обязательный</th>
+                    <th style="width:40%;">Описание</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>condition</td>
+                    <td align="center">Строка</td>
+                    <td align="center">Нет</td>
+                    <td>Условие. Может принимать только два занчения AND (по умолчанию) или OR.</td>
+                  </tr>
+                  <tr>
+                    <td>field</td>
+                    <td align="center">Строка</td>
+                    <td align="center">Да</td>
+                    <td>Наименование поля, к которому применяется условие.</td>
+                  </tr>
+                  <tr>
+                    <td>compare</td>
+                    <td align="center">Строка</td>
+                    <td align="center">Нет</td>
+                    <td>Сравнение. Может принимать только одно из следующих значений: (EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN).<br>Где:<br>EQL - равно (по умолчанию);<br>NEQ - не равно;<br>LSS - меньше;<br>LEQ - меньше или равно;<br>GTR - больше;<br>GEQ - больше или равно;<br>GIN - для поиска вхождений JSON;<br>LKE - LIKE - Значение ключа (value) должно передаваться вместе со знаком '%' в нужном вам месте;<br>ISN - IS NULL - Ключ "value" должен быть опушен;<br>INN - IS NOT NULL - Ключ "value" должен быть опушен;</td>
+                  </tr>
+                  <tr>
+                    <td>value</td>
+                    <td align="center">Строка</td>
+                    <td align="center">Да/Нет</td>
+                    <td>Искомое значение.</td>
+                  </tr>
+                  <tr>
+                    <td>valarr</td>
+                    <td align="center">Массив JSON</td>
+                    <td align="center">Да/Нет</td>
+                    <td>Искомые значения в виде массива. Если указан ключ "valarr", то ключи "compare" и "value" игнорируются.</td>
+                  </tr>
+                </tbody>
+              </table>
+              <a href="#top" class="back-to-top">Наверх</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="footer">
+      <div class="container">
+        <hr>
+        <div class="row">
+          <div class="col-xs-12 text-center text-muted">
+            <div class="pull-left">
+              <a href="#" class="btn btn-default btn-xs scroll-top"><span class="glyphicon glyphicon-chevron-up"></span> Наверх</a>
+            </div>
+            <div class="pull-right">
+              <a href="#" class="btn btn-default btn-xs scroll-top">Наверх <span class="glyphicon glyphicon-chevron-up"></span></a>
+            </div>
+            <div style="margin-top: 1px">
+              <div class="footera"><small>&copy; 2019 ООО &laquo;Байт-Энерго&raquo;</small></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add jQuery lib -->
+    <script type="text/javascript" src="./files/js/jquery.min.js"></script>
+
+    <!-- Add BootStrap -->
+    <script type="text/javascript" src="./files/js/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+
+    <!-- Add Docs -->
+    <script type="text/javascript" src="./files/js/docs.min.js"></script>
+  </body>
+</html>
