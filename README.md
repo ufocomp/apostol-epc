@@ -1,7 +1,7 @@
 Apostol Electro
 =
 
-**Apostol Electro** - сервис обработки **Bitcoin** платежей, исходные коды на C++.
+**Apostol Electro** - исходные коды на C++.
 
 СТРУКТУРА КАТАЛОГОВ
 -
@@ -9,20 +9,25 @@ Apostol Electro
     auto/               содержит файлы со скриптами
     cmake-modules/      содержит файлы с модулями CMake
     conf/               содержит файлы с настройками
-    doc/                содержит файлы с документацией
-    ├─www/              содержит файлы с документацией в формате html
+    db/                 содержит файлы с исходным кодом базы данных
+    ├─bin/              содержит файлы для автоматизации установки базы данных
+    ├─doc/              содержит файлы с документацией для базы данных
+    | └─html/           содержит файлы с документацией в формате html
+    ├─log/              содержит файлы с отчетами (логами) установки
+    ├─scripts/          содержит скрипты для автоматизации установки
+    ├─sql/              содержит файлы для создания базы данных
     src/                содержит файлы с исходным кодом
-    ├─apostol-bitcoin/  содержит файлы с исходным кодом: Apostol Electro
     ├─core/             содержит файлы с исходным кодом: Apostol Core
+    ├─epc/              содержит файлы с исходным кодом: Apostol Electro
     ├─lib/              содержит файлы с исходным кодом библиотек
     | └─delphi/         содержит файлы с исходным кодом библиотеки: Delphi classes for C++
     └─modules/          содержит файлы с исходным кодом дополнений (модулей)
-      └─BitTrade/       содержит файлы с исходным кодом дополнения: Модуль сделок
+      └─Electro/        содержит файлы с исходным кодом дополнения: Сервера приложений
 
 ОПИСАНИЕ
 -
 
-**Apostol Electro** (ABC) - сервис обработки **Bitcoin** платежей построен на базе [Апостол](https://github.com/ufocomp/apostol).
+**Apostol Electro** (epc) - сервер приложений построен на базе [Апостол](https://github.com/ufocomp/apostol).
 
 СБОРКА И УСТАНОВКА
 -
@@ -30,39 +35,33 @@ Apostol Electro
 
 1. Компилятор C++;
 1. [CMake](https://cmake.org) или интегрированная среда разработки (IDE) с поддержкой [CMake](https://cmake.org);
-1. Библиотека [libbitcoin-system](https://github.com/libbitcoin/libbitcoin-system/) (Bitcoin Cross-Platform C++ Development Toolkit);
+1. Библиотека [libelectro-system](https://github.com/libelectro/libelectro-system/) (Bitcoin Cross-Platform C++ Development Toolkit);
 1. Библиотека [libpq-dev](https://www.postgresql.org/download/) (libraries and headers for C language frontend development);
 1. Библиотека [postgresql-server-dev-10](https://www.postgresql.org/download/) (libraries and headers for C language backend development).
-1. Библиотека [sqllite3](https://www.sqlite.org/download/) (SQLite 3);
 
 Для того чтобы установить компилятор C++ и необходимые библиотеки на Ubuntu выполните:
 ~~~
 sudo apt-get install build-essential libssl-dev libcurl4-openssl-dev make cmake gcc g++
 ~~~
 
-Для того чтобы установить SQLite3 выполните:
-~~~
-sudo apt-get install sqlite3 libsqlite3-dev
-~~~
-
 Для того чтобы установить PostgreSQL воспользуйтесь инструкцией по [этой](https://www.postgresql.org/download/) ссылке.
 
 ###### Подробное описание установки C++, CMake, IDE и иных компонентов необходимых для сборки проекта не входит в данное руководство. 
 
-Для сборки **Апостол Bitcoin**, необходимо:
+Для сборки **Apostol Electro**, необходимо:
 
-1. Скачать **Апостол Bitcoin** по [ссылке](https://github.com/ufocomp/apostol-bitcoin/archive/master.zip);
+1. Скачать **Apostol Electro** по [ссылке](https://github.com/ufocomp/apostol-electro/archive/master.zip);
 1. Распаковать;
 1. Скомпилировать (см. ниже).
 
-Для сборки **Апостол Bitcoin**, с помощью Git выполните:
+Для сборки **Apostol Electro**, с помощью Git выполните:
 ~~~
-git clone https://github.com/ufocomp/apostol-bitcoin.git
+git clone https://github.com/ufocomp/apostol-electro.git
 ~~~
 
 ###### Сборка:
 ~~~
-cd apostol-bitcoin
+cd apostol-electro
 cmake -DCMAKE_BUILD_TYPE=Release . -B cmake-build-release
 ~~~
 
@@ -73,14 +72,14 @@ make
 sudo make install
 ~~~
 
-По умолчанию **Апостол Bitcoin** будет установлен в:
+По умолчанию **Apostol Electro** будет установлен в:
 ~~~
 /usr/sbin
 ~~~
 
 Файл конфигурации и необходимые для работы файлы будут расположены в: 
 ~~~
-/etc/abc
+/etc/epc
 ~~~
 
 ЗАПУСК
@@ -91,34 +90,34 @@ sudo make install
 
 Для запуска Апостол выполните:
 ~~~
-sudo service abc start
+sudo service epc start
 ~~~
 
 Для проверки статуса выполните:
 ~~~
-sudo service abc status
+sudo service epc status
 ~~~
 
 Результат должен быть **примерно** таким:
 ~~~
-● abc.service - LSB: starts the apostol bitcoin
-   Loaded: loaded (/etc/init.d/abc; generated; vendor preset: enabled)
+● epc.service - LSB: starts the apostol electro
+   Loaded: loaded (/etc/init.d/epc; generated; vendor preset: enabled)
    Active: active (running) since Thu 2019-08-15 14:11:34 BST; 1h 1min ago
      Docs: man:systemd-sysv-generator(8)
-  Process: 16465 ExecStop=/etc/init.d/abc stop (code=exited, status=0/SUCCESS)
-  Process: 16509 ExecStart=/etc/init.d/abc start (code=exited, status=0/SUCCESS)
+  Process: 16465 ExecStop=/etc/init.d/epc stop (code=exited, status=0/SUCCESS)
+  Process: 16509 ExecStart=/etc/init.d/epc start (code=exited, status=0/SUCCESS)
     Tasks: 3 (limit: 4915)
-   CGroup: /system.slice/abc.service
-           ├─16520 abc: master process /usr/sbin/abc
-           ├─16521 abc: worker process
-           └─16522 abc: bitmessage process
+   CGroup: /system.slice/epc.service
+           ├─16520 epc: master process /usr/sbin/epc
+           ├─16521 epc: worker process
+           └─16522 epc: bitmessage process
 ~~~
 
-### **Управление abc**.
+### **Управление epc**.
 
-Управлять **`abc`** можно с помощью сигналов.
-Номер главного процесса по умолчанию записывается в файл `/usr/local/abc/logs/abc.pid`. 
-Изменить имя этого файла можно при конфигурации сборки или же в `abc.conf` секция `[daemon]` ключ `pid`. 
+Управлять **`epc`** можно с помощью сигналов.
+Номер главного процесса по умолчанию записывается в файл `/usr/local/epc/logs/epc.pid`. 
+Изменить имя этого файла можно при конфигурации сборки или же в `epc.conf` секция `[daemon]` ключ `pid`. 
 
 Главный процесс поддерживает следующие сигналы:
 
