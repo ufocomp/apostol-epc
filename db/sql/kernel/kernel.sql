@@ -25,6 +25,38 @@ BEGIN
   INSERT INTO db.essence (code, name) VALUES ('calendar', 'Календарь');
   INSERT INTO db.essence (code, name) VALUES ('address', 'Адрес');
 
+  ------------------------------------------------------------------------------
+
+  INSERT INTO db.state_type (code, name) VALUES ('created', 'Создан');
+  INSERT INTO db.state_type (code, name) VALUES ('enabled', 'Включен');
+  INSERT INTO db.state_type (code, name) VALUES ('disabled', 'Отключен');
+  INSERT INTO db.state_type (code, name) VALUES ('deleted', 'Удалён');
+
+  ------------------------------------------------------------------------------
+
+  INSERT INTO db.action_list (code, name) VALUES ('anything', 'Ничто');
+
+  INSERT INTO db.action_list (code, name) VALUES ('create', 'Создать');
+  INSERT INTO db.action_list (code, name) VALUES ('open', 'Открыть');
+  INSERT INTO db.action_list (code, name) VALUES ('edit', 'Изменить');
+  INSERT INTO db.action_list (code, name) VALUES ('save', 'Сохранить');
+  INSERT INTO db.action_list (code, name) VALUES ('enable', 'Включить');
+  INSERT INTO db.action_list (code, name) VALUES ('disable', 'Отключить');
+  INSERT INTO db.action_list (code, name) VALUES ('delete', 'Удалить');
+  INSERT INTO db.action_list (code, name) VALUES ('restore', 'Восстановить');
+  INSERT INTO db.action_list (code, name) VALUES ('drop', 'Уничтожить');
+  INSERT INTO db.action_list (code, name) VALUES ('start', 'Запустить');
+  INSERT INTO db.action_list (code, name) VALUES ('stop', 'Остановить');
+  INSERT INTO db.action_list (code, name) VALUES ('check', 'Проверить');
+  INSERT INTO db.action_list (code, name) VALUES ('cancel', 'Отменить');
+  INSERT INTO db.action_list (code, name) VALUES ('postpone', 'Отложить');
+
+  ------------------------------------------------------------------------------
+
+  INSERT INTO db.event_type (code, name) VALUES ('parent', 'События класса родителя');
+  INSERT INTO db.event_type (code, name) VALUES ('event', 'Событие');
+  INSERT INTO db.event_type (code, name) VALUES ('plpgsql', 'PL/pgSQL код');
+
   -- Объект
 
   nEssence := GetEssence('object');

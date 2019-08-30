@@ -464,13 +464,6 @@ COMMENT ON COLUMN db.state_type.name IS 'Наименование типа со�
 CREATE UNIQUE INDEX ON db.state_type (code);
 
 --------------------------------------------------------------------------------
-
-INSERT INTO db.state_type (code, name) VALUES ('created', 'Создан');
-INSERT INTO db.state_type (code, name) VALUES ('enabled', 'Включен');
-INSERT INTO db.state_type (code, name) VALUES ('disabled', 'Отключен');
-INSERT INTO db.state_type (code, name) VALUES ('deleted', 'Удалён');
-
---------------------------------------------------------------------------------
 -- VIEW StateType --------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -767,25 +760,6 @@ COMMENT ON COLUMN db.action_list.name IS 'Наименование действ�
 CREATE UNIQUE INDEX ON db.action_list (code);
 
 --------------------------------------------------------------------------------
-
-INSERT INTO db.action_list (code, name) VALUES ('anything', 'Ничто');
-
-INSERT INTO db.action_list (code, name) VALUES ('create', 'Создать');
-INSERT INTO db.action_list (code, name) VALUES ('open', 'Открыть');
-INSERT INTO db.action_list (code, name) VALUES ('edit', 'Изменить');
-INSERT INTO db.action_list (code, name) VALUES ('save', 'Сохранить');
-INSERT INTO db.action_list (code, name) VALUES ('enable', 'Включить');
-INSERT INTO db.action_list (code, name) VALUES ('disable', 'Отключить');
-INSERT INTO db.action_list (code, name) VALUES ('delete', 'Удалить');
-INSERT INTO db.action_list (code, name) VALUES ('restore', 'Восстановить');
-INSERT INTO db.action_list (code, name) VALUES ('drop', 'Уничтожить');
-INSERT INTO db.action_list (code, name) VALUES ('start', 'Запустить');
-INSERT INTO db.action_list (code, name) VALUES ('stop', 'Остановить');
-INSERT INTO db.action_list (code, name) VALUES ('check', 'Проверить');
-INSERT INTO db.action_list (code, name) VALUES ('cancel', 'Отменить');
-INSERT INTO db.action_list (code, name) VALUES ('postpone', 'Отложить');
-
---------------------------------------------------------------------------------
 -- VIEW Action -----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -1072,7 +1046,7 @@ CREATE TABLE db.transition (
 COMMENT ON TABLE db.transition IS 'Таблица переходов из одного состояния объекта в другое состояние.';
 
 COMMENT ON COLUMN db.transition.id IS 'Идентификатор';
-COMMENT ON COLUMN db.transition.state IS 'Cостояние (текущее)';
+COMMENT ON COLUMN db.transition.state IS 'Состояние (текущее)';
 COMMENT ON COLUMN db.transition.method IS 'Совершаемая операция (действие)';
 COMMENT ON COLUMN db.transition.newstate IS 'Состояние (новое)';
 
@@ -1191,15 +1165,11 @@ CREATE TABLE db.event_type (
 
 COMMENT ON TABLE db.event_type IS 'Тип события.';
 
-COMMENT ON COLUMN db.event_type.ID IS 'Идентификатор';
-COMMENT ON COLUMN db.event_type.CODE IS 'Код типа события';
-COMMENT ON COLUMN db.event_type.NAME IS 'Наименование типа события';
+COMMENT ON COLUMN db.event_type.id IS 'Идентификатор';
+COMMENT ON COLUMN db.event_type.code IS 'Код типа события';
+COMMENT ON COLUMN db.event_type.name IS 'Наименование типа события';
 
-CREATE UNIQUE INDEX ON db.event_type (CODE);
-
-INSERT INTO db.event_type (code, name) VALUES ('parent', 'События класса родителя');
-INSERT INTO db.event_type (code, name) VALUES ('event', 'Событие');
-INSERT INTO db.event_type (code, name) VALUES ('plpgsql', 'PL/pgSQL код');
+CREATE UNIQUE INDEX ON db.event_type (code);
 
 --------------------------------------------------------------------------------
 -- VIEW EventType --------------------------------------------------------------
