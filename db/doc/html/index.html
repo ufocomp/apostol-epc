@@ -6,6 +6,8 @@
     <title>Руководство разработчика базы данных</title>
 
     <link href="./files/js/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet" type="text/css">
+    <link href="./files/js/fancybox/source/jquery.fancybox.css?v=2.1.5" media="screen" rel="stylesheet" type="text/css">
+
     <link href="./css/bootstrap-docs.css" rel="stylesheet" type="text/css">
     <link href="./css/fonts.css" rel="stylesheet" type="text/css">
     <link href="./css/main.css" rel="stylesheet" type="text/css">
@@ -163,7 +165,7 @@
             </div>
 
             <p class="indent"><strong>Сущность</strong> задаётся разработчиком системы и в отличие от других характеристик объекта не может быть изменена пользователем системы. На данный момент системе определены следующие сущности:</p>
-            <ul> 
+            <ul>
               <li><code>object</code> Объект;</li>
               <li><code>document</code> Документ;</li>
               <li><code>reference</code> Справочник;</li>
@@ -183,7 +185,7 @@
             <p class="indent">Класс объекта может быть <i>абстрактным</i>, создать документ с абстрактным классом объекта невозможно.</p>
             <p class="indent">После создания базы данных в системе будут доступны следующие классы объектов:</p>
 
-            <ul> 
+            <ul>
               <li>
                 <code>object</code> Объект <code class="gray">(абстрактный)</code>
                 <ul>
@@ -283,6 +285,36 @@
                   <li>Ограничивать вход в систему по IP-адресу (IP-tables);</li>
                   <li>Отслеживать состояния и статусы пользователя (в сети/не в сети, активен/заблокирован);</li>
               </ul>
+          </div>
+          <div class="col-md-3 hidden-print hidden-xs hidden-sm" role="complementary">
+            <div class="bs-docs-sidebar affix-top">
+              <ul class="nav bs-docs-sidenav">
+                <li><a href="#Ref1">Описание</a>
+                  <ul class="nav">
+                    <li><a href="#Ref11">Структура каталогов</a></li>
+                    <li><a href="#Ref12">Требования</a></li>
+                  </ul>
+                </li>
+                <li><a href="#Ref2">Установка</a>
+                  <ul class="nav">
+                    <li><a href="#Ref21">Windows</a></li>
+                    <li><a href="#Ref22">Linux</a></li>
+                  </ul>
+                </li>
+                <li><a href="#Ref3">Настройка</a>
+                  <ul class="nav">
+                    <li><a href="#Ref31">Windows</a></li>
+                    <li><a href="#Ref32">Linux</a></li>
+                  </ul>
+                </li>
+                <li><a href="#Ref4">База данных</a>
+                  <ul class="nav">
+                    <li><a href="#Ref41">Ядро системы</a></li>
+                    <li><a href="#Ref42">Модуль безопасности</a></li>
+                  </ul>
+                </li>
+              </ul>
+              <a class="back-to-top" href="#top">Наверх</a>
             </div>
           </div>
         </div>
@@ -301,7 +333,7 @@
               <a class="btn btn-default btn-xs scroll-top" href="#">Наверх <span class="glyphicon glyphicon-chevron-up"></span></a>
             </div>
             <div style="margin-top: 1px">
-              <div class="footera"><small>&copy; 2017 ООО &laquo;Байт-Энерго&raquo;</small></div>
+              <div class="footera"><small>&copy; 2019 ООО &laquo;Байт-Энерго&raquo;</small></div>
             </div>
           </div>
         </div>
@@ -316,5 +348,13 @@
 
     <!-- Add Docs -->
     <script src="./files/js/docs.min.js" type="text/javascript"></script>
+
+    <!-- Add Fancybox -->
+    <script src="./files/js/fancybox/source/jquery.fancybox.pack.js?v=2.1.5" type="text/javascript"></script>
+    <script type="text/javascript">
+      $(document).ready(function() {
+        $(".fancybox").fancybox();
+      });
+    </script>
   </body>
 </html>
