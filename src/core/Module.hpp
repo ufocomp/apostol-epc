@@ -24,13 +24,94 @@ Author:
 #ifndef APOSTOL_MODULE_HPP
 #define APOSTOL_MODULE_HPP
 
+#define APOSTOL_MODULE_JOB_ID_LENGTH    41
+
 extern "C++" {
 
 namespace Apostol {
 
     namespace Module {
 
-        class CModuleManager;
+        typedef TList<TList<CStringList>> CQueryResult;
+        //--------------------------------------------------------------------------------------------------------------
+
+        typedef std::function<void (CHTTPServerConnection *AConnection)> COnHeaderHandlerEvent;
+        //--------------------------------------------------------------------------------------------------------------
+
+        class CHeaderHandler: CObject {
+        private:
+
+            bool m_Allow;
+            COnHeaderHandlerEvent m_Handler;
+
+        public:
+
+            CHeaderHandler(bool Allow, COnHeaderHandlerEvent && Handler): CObject(),
+                m_Allow(Allow), m_Handler(Handler) {
+
+            };
+
+            bool Allow() { return m_Allow; };
+
+            void Handler(CHTTPServerConnection *AConnection) {
+                if (m_Allow && m_Handler)
+                    m_Handler(AConnection);
+            }
+        };
+
+        class CJob: CCollectionItem {
+        private:
+
+            CString m_JobId;
+
+            CString m_Result;
+
+            CString m_CacheFile;
+
+            CPQPollQuery *m_PollQuery;
+
+        public:
+
+            explicit CJob(CCollection *ACCollection);
+
+            ~CJob() override = default;
+
+            CString& JobId() { return m_JobId; };
+            const CString& JobId() const { return m_JobId; };
+
+            CString& CacheFile() { return m_CacheFile; };
+            const CString& CacheFile() const { return m_CacheFile; };
+
+            CString& Result() { return m_Result; }
+            const CString& Result() const { return m_Result; }
+
+            CPQPollQuery *PollQuery() { return m_PollQuery; };
+            void PollQuery(CPQPollQuery *Value) { m_PollQuery = Value; };
+        };
+        //--------------------------------------------------------------------------------------------------------------
+
+        class CJobManager: CCollection {
+            typedef CCollection inherited;
+        private:
+
+            CJob *Get(int Index);
+            void Set(int Index, CJob *Value);
+
+        public:
+
+            CJobManager(): CCollection(this) {
+
+            }
+
+            CJob *Add(CPQPollQuery *Query);
+
+            CJob *FindJobById(const CString &Id);
+            CJob *FindJobByQuery(CPQPollQuery *Query);
+
+            CJob *Jobs(int Index) { return Get(Index); }
+            void Jobs(int Index, CJob *Value) { Set(Index, Value); }
+
+        };
 
         //--------------------------------------------------------------------------------------------------------------
 
@@ -38,8 +119,25 @@ namespace Apostol {
 
         //--------------------------------------------------------------------------------------------------------------
 
+        class CModuleManager;
+        //--------------------------------------------------------------------------------------------------------------
+
         class CApostolModule: public CCollectionItem, public CGlobalComponent {
+        private:
+
+            CString m_AllowedMethods;
+
+            const CString& GetAllowedMethods(CString& AllowedMethods) const;
+
         protected:
+
+            CStringList *m_Headers;
+
+            virtual void InitHeaders();
+
+            virtual void DoOptions(CHTTPServerConnection *AConnection);
+
+            virtual void MethodNotAllowed(CHTTPServerConnection *AConnection);
 
             virtual void DoPostgresQueryExecuted(CPQPollQuery *APollQuery) abstract;
             virtual void DoPostgresQueryException(CPQPollQuery *APollQuery, Delphi::Exception::Exception *AException) abstract;
@@ -50,13 +148,19 @@ namespace Apostol {
 
             explicit CApostolModule(CModuleManager *AManager);
 
-            ~CApostolModule() override = default;
+            ~CApostolModule() override;
 
             virtual bool CheckUrerArent(const CString& Value) abstract;
 
             virtual void Execute(CHTTPServerConnection *AConnection) abstract;
 
+            static void QueryToResult(CPQPollQuery *APollQuery, CQueryResult& AResult);
+
+            const CString& AllowedMethods() { return GetAllowedMethods(m_AllowedMethods); };
+
             CPQPollQuery *GetQuery(CPollConnection *AConnection);
+
+            bool ExecSQL(CPollConnection *AConnection, const CStringList &SQL, COnPQPollQueryExecutedEvent &&Executed = nullptr);
 
         };
 
