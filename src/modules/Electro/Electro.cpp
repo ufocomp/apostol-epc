@@ -276,6 +276,7 @@ namespace Apostol {
             auto LQuery = GetQuery(AConnection);
 
             if (LQuery == nullptr) {
+                Log()->Error(APP_LOG_ALERT, 0, "QueryStart: GetQuery() failed!");
                 AConnection->SendStockReply(CReply::internal_server_error);
                 return false;
             }
