@@ -1,16 +1,16 @@
 /*++
 
-Programm name:
+Program name:
 
-  Apostol Electro
+  Apostol WebService
 
 Module Name:
 
-  Electro.cpp
+  WebService.cpp
 
 Notices:
 
-  Module Electro
+  Module WebService
 
 Author:
 
@@ -24,66 +24,63 @@ Author:
 //----------------------------------------------------------------------------------------------------------------------
 
 #include "Core.hpp"
-#include "Electro.hpp"
+#include "WebService.hpp"
 //----------------------------------------------------------------------------------------------------------------------
 
 extern "C++" {
 
 namespace Apostol {
 
-    namespace Electro {
+    namespace Module {
 
         //--------------------------------------------------------------------------------------------------------------
 
-        //-- CElectro --------------------------------------------------------------------------------------------------
+        //-- CWebService --------------------------------------------------------------------------------------------------
 
         //--------------------------------------------------------------------------------------------------------------
 
-        CElectro::CElectro(CModuleManager *AManager) : CApostolModule(AManager) {
+        CWebService::CWebService(CModuleManager *AManager) : CApostolModule(AManager) {
             m_Version = -1;
             m_Jobs = new CJobManager();
+            InitMethods();
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        CElectro::~CElectro() {
+        CWebService::~CWebService() {
             delete m_Jobs;
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        void CElectro::InitHeaders() {
-            m_Headers->AddObject(_T("GET"), (CObject *) new CHeaderHandler(false, std::bind(&CElectro::DoGet, this, _1)));
-            m_Headers->AddObject(_T("POST"), (CObject *) new CHeaderHandler(false, std::bind(&CElectro::DoPost, this, _1)));
-            m_Headers->AddObject(_T("OPTIONS"), (CObject *) new CHeaderHandler(true, std::bind(&CElectro::DoOptions, this, _1)));
-            m_Headers->AddObject(_T("PUT"), (CObject *) new CHeaderHandler(false, std::bind(&CElectro::MethodNotAllowed, this, _1)));
-            m_Headers->AddObject(_T("DELETE"), (CObject *) new CHeaderHandler(false, std::bind(&CElectro::MethodNotAllowed, this, _1)));
-            m_Headers->AddObject(_T("TRACE"), (CObject *) new CHeaderHandler(false, std::bind(&CElectro::MethodNotAllowed, this, _1)));
-            m_Headers->AddObject(_T("HEAD"), (CObject *) new CHeaderHandler(false, std::bind(&CElectro::MethodNotAllowed, this, _1)));
-            m_Headers->AddObject(_T("PATCH"), (CObject *) new CHeaderHandler(false, std::bind(&CElectro::MethodNotAllowed, this, _1)));
-            m_Headers->AddObject(_T("CONNECT"), (CObject *) new CHeaderHandler(false, std::bind(&CElectro::MethodNotAllowed, this, _1)));
+        void CWebService::InitMethods() {
+            m_Methods.AddObject(_T("GET"), (CObject *) new CMethodHandler(true, std::bind(&CWebService::DoGet, this, _1)));
+            m_Methods.AddObject(_T("POST"), (CObject *) new CMethodHandler(true, std::bind(&CWebService::DoPost, this, _1)));
+            m_Methods.AddObject(_T("OPTIONS"), (CObject *) new CMethodHandler(true, std::bind(&CWebService::DoOptions, this, _1)));
+            m_Methods.AddObject(_T("PUT"), (CObject *) new CMethodHandler(false, std::bind(&CWebService::MethodNotAllowed, this, _1)));
+            m_Methods.AddObject(_T("DELETE"), (CObject *) new CMethodHandler(false, std::bind(&CWebService::MethodNotAllowed, this, _1)));
+            m_Methods.AddObject(_T("TRACE"), (CObject *) new CMethodHandler(false, std::bind(&CWebService::MethodNotAllowed, this, _1)));
+            m_Methods.AddObject(_T("HEAD"), (CObject *) new CMethodHandler(false, std::bind(&CWebService::MethodNotAllowed, this, _1)));
+            m_Methods.AddObject(_T("PATCH"), (CObject *) new CMethodHandler(false, std::bind(&CWebService::MethodNotAllowed, this, _1)));
+            m_Methods.AddObject(_T("CONNECT"), (CObject *) new CMethodHandler(false, std::bind(&CWebService::MethodNotAllowed, this, _1)));
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        void CElectro::ExceptionToJson(Delphi::Exception::Exception *AException, CString &Json) {
+        void CWebService::ExceptionToJson(int ErrorCode, Delphi::Exception::Exception *AException, CString& Json) {
 
+            TCHAR ch;
             LPCTSTR lpMessage = AException->what();
             CString Message;
-            TCHAR ch = 0;
 
-            while (*lpMessage) {
-                ch = *lpMessage++;
-                if ((ch == '"') || (ch == '\\')) {
+            while ((ch = *lpMessage++) != 0) {
+                if ((ch == '"') || (ch == '\\'))
                     Message.Append('\\');
-                }
                 Message.Append(ch);
             }
 
-            Json.Format(R"({"error": {"errors": [{"domain": "%s", "reason": "%s", "message": "%s", "locationType": "%s",
-                        "location": "%s"}], "code": %u, "message": "%s"}})",
-                        "module", "exception", Message.c_str(), "SQL", "Electro", 500, "Internal Server Error");
+            Json.Format(R"({"error": {"code": %u, "message": "%s"}})", ErrorCode, Message.c_str());
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        void CElectro::DoPostgresQueryException(CPQPollQuery *APollQuery, Delphi::Exception::Exception *AException) {
+        void CWebService::DoPostgresQueryException(CPQPollQuery *APollQuery, Delphi::Exception::Exception *AException) {
             auto LConnection = dynamic_cast<CHTTPServerConnection *> (APollQuery->PollConnection());
 
             if (LConnection != nullptr) {
@@ -91,7 +88,7 @@ namespace Apostol {
 
                 CReply::status_type LStatus = CReply::internal_server_error;
 
-                ExceptionToJson(AException, LReply->Content);
+                ExceptionToJson(0, AException, LReply->Content);
 
                 LConnection->SendReply(LStatus);
             }
@@ -100,7 +97,7 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        void CElectro::RowToJson(const CStringList &Row, CString &Json) {
+        void CWebService::RowToJson(const CStringList &Row, CString &Json) {
             Json = "{";
 
             for (int I = 0; I < Row.Count(); ++I) {
@@ -142,7 +139,7 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        void CElectro::PQResultToJson(CPQResult *Result, CString &Json) {
+        void CWebService::PQResultToJson(CPQResult *Result, CString &Json) {
             Json = "{";
 
             for (int I = 0; I < Result->nFields(); ++I) {
@@ -181,7 +178,7 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        void CElectro::QueryToJson(CPQPollQuery *Query, CString& Json) {
+        void CWebService::QueryToJson(CPQPollQuery *Query, CString& Json) {
 
             CPQResult *Run;
             CPQResult *Login;
@@ -233,7 +230,7 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        void CElectro::DoPostgresQueryExecuted(CPQPollQuery *APollQuery) {
+        void CWebService::DoPostgresQueryExecuted(CPQPollQuery *APollQuery) {
             clock_t start = clock();
 
             auto LConnection = dynamic_cast<CHTTPServerConnection *> (APollQuery->PollConnection());
@@ -248,7 +245,7 @@ namespace Apostol {
                     QueryToJson(APollQuery, LReply->Content);
                     LStatus = CReply::ok;
                 } catch (Delphi::Exception::Exception &E) {
-                    ExceptionToJson(&E, LReply->Content);
+                    ExceptionToJson(0, &E, LReply->Content);
                     Log()->Error(APP_LOG_EMERG, 0, E.what());
                 }
 
@@ -262,7 +259,7 @@ namespace Apostol {
                     try {
                         QueryToJson(APollQuery, LJob->Result());
                     } catch (Delphi::Exception::Exception &E) {
-                        ExceptionToJson(&E, LJob->Result());
+                        ExceptionToJson(0, &E, LJob->Result());
                         Log()->Error(APP_LOG_EMERG, 0, E.what());
                     }
                 }
@@ -272,7 +269,7 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        bool CElectro::QueryStart(CHTTPServerConnection *AConnection, const CStringList& ASQL) {
+        bool CWebService::QueryStart(CHTTPServerConnection *AConnection, const CStringList& ASQL) {
             auto LQuery = GetQuery(AConnection);
 
             if (LQuery == nullptr) {
@@ -305,7 +302,7 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        bool CElectro::APIRun(CHTTPServerConnection *AConnection, const CString &Route, const CString &jsonString,
+        bool CWebService::APIRun(CHTTPServerConnection *AConnection, const CString &Route, const CString &jsonString,
                 const CDataBase &DataBase) {
 
             CStringList SQL;
@@ -333,12 +330,12 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        void CElectro::DoGet(CHTTPServerConnection *AConnection) {
+        void CWebService::DoGet(CHTTPServerConnection *AConnection) {
             auto LRequest = AConnection->Request();
 
             CString JobId = LRequest->Uri.SubString(1);
 
-            if (JobId.Length() != APOSTOL_MODULE_JOB_ID_LENGTH) {
+            if (JobId.Length() != APOSTOL_MODULE_UID_LENGTH) {
                 AConnection->SendStockReply(CReply::bad_request);
                 return;
             }
@@ -365,7 +362,7 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        void CElectro::DoPost(CHTTPServerConnection *AConnection) {
+        void CWebService::DoPost(CHTTPServerConnection *AConnection) {
             auto LRequest = AConnection->Request();
             auto LReply = AConnection->Reply();
 
@@ -454,34 +451,44 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        void CElectro::Execute(CHTTPServerConnection *AConnection) {
+        void CWebService::Execute(CHTTPServerConnection *AConnection) {
             int i = 0;
             auto LRequest = AConnection->Request();
             auto LReply = AConnection->Reply();
 
             LReply->Clear();
             LReply->ContentType = CReply::json;
-            LReply->AddHeader("Access-Control-Allow-Origin", "*");
 
-            CHeaderHandler *Handler;
-            for (i = 0; i < m_Headers->Count(); ++i) {
-                Handler = (CHeaderHandler *) m_Headers->Objects(i);
+            CMethodHandler *Handler;
+            for (i = 0; i < m_Methods.Count(); ++i) {
+                Handler = (CMethodHandler *) m_Methods.Objects(i);
                 if (Handler->Allow()) {
-                    const CString& Method = m_Headers->Strings(i);
+                    const CString& Method = m_Methods.Strings(i);
                     if (Method == LRequest->Method) {
+                        CORS(AConnection);
                         Handler->Handler(AConnection);
                         break;
                     }
                 }
             }
 
-            if (i == m_Headers->Count()) {
+            if (i == m_Methods.Count()) {
                 AConnection->SendStockReply(CReply::not_implemented);
             }
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        bool CElectro::CheckUrerArent(const CString &Value) {
+        void CWebService::BeforeExecute(Pointer Data) {
+
+        }
+        //--------------------------------------------------------------------------------------------------------------
+
+        void CWebService::AfterExecute(Pointer Data) {
+
+        }
+        //--------------------------------------------------------------------------------------------------------------
+
+        bool CWebService::CheckUserAgent(const CString& Value) {
             return true;
         }
 

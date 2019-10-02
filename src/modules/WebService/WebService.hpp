@@ -1,16 +1,16 @@
 /*++
 
-Programm name:
+Program name:
 
   Apostol Electro
 
 Module Name:
 
-  Electro.hpp
+  WebService.hpp
 
 Notices:
 
-  Module Electro 
+  Module WebService 
 
 Author:
 
@@ -21,15 +21,15 @@ Author:
 
 --*/
 
-#ifndef APOSTOL_ADDSERVER_HPP
-#define APOSTOL_ADDSERVER_HPP
+#ifndef APOSTOL_WEBSERVICE_HPP
+#define APOSTOL_WEBSERVICE_HPP
 //----------------------------------------------------------------------------------------------------------------------
 
 extern "C++" {
 
 namespace Apostol {
 
-    namespace Electro {
+    namespace Module {
 
         typedef struct CDataBase {
             CString Username;
@@ -38,7 +38,7 @@ namespace Apostol {
         } CDataBase;
         //--------------------------------------------------------------------------------------------------------------
 
-        class CElectro: public CApostolModule {
+        class CWebService: public CApostolModule {
         private:
 
             int m_Version;
@@ -47,7 +47,6 @@ namespace Apostol {
 
             static void RowToJson(const CStringList& Row, CString& Json);
             static void PQResultToJson(CPQResult *Result, CString& Json);
-            static void ExceptionToJson(Delphi::Exception::Exception *AException, CString& Json);
 
             void QueryToJson(CPQPollQuery *Query, CString& Json);
 
@@ -57,33 +56,38 @@ namespace Apostol {
 
         protected:
 
-            void InitHeaders() override;
-
             void DoGet(CHTTPServerConnection *AConnection);
             void DoPost(CHTTPServerConnection *AConnection);
 
             void DoPostgresQueryExecuted(CPQPollQuery *APollQuery) override;
             void DoPostgresQueryException(CPQPollQuery *APollQuery, Delphi::Exception::Exception *AException) override;
 
+            static void ExceptionToJson(int ErrorCode, Delphi::Exception::Exception *AException, CString& Json);
+
         public:
 
-            explicit CElectro(CModuleManager *AManager);
+            explicit CWebService(CModuleManager *AManager);
 
-            ~CElectro() override;
+            ~CWebService() override;
 
-            static class CElectro *CreateModule(CModuleManager *AManager) {
-                return new CElectro(AManager);
+            static class CWebService *CreateModule(CModuleManager *AManager) {
+                return new CWebService(AManager);
             }
+
+            void InitMethods() override;
+
+            void BeforeExecute(Pointer Data) override;
+            void AfterExecute(Pointer Data) override;
 
             void Execute(CHTTPServerConnection *AConnection) override;
 
-            bool CheckUrerArent(const CString& Value) override;
+            bool CheckUserAgent(const CString& Value) override;
 
         };
 
     }
 }
 
-using namespace Apostol::Electro;
+using namespace Apostol::Module;
 }
-#endif //APOSTOL_ADDSERVER_HPP
+#endif //APOSTOL_WEBSERVICE_HPP

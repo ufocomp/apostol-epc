@@ -24,7 +24,6 @@ Author:
 #include "Core.hpp"
 #include "Module.hpp"
 //----------------------------------------------------------------------------------------------------------------------
-
 #include <sstream>
 #include <random>
 //----------------------------------------------------------------------------------------------------------------------
@@ -43,13 +42,13 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
-//      A0000-P0000-O0000-S0000-T0000-O0000-L0000
-//      01234567890123456789012345678901234567890
+//      A0000-P0000-O0000-S0000-T0000-O0000-L00000
+//      012345678901234567890123456789012345678901
 //      0         1         2         3         4
-        CString generate_hex(const unsigned int len) {
+        CString GetUID(unsigned int len) {
             CString S(len, ' ');
 
-            for (auto i = 0; i < len / 2; i++) {
+            for (unsigned int i = 0; i < len / 2; i++) {
                 unsigned char rc = random_char();
                 ByteToHexStr(S.Data() + i * 2 * sizeof(unsigned char), S.Size(), &rc, 1);
             }
@@ -70,7 +69,7 @@ namespace Apostol {
 
             return S;
         }
-
+#ifdef DELPHI_POSTGRESQL
         //--------------------------------------------------------------------------------------------------------------
 
         //-- CJob ------------------------------------------------------------------------------------------------------
@@ -78,7 +77,7 @@ namespace Apostol {
         //--------------------------------------------------------------------------------------------------------------
 
         CJob::CJob(CCollection *ACCollection) : CCollectionItem(ACCollection) {
-            m_JobId = generate_hex(APOSTOL_MODULE_JOB_ID_LENGTH);
+            m_JobId = GetUID(APOSTOL_MODULE_UID_LENGTH);
             m_PollQuery = nullptr;
         }
 
@@ -125,7 +124,7 @@ namespace Apostol {
             }
             return LJob;
         }
-
+#endif
         //--------------------------------------------------------------------------------------------------------------
 
         //-- CApostolModule --------------------------------------------------------------------------------------------
@@ -138,40 +137,21 @@ namespace Apostol {
         //--------------------------------------------------------------------------------------------------------------
 
         CApostolModule::CApostolModule(CModuleManager *AManager): CCollectionItem(AManager), CGlobalComponent() {
-            m_Headers = new CStringList(true);
-            InitHeaders();
-        }
-        //--------------------------------------------------------------------------------------------------------------
 
-        CApostolModule::~CApostolModule() {
-            delete m_Headers;
-        }
-        //--------------------------------------------------------------------------------------------------------------
-
-        void CApostolModule::InitHeaders() {
-            m_Headers->AddObject(_T("GET"), (CObject *) new CHeaderHandler(false, std::bind(&CApostolModule::MethodNotAllowed, this, _1)));
-            m_Headers->AddObject(_T("POST"), (CObject *) new CHeaderHandler(false, std::bind(&CApostolModule::MethodNotAllowed, this, _1)));
-            m_Headers->AddObject(_T("OPTIONS"), (CObject *) new CHeaderHandler(true, std::bind(&CApostolModule::DoOptions, this, _1)));
-            m_Headers->AddObject(_T("PUT"), (CObject *) new CHeaderHandler(false, std::bind(&CApostolModule::MethodNotAllowed, this, _1)));
-            m_Headers->AddObject(_T("DELETE"), (CObject *) new CHeaderHandler(false, std::bind(&CApostolModule::MethodNotAllowed, this, _1)));
-            m_Headers->AddObject(_T("TRACE"), (CObject *) new CHeaderHandler(false, std::bind(&CApostolModule::MethodNotAllowed, this, _1)));
-            m_Headers->AddObject(_T("HEAD"), (CObject *) new CHeaderHandler(false, std::bind(&CApostolModule::MethodNotAllowed, this, _1)));
-            m_Headers->AddObject(_T("PATCH"), (CObject *) new CHeaderHandler(false, std::bind(&CApostolModule::MethodNotAllowed, this, _1)));
-            m_Headers->AddObject(_T("CONNECT"), (CObject *) new CHeaderHandler(false, std::bind(&CApostolModule::MethodNotAllowed, this, _1)));
         }
         //--------------------------------------------------------------------------------------------------------------
 
         const CString &CApostolModule::GetAllowedMethods(CString &AllowedMethods) const {
             if (AllowedMethods.IsEmpty()) {
-                if (m_Headers->Count() > 0) {
-                    CHeaderHandler *Handler;
-                    for (int i = 0; i < m_Headers->Count(); ++i) {
-                        Handler = (CHeaderHandler *) m_Headers->Objects(i);
+                if (m_Methods.Count() > 0) {
+                    CMethodHandler *Handler;
+                    for (int i = 0; i < m_Methods.Count(); ++i) {
+                        Handler = (CMethodHandler *) m_Methods.Objects(i);
                         if (Handler->Allow()) {
                             if (AllowedMethods.IsEmpty())
-                                AllowedMethods = m_Headers->Strings(i);
+                                AllowedMethods = m_Methods.Strings(i);
                             else
-                                AllowedMethods += _T(", ") + m_Headers->Strings(i);
+                                AllowedMethods += _T(", ") + m_Methods.Strings(i);
                         }
                     }
                 }
@@ -186,28 +166,48 @@ namespace Apostol {
             CReply::GetStockReply(LReply, CReply::not_allowed);
 
             if (!AllowedMethods().IsEmpty())
-                LReply->AddHeader(_T("Allow"), AllowedMethods().c_str());
+                LReply->AddHeader(_T("Allow"), AllowedMethods());
 
             AConnection->SendReply();
         }
         //--------------------------------------------------------------------------------------------------------------
 
         void CApostolModule::DoOptions(CHTTPServerConnection *AConnection) {
-            auto LReply = AConnection->Reply();
-#ifdef _DEBUG
             auto LRequest = AConnection->Request();
+            auto LReply = AConnection->Reply();
+
+            CReply::GetStockReply(LReply, CReply::no_content);
+
+            if (!AllowedMethods().IsEmpty())
+                LReply->AddHeader(_T("Allow"), AllowedMethods());
+
+            AConnection->SendReply();
+#ifdef _DEBUG
             if (LRequest->Uri == _T("/quit"))
                 Application::Application->SignalProcess()->Quit();
 #endif
-            CReply::GetStockReply(LReply, CReply::ok);
-
-            if (!AllowedMethods().IsEmpty())
-                LReply->AddHeader(_T("Allow"), AllowedMethods().c_str());
-
-            AConnection->SendReply();
         }
         //--------------------------------------------------------------------------------------------------------------
 
+        void CApostolModule::CORS(CHTTPServerConnection *AConnection) {
+            auto LRequest = AConnection->Request();
+            auto LReply = AConnection->Reply();
+
+            const CHeaders& LRequestHeaders = LRequest->Headers;
+            CHeaders& LReplyHeaders = LReply->Headers;
+
+            const CString& Origin = LRequestHeaders.Values("origin");
+            if (!Origin.IsEmpty()) {
+                LReplyHeaders.AddPair("Access-Control-Allow-Origin", Origin);
+                LReplyHeaders.AddPair("Access-Control-Allow-Methods", AllowedMethods());
+
+                const CString& ControlRequestHeaders = LRequestHeaders.Values("Access-Control-Request-Headers");
+                if (!ControlRequestHeaders.IsEmpty())
+                    LReplyHeaders.AddPair("Access-Control-Allow-Headers", ControlRequestHeaders);
+            }
+        }
+        //--------------------------------------------------------------------------------------------------------------
+#ifdef DELPHI_POSTGRESQL
         void CApostolModule::QueryToResult(CPQPollQuery *APollQuery, CQueryResult &AResult) {
             CPQResult *LResult = nullptr;
             CStringList LFields;
@@ -281,27 +281,28 @@ namespace Apostol {
 
             return false;
         }
-
+#endif
         //--------------------------------------------------------------------------------------------------------------
 
         //-- CModuleManager --------------------------------------------------------------------------------------------
 
         //--------------------------------------------------------------------------------------------------------------
 
-        bool CModuleManager::ExecuteModule(CHTTPServerConnection *AConnection) {
+        bool CModuleManager::ExecuteModule(CTCPConnection *AConnection) {
+            auto LConnection = dynamic_cast<CHTTPServerConnection *> (AConnection);
 
             CApostolModule *LModule = nullptr;
 
-            auto LRequest = AConnection->Request();
+            auto LRequest = LConnection->Request();
 
             const CString &UserAgent = LRequest->Headers.Values(_T("user-agent"));
 
             int Index = 0;
-            while (Index < ModuleCount() && !Modules(Index)->CheckUrerArent(UserAgent))
+            while (Index < ModuleCount() && !Modules(Index)->CheckUserAgent(UserAgent))
                 Index++;
 
             if (Index == ModuleCount()) {
-                AConnection->SendStockReply(CReply::forbidden);
+                LConnection->SendStockReply(CReply::forbidden);
                 return false;
             }
 
@@ -309,9 +310,9 @@ namespace Apostol {
 
             DoBeforeExecuteModule(LModule);
             try {
-                LModule->Execute(AConnection);
+                LModule->Execute(LConnection);
             } catch (...) {
-                AConnection->SendStockReply(CReply::internal_server_error);
+                LConnection->SendStockReply(CReply::internal_server_error);
                 DoAfterExecuteModule(LModule);
                 throw;
             }

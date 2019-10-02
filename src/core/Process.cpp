@@ -545,7 +545,9 @@ namespace Apostol {
 
         CServerProcess::CServerProcess(CProcessType AType, CCustomProcess *AParent): CSignalProcess(AType, AParent) {
             m_pServer = nullptr;
+#ifdef DELPHI_POSTGRESQL
             m_pPQServer = nullptr;
+#endif
         }
         //--------------------------------------------------------------------------------------------------------------
 
@@ -560,7 +562,7 @@ namespace Apostol {
             }
         }
         //--------------------------------------------------------------------------------------------------------------
-
+#ifdef DELPHI_POSTGRESQL
         void CServerProcess::SetPQServer(CPQServer *Value) {
             if (m_pPQServer != Value) {
 /*
@@ -578,7 +580,7 @@ namespace Apostol {
             }
         }
         //--------------------------------------------------------------------------------------------------------------
-
+#endif
         void CServerProcess::InitializeServerHandlers() {
 
             if (Assigned(m_pServer)) {
@@ -625,7 +627,7 @@ namespace Apostol {
             }
         }
         //--------------------------------------------------------------------------------------------------------------
-
+#ifdef DELPHI_POSTGRESQL
         CPQPollQuery *CServerProcess::GetQuery(CPollConnection *AConnection) {
             CPQPollQuery *LQuery = nullptr;
 
@@ -777,7 +779,7 @@ namespace Apostol {
             }
         }
         //--------------------------------------------------------------------------------------------------------------
-
+#endif
         void CServerProcess::DoServerListenException(CSocketEvent *Sender, Delphi::Exception::Exception *AException) {
             Log()->Error(APP_LOG_EMERG, 0, AException->what());
         }
@@ -806,7 +808,7 @@ namespace Apostol {
 
         void CServerProcess::DoServerDisconnected(CObject *Sender) {
             auto LConnection = dynamic_cast<CHTTPServerConnection *>(Sender);
-
+#ifdef DELPHI_POSTGRESQL
             if (LConnection != nullptr) {
                 auto LPollQuery = PQServer()->FindQueryByConnection(LConnection);
                 if (LPollQuery != nullptr) {
@@ -816,6 +818,7 @@ namespace Apostol {
                 Log()->Message(_T("[%s:%d] Client closed connection."), LConnection->Socket()->Binding()->PeerIP(),
                                LConnection->Socket()->Binding()->PeerPort());
             }
+#endif
         }
         //--------------------------------------------------------------------------------------------------------------
 
@@ -849,11 +852,14 @@ namespace Apostol {
                 if (!UserAgent.IsEmpty()) lpUserAgent = UserAgent.c_str(); else lpUserAgent = _T("-");
                 //if (!ContentLength.IsEmpty()) lpContentLength = ContentLength.c_str(); else lpContentLength = _T("-");
 
-                Log()->Access(_T("%s %d %8.2f ms [%s] \"%s %s HTTP/%d.%d\" %d %d \"%s\" \"%s\"\r\n"),
-                        AConnection->Socket()->Binding()->PeerIP(), AConnection->Socket()->Binding()->PeerPort(),
-                        double((clock() - AConnection->Tag()) / (double) CLOCKS_PER_SEC * 1000), szTime,
-                        LRequest->Method.c_str(), LRequest->Uri.c_str(), LRequest->VMajor, LRequest->VMinor,
-                        LReply->Status, LReply->Content.Size(), lpReferer, lpUserAgent);
+                if (LConnection->Socket()->Binding() != nullptr) {
+                    Log()->Access(_T("%s %d %8.2f ms [%s] \"%s %s HTTP/%d.%d\" %d %d \"%s\" \"%s\"\r\n"),
+                                  LConnection->Socket()->Binding()->PeerIP(),
+                                  LConnection->Socket()->Binding()->PeerPort(),
+                                  double((clock() - AConnection->Tag()) / (double) CLOCKS_PER_SEC * 1000), szTime,
+                                  LRequest->Method.c_str(), LRequest->Uri.c_str(), LRequest->VMajor, LRequest->VMinor,
+                                  LReply->Status, LReply->Content.Size(), lpReferer, lpUserAgent);
+                }
             }
         }
         //--------------------------------------------------------------------------------------------------------------
@@ -866,10 +872,10 @@ namespace Apostol {
         void CServerProcess::DoOptions(CCommand *ACommand) {
             auto LConnection = dynamic_cast<CHTTPServerConnection *> (ACommand->Connection());
             auto LRequest = LConnection->Request();
-
+#ifdef _DEBUG
             if (LRequest->Uri == _T("/quit"))
                 SignalProcess()->Quit();
-
+#endif
             LConnection->SendStockReply(CReply::ok);
         }
         //--------------------------------------------------------------------------------------------------------------
@@ -925,12 +931,12 @@ namespace Apostol {
         //--------------------------------------------------------------------------------------------------------------
 
         void CModuleProcess::DoBeforeExecuteModule(CApostolModule *AModule) {
-
+            AModule->BeforeExecute(this);
         }
         //--------------------------------------------------------------------------------------------------------------
 
         void CModuleProcess::DoAfterExecuteModule(CApostolModule *AModule) {
-
+            AModule->AfterExecute(this);
         }
         //--------------------------------------------------------------------------------------------------------------
 

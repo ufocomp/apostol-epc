@@ -1,6 +1,6 @@
 /*++
 
-Programm name:
+Program name:
 
   epc
 
@@ -39,13 +39,13 @@ extern "C++" {
 
 namespace Apostol {
 
-    namespace Electro {
+    namespace EPC {
 
         class CEPC: public CApplication {
         protected:
 
             void ParseCmdLine() override;
-            void ShowVersioInfo() override;
+            void ShowVersionInfo() override;
 
         public:
 
@@ -67,7 +67,7 @@ namespace Apostol {
     }
 }
 
-using namespace Apostol::Electro;
+using namespace Apostol::EPC;
 }
 
 #endif //APOSTOL_APOSTOL_HPP

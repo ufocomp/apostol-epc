@@ -24,7 +24,7 @@ Author:
 #ifndef APOSTOL_MODULE_HPP
 #define APOSTOL_MODULE_HPP
 
-#define APOSTOL_MODULE_JOB_ID_LENGTH    41
+#define APOSTOL_MODULE_UID_LENGTH    42
 
 extern "C++" {
 
@@ -35,18 +35,21 @@ namespace Apostol {
         typedef TList<TList<CStringList>> CQueryResult;
         //--------------------------------------------------------------------------------------------------------------
 
-        typedef std::function<void (CHTTPServerConnection *AConnection)> COnHeaderHandlerEvent;
+        typedef std::function<void (CHTTPServerConnection *AConnection)> COnMethodHandlerEvent;
         //--------------------------------------------------------------------------------------------------------------
 
-        class CHeaderHandler: CObject {
+        CString GetUID(unsigned int len);
+        //--------------------------------------------------------------------------------------------------------------
+
+        class CMethodHandler: CObject {
         private:
 
             bool m_Allow;
-            COnHeaderHandlerEvent m_Handler;
+            COnMethodHandlerEvent m_Handler;
 
         public:
 
-            CHeaderHandler(bool Allow, COnHeaderHandlerEvent && Handler): CObject(),
+            CMethodHandler(bool Allow, COnMethodHandlerEvent && Handler): CObject(),
                 m_Allow(Allow), m_Handler(Handler) {
 
             };
@@ -58,7 +61,8 @@ namespace Apostol {
                     m_Handler(AConnection);
             }
         };
-
+        //--------------------------------------------------------------------------------------------------------------
+#ifdef DELPHI_POSTGRESQL
         class CJob: CCollectionItem {
         private:
 
@@ -112,7 +116,7 @@ namespace Apostol {
             void Jobs(int Index, CJob *Value) { Set(Index, Value); }
 
         };
-
+#endif
         //--------------------------------------------------------------------------------------------------------------
 
         //-- CApostolModule --------------------------------------------------------------------------------------------
@@ -131,37 +135,45 @@ namespace Apostol {
 
         protected:
 
-            CStringList *m_Headers;
+            CStringList m_Methods;
 
-            virtual void InitHeaders();
+            virtual void CORS(CHTTPServerConnection *AConnection);
 
             virtual void DoOptions(CHTTPServerConnection *AConnection);
 
             virtual void MethodNotAllowed(CHTTPServerConnection *AConnection);
 
+#ifdef DELPHI_POSTGRESQL
             virtual void DoPostgresQueryExecuted(CPQPollQuery *APollQuery) abstract;
             virtual void DoPostgresQueryException(CPQPollQuery *APollQuery, Delphi::Exception::Exception *AException) abstract;
-
+#endif
         public:
 
             CApostolModule();
 
             explicit CApostolModule(CModuleManager *AManager);
 
-            ~CApostolModule() override;
+            ~CApostolModule() override = default;
 
-            virtual bool CheckUrerArent(const CString& Value) abstract;
+            virtual void InitMethods() abstract;
+
+            virtual bool CheckUserAgent(const CString& Value) abstract;
+
+            virtual void BeforeExecute(Pointer Data) abstract;
+            virtual void AfterExecute(Pointer Data) abstract;
 
             virtual void Execute(CHTTPServerConnection *AConnection) abstract;
 
-            static void QueryToResult(CPQPollQuery *APollQuery, CQueryResult& AResult);
-
             const CString& AllowedMethods() { return GetAllowedMethods(m_AllowedMethods); };
+
+#ifdef DELPHI_POSTGRESQL
+
+            static void QueryToResult(CPQPollQuery *APollQuery, CQueryResult& AResult);
 
             CPQPollQuery *GetQuery(CPollConnection *AConnection);
 
             bool ExecSQL(CPollConnection *AConnection, const CStringList &SQL, COnPQPollQueryExecutedEvent &&Executed = nullptr);
-
+#endif
         };
 
         //--------------------------------------------------------------------------------------------------------------
@@ -184,7 +196,7 @@ namespace Apostol {
 
             };
 
-            bool ExecuteModule(CHTTPServerConnection *AConnection);
+            bool ExecuteModule(CTCPConnection *AConnection);
 
             int ModuleCount() { return inherited::Count(); };
             void DeleteModule(int Index) { inherited::Delete(Index); };

@@ -1,6 +1,6 @@
 /*++
 
-Programm name:
+Program name:
 
   apostol
 
@@ -28,11 +28,11 @@ Author:
 #include "Module.hpp"
 //----------------------------------------------------------------------------------------------------------------------
 
-#include "Electro/Electro.hpp"
+#include "WebService/WebService.hpp"
 //----------------------------------------------------------------------------------------------------------------------
 
 static void CreateModule(CModuleManager *AManager) {
-    CElectro::CreateModule(AManager);
+    CWebService::CreateModule(AManager);
 }
 
 #endif //APOSTOL_MODULES_HPP

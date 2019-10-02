@@ -1,6 +1,6 @@
 /*++
 
-Programm name:
+Program name:
 
   epc
 
@@ -37,9 +37,9 @@ extern "C++" {
 
 namespace Apostol {
 
-    namespace Electro {
+    namespace EPC {
 
-        void CEPC::ShowVersioInfo() {
+        void CEPC::ShowVersionInfo() {
 
             std::cerr << APP_NAME " version: " APP_VERSION " (" APP_DESCRIPTION ")" LINEFEED << std::endl;
 

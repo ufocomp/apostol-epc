@@ -1,7 +1,20 @@
 cmake_minimum_required(VERSION 3.13)
 project(apostol-electro)
 
-list( APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake-modules" )
+# Settings
+# ----------------------------------------------------------------------------------------------------------------------
+set(INSTALL_AS_ROOT  ON  CACHE BOOL "Install as root")
+set(WITH_POSTGRESQL  ON  CACHE BOOL "Build with PostgreSQL")
+set(WITH_SQLITE3     OFF CACHE BOOL "Build with Sqlite3")
+# ----------------------------------------------------------------------------------------------------------------------
+
+if (INSTALL_AS_ROOT)
+    set(INSTALL_BIN_PATH "/usr/sbin")
+    set(PROJECT_PREFIX "/etc/${PROJECT_NAME}")
+else()
+    set(INSTALL_BIN_PATH "/usr/bin")
+    set(PROJECT_PREFIX "$ENV{HOME}/.${PROJECT_NAME}")
+endif()
 
 add_compile_options("$<$<CONFIG:DEBUG>:-D_DEBUG>")
 
@@ -9,38 +22,11 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++")
 
 set(PROJECT_NAME "epc")
-set(PROJECT_DESCRIPTION "Apostol Electro")
+set(PROJECT_DESCRIPTION "epc electro")
 
 message(STATUS "Project name: ${PROJECT_NAME}")
 message(STATUS "Project description: ${PROJECT_DESCRIPTION}")
 
-set(INSTALL_LOCAL   OFF CACHE BOOL "Install local")
-
-set(USE_POSTGRESQL  ON CACHE BOOL "Build with PostgreSQL")
-set(USE_SQLITE3     OFF CACHE BOOL "Build with Sqlite3.")
-
-if (INSTALL_LOCAL)
-    set(INSTALL_BIN_PATH "/usr/local/sbin")
-    set(PROJECT_PREFIX "~/.${PROJECT_NAME}")
-else()
-    set(INSTALL_BIN_PATH "/usr/sbin")
-    set(PROJECT_PREFIX "/etc/${PROJECT_NAME}")
-endif()
-
-if (USE_POSTGRESQL)
-    message(STATUS "Using PostgreSQL.")
-    find_package(PostgreSQL REQUIRED)
-    set(PQ_LIB_NAME "pq")
-    add_compile_options("-DDELPHI_POSTGRESQL")
-endif()
-
-if (USE_SQLITE3)
-    message(STATUS "Using SQLite3.")
-    set(SQLITE3_LIB_NAME "sqlite3")
-    add_compile_options("-DDELPHI_SQLITE3")
-endif()
-
-set(DELPHI_LIB_NAME delphi)
 set(CORE_LIB_NAME apostol-core)
 set(MODULES_LIB_NAME apostol-modules)
 
@@ -51,87 +37,43 @@ add_custom_target(
         -P ${CMAKE_SOURCE_DIR}/AutoVersion.cmake
 )
 
-# Find PkgConfig
-#------------------------------------------------------------------------------
-find_package( PkgConfig REQUIRED )
-
-set( prefix "${CMAKE_PREFIX_PATH}" )
-set( exec_prefix "\${prefix}" )
-set( libdir "\${exec_prefix}/lib" )
-set( includedir "\${exec_prefix}/include" )
-
-set( pkgconfigdir "${libdir}/pkgconfig" CACHE PATH "Path to pkgconfig directory." )
-
-# Find dl
-#------------------------------------------------------------------------------
-if ((${CMAKE_SYSTEM_NAME} MATCHES "Linux"))
-    find_package( Dl REQUIRED )
-
-    message(STATUS "Dl libs: ${dl_LIBS}")
-    message(STATUS "Dl libraries: ${dl_LIBRARIES}")
-endif()
-
-# Define project common includes directories
-#------------------------------------------------------------------------------
-if (BUILD_SHARED_LIBS)
-    include_directories( SYSTEM
-            ${dl_INCLUDE_DIRS}
-            )
-else()
-    include_directories( SYSTEM
-            ${dl_INCLUDE_DIRS}
-            )
-endif()
-
-# Define project common library directories
-#------------------------------------------------------------------------------
-if (BUILD_SHARED_LIBS)
-    link_directories(
-            ${dl_LIBRARY_DIRS}
-    )
-else()
-    link_directories(
-            ${dl_LIBRARY_DIRS}
-    )
-endif()
-
-# Define project common libraries/linker flags.
-#------------------------------------------------------------------------------
-if (BUILD_SHARED_LIBS)
-    link_libraries(
-            "-fstack-protector"
-            "-fstack-protector-all"
-            ${dl_LIBRARIES}
-    )
-else()
-    link_libraries(
-            "-fstack-protector"
-            "-fstack-protector-all"
-            ${dl_LIBRARIES}
-    )
-endif()
-
-# Apostol-Bitcoin
+# Delphi classes for C++
 # ----------------------------------------------------------------------------------------------------------------------
-include_directories(src/lib/delphi src/${PROJECT_NAME} src/core src/modules)
+add_compile_options("-DDELPHI_LIB_EXPORTS")
+add_compile_options(-DWWWServerName="${PROJECT_DESCRIPTION}")
 
-file(GLOB project_files version.h src/${PROJECT_NAME}/*.hpp src/${PROJECT_NAME}/*.cpp)
-file(GLOB delphi_files src/lib/delphi/*.hpp src/lib/delphi/*.cpp)
+if (WITH_POSTGRESQL)
+    set(PQ_LIB_NAME "pq")
+    add_compile_options("-DDELPHI_POSTGRESQL")
+endif()
+
+if (WITH_SQLITE3)
+    set(SQLITE3_LIB_NAME "sqlite3")
+    add_compile_options("-DDELPHI_SQLITE3")
+endif()
+
+set(DELPHI_LIB_DIR "src/lib/delphi")
+
+add_subdirectory(${DELPHI_LIB_DIR})
+
+# -Iinclude
+include_directories(${DELPHI_LIB_DIR}/include)
+include_directories(${DELPHI_LIB_DIR}/src)
+
+# Apostol
+# ----------------------------------------------------------------------------------------------------------------------
+include_directories(src/app src/core src/modules)
+
+file(GLOB app_files version.h src/app/*.hpp src/app/*.cpp)
 file(GLOB core_files src/core/*.hpp src/core/*.cpp)
 file(GLOB modules_files src/modules/Modules.hpp src/modules/*/*.hpp src/modules/*/*.cpp)
 
-# Delphi classes for C++
-# ----------------------------------------------------------------------------------------------------------------------
-add_library(${DELPHI_LIB_NAME} STATIC ${delphi_files})
-target_link_libraries(${DELPHI_LIB_NAME} pthread ${SQLITE3_LIB_NAME} ${PQ_LIB_NAME})
-target_compile_definitions(${DELPHI_LIB_NAME} PUBLIC WWWServerName="${PROJECT_DESCRIPTION}")
-
-add_definitions(-DDELPHI_LIB_EXPORTS)
-add_definitions(-DSYS_ERRNO_COUNT=135)
-
 # Apostol Core
 # ----------------------------------------------------------------------------------------------------------------------
-add_library(${CORE_LIB_NAME} STATIC ${core_files})
+add_library(${CORE_LIB_NAME} STATIC
+        $<TARGET_OBJECTS:delphi>
+        ${core_files}
+        )
 
 target_compile_definitions(${CORE_LIB_NAME} PUBLIC
         APP_NAME="${PROJECT_NAME}"
@@ -141,6 +83,7 @@ target_compile_definitions(${CORE_LIB_NAME} PUBLIC
         APP_OLDPID_EXT=".oldbin"
         APP_DEFAULT_USER="nobody"
         APP_DEFAULT_GROUP="nogroup"
+        APP_DEFAULT_LISTEN="0.0.0.0"
         APP_PREFIX="${PROJECT_PREFIX}/"
         APP_CONF_PREFIX="conf/"
         APP_CACHE_PREFIX="cache/"
@@ -154,29 +97,34 @@ target_compile_definitions(${CORE_LIB_NAME} PUBLIC
         APP_DOC_ROOT="www/"
         )
 
-target_link_libraries(${CORE_LIB_NAME} ${DELPHI_LIB_NAME})
+target_link_libraries(${CORE_LIB_NAME} dl pthread ${PQ_LIB_NAME} ${SQLITE3_LIB_NAME})
 
 # Apostol modules
 # ----------------------------------------------------------------------------------------------------------------------
 add_library(${MODULES_LIB_NAME} STATIC ${modules_files})
 target_link_libraries(${MODULES_LIB_NAME} ${CORE_LIB_NAME})
 
-# Apostol Electro
+# Apostol
 # ----------------------------------------------------------------------------------------------------------------------
-add_executable(${PROJECT_NAME} ${project_files})
+add_executable(${PROJECT_NAME} ${app_files})
 target_link_libraries(${PROJECT_NAME} ${MODULES_LIB_NAME})
 
 add_dependencies(${PROJECT_NAME} auto_increment_version)
-# ----------------------------------------------------------------------------------------------------------------------
 
+# Install
+# ----------------------------------------------------------------------------------------------------------------------
 set(INSTALL_PATH "${PROJECT_PREFIX}")
 
-install(TARGETS ${PROJECT_NAME} CONFIGURATIONS Release DESTINATION ${INSTALL_BIN_PATH})
-install(FILES auto/${PROJECT_NAME} DESTINATION /etc/init.d PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+install(TARGETS ${PROJECT_NAME} DESTINATION ${INSTALL_BIN_PATH})
 
 install(DIRECTORY DESTINATION ${INSTALL_PATH})
 install(DIRECTORY DESTINATION ${INSTALL_PATH}/conf)
 install(DIRECTORY DESTINATION ${INSTALL_PATH}/logs)
-install(FILES conf/${PROJECT_NAME}.conf DESTINATION ${INSTALL_PATH}/conf RENAME default.conf)
-install(FILES conf/${PROJECT_NAME}.conf DESTINATION ${INSTALL_PATH})
-install(CODE "execute_process(COMMAND update-rc.d ${PROJECT_NAME} defaults)")
+install(DIRECTORY doc/www/ DESTINATION ${INSTALL_PATH}/www)
+install(FILES conf/default.conf DESTINATION ${INSTALL_PATH}/conf)
+install(FILES conf/default.conf DESTINATION ${INSTALL_PATH} RENAME ${PROJECT_NAME}.conf)
+
+if (INSTALL_AS_ROOT)
+    install(FILES auto/daemon DESTINATION /etc/init.d RENAME ${PROJECT_NAME} PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+    install(CODE "execute_process(COMMAND update-rc.d ${PROJECT_NAME} defaults)")
+endif()
