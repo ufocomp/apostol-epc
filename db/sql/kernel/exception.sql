@@ -95,6 +95,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
+CREATE OR REPLACE FUNCTION IncorrectClassType() RETURNS void
+AS $$
+BEGIN
+  RAISE EXCEPTION 'Неверно задан тип объекта.';
+END;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE;
+
 CREATE OR REPLACE FUNCTION IncorrectDocumentType() RETURNS void
 AS $$
 BEGIN
@@ -208,6 +215,24 @@ CREATE OR REPLACE FUNCTION DeleteUserError() RETURNS void
 AS $$
 BEGIN
   RAISE EXCEPTION 'Нельзя удалить самого себя.';
+END;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION ClientCodeExists (
+  pCode		varchar
+) RETURNS	void
+AS $$
+BEGIN
+  RAISE EXCEPTION 'Клиент с кодом "%" уже существует.', pCode;
+END;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION CardCodeExists (
+  pCode		varchar
+) RETURNS	void
+AS $$
+BEGIN
+  RAISE EXCEPTION 'Карта с кодом "%" уже существует.', pCode;
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
@@ -421,5 +446,31 @@ CREATE OR REPLACE FUNCTION IncorrectRegisterKey (
 AS $$
 BEGIN
   RAISE EXCEPTION 'РЕЕСТР: Недопустимый ключ "%". Допустимые ключи: %.', pKey, pArray;
+END;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE;
+
+--------------------------------------------------------------------------------
+-- FUNCTION ActionNotFound -----------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION ActionNotFound (
+  pAction	text
+) RETURNS	void
+AS $$
+BEGIN
+  RAISE EXCEPTION 'OCPP: Неопределенное действие: "%".', pAction;
+END;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE;
+
+--------------------------------------------------------------------------------
+-- FUNCTION UnknownTransaction -------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION UnknownTransaction (
+  pId		numeric
+) RETURNS	void
+AS $$
+BEGIN
+  RAISE EXCEPTION 'Неизвестная транзакия: "%".', pId;
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;

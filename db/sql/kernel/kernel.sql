@@ -21,9 +21,12 @@ BEGIN
 
   INSERT INTO db.essence (code, name) VALUES ('client', 'Клиент');
   INSERT INTO db.essence (code, name) VALUES ('contract', 'Договор');
+  INSERT INTO db.essence (code, name) VALUES ('card', 'Карта');
 
   INSERT INTO db.essence (code, name) VALUES ('calendar', 'Календарь');
   INSERT INTO db.essence (code, name) VALUES ('address', 'Адрес');
+
+  INSERT INTO db.essence (code, name) VALUES ('charge_point', 'Зарядная станция');
 
   ------------------------------------------------------------------------------
 
@@ -81,6 +84,12 @@ BEGIN
 
       nId[2] := AddClass(nId[1], nEssence, 'contract', 'Договор', false);
 
+      -- Карта
+
+      nEssence := GetEssence('card');
+
+      nId[2] := AddClass(nId[1], nEssence, 'card', 'Карта', false);
+
     -- Справочник
 
     nEssence := GetEssence('reference');
@@ -99,6 +108,11 @@ BEGIN
 
       nId[2] := AddClass(nId[1], nEssence, 'address', 'Адрес', false);
 
+      -- Зарядная станция
+
+      nEssence := GetEssence('charge_point');
+
+      nId[2] := AddClass(nId[1], nEssence, 'charge_point', 'Зарядная станция', false);
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
@@ -136,9 +150,18 @@ BEGIN
       PERFORM AddType(rec_class.id, 'workday.calendar', 'Рабочий', 'Календарь рабочих дней');
     END IF;
 
+    IF rec_class.code = 'card' THEN
+      PERFORM AddType(rec_class.id, 'plastic.card', 'Пластиковая карта', 'Пластиковая карта для зарядной станции');
+    END IF;
+
     IF rec_class.code = 'address' THEN
       PERFORM AddType(rec_class.id, 'post.address', 'Почтовый', 'Почтовый адрес');
       PERFORM AddType(rec_class.id, 'legal.address', 'Юридический', 'Юридический адрес');
+    END IF;
+
+    IF rec_class.code = 'charge_point' THEN
+      PERFORM AddType(rec_class.id, 'soap.charge_point', 'SOAP', 'SOAP');
+      PERFORM AddType(rec_class.id, 'json.charge_point', 'JSON', 'JSON');
     END IF;
 
   END LOOP;
@@ -307,17 +330,11 @@ CREATE OR REPLACE FUNCTION KernelInit()
 RETURNS void 
 AS $$
 DECLARE
-  nId		NUMERIC;
   nEvent	NUMERIC;
   nParent	NUMERIC;
-  nState  	NUMERIC;
 
   rec_class	RECORD;
   rec_action	RECORD;
-  rec_type	RECORD;
-  rec_state	RECORD;
-  rec_method	RECORD;
-
 BEGIN
   nParent := GetEventType('parent');
   nEvent := GetEventType('event');
@@ -684,6 +701,71 @@ BEGIN
 
           IF rec_action.code = 'drop' THEN
             PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Адрес будет уничтожен', 'EventAddressDrop();');
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+          END IF;
+
+        END LOOP;
+
+      ELSE
+        -- Для всех остальных события класса родителя
+        FOR rec_action IN SELECT * FROM Action
+        LOOP
+          PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+        END LOOP;
+
+      END IF;
+
+      PERFORM AddDefaultMethods(rec_class.id);
+
+    ELSIF rec_class.essencecode = 'charge_point' THEN
+
+      IF rec_class.code = 'charge_point' THEN
+
+        FOR rec_action IN SELECT * FROM Action
+        LOOP
+
+          IF rec_action.code = 'create' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция создана', 'EventChargePointCreate();');
+          END IF;
+
+          IF rec_action.code = 'open' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция открыта', 'EventChargePointOpen();');
+          END IF;
+
+          IF rec_action.code = 'edit' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция измена', 'EventChargePointEdit();');
+          END IF;
+
+          IF rec_action.code = 'save' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция сохрана', 'EventChargePointSave();');
+          END IF;
+
+          IF rec_action.code = 'enable' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция включена', 'EventChargePointEnable();');
+          END IF;
+
+          IF rec_action.code = 'disable' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция отключена', 'EventChargePointDisable();');
+          END IF;
+
+          IF rec_action.code = 'delete' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция будет удалёна', 'EventChargePointDelete();');
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+          END IF;
+
+          IF rec_action.code = 'restore' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция восстановлена', 'EventChargePointRestore();');
+          END IF;
+
+          IF rec_action.code = 'drop' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция будет уничтожена', 'EventChargePointDrop();');
             PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
           END IF;
 

@@ -54,7 +54,7 @@ CREATE INDEX ON db.object (udate);
 CREATE OR REPLACE FUNCTION db.ft_object_before_insert()
 RETURNS trigger AS $$
 DECLARE
-  nClass        numeric;
+  nClass	numeric;
   bAbstract	boolean;
 BEGIN
   IF lower(session_user) = 'kernel' THEN
@@ -208,27 +208,10 @@ CREATE TRIGGER t_object_before_delete
   EXECUTE PROCEDURE db.ft_object_before_delete();
 
 --------------------------------------------------------------------------------
--- CheckObjectAccess -----------------------------------------------------------
+-- VIEW Object -----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION CheckObjectAccess (
-  pObject	numeric,
-  pMask		bit,
-  pUserId	numeric default current_userid()
-) RETURNS	boolean
-AS $$
-BEGIN
-  RETURN coalesce(GetObjectMask(pObject, pUserId) & pMask = pMask, false);
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- VIEW object -----------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE VIEW object (Id, Parent,
+CREATE OR REPLACE VIEW Object (Id, Parent,
   Essence, EssenceCode, EssenceName,
   Class, ClassCode, ClassLabel,
   Type, TypeCode, TypeName, TypeDescription,
@@ -238,9 +221,6 @@ CREATE OR REPLACE VIEW object (Id, Parent,
   Owner, OwnerCode, OwnerName, Created,
   Oper, OperCode, OperName, OperDate
 ) AS
-  WITH cu AS (
-    SELECT current_userid() AS owner
-  )
   SELECT o.id, o.parent,
          e.id, e.code, e.name,
          c.id, c.code, c.label,
@@ -256,10 +236,9 @@ CREATE OR REPLACE VIEW object (Id, Parent,
                      INNER JOIN db.state_list s ON s.id = o.state
                      INNER JOIN db.state_type y ON y.id = s.type
                      INNER JOIN db.user w       ON w.id = o.owner AND w.type = 'U'
-                     INNER JOIN db.user u       ON u.id = o.oper AND u.type = 'U'
-   WHERE o.owner = (SELECT owner FROM cu);
+                     INNER JOIN db.user u       ON u.id = o.oper AND u.type = 'U';
 
-GRANT SELECT ON object TO administrator;
+GRANT SELECT ON Object TO administrator;
 
 --------------------------------------------------------------------------------
 -- CreateObject ----------------------------------------------------------------
@@ -472,11 +451,32 @@ $$ LANGUAGE SQL
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
+-- CheckObjectAccess -----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION CheckObjectAccess (
+  pObject	numeric,
+  pMask		bit,
+  pUserId	numeric default current_userid()
+) RETURNS	boolean
+AS $$
+BEGIN
+  IF session_user = 'ocpp' THEN
+    RETURN true;
+  END IF;
+
+  RETURN coalesce(GetObjectMask(pObject, pUserId) & pMask = pMask, false);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
 -- OBJECT_STATE ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.object_state (
-    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_ID'),
+    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
     object		numeric(12) NOT NULL,
     state		numeric(12) NOT NULL,
     validfromdate	timestamp DEFAULT NOW() NOT NULL,
@@ -848,7 +848,7 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.object_group (
-    id                  numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_ID'),
+    id                  numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
     owner		numeric(12) NOT NULL,
     code                varchar(30) NOT NULL,
     name                varchar(50) NOT NULL,
@@ -974,7 +974,7 @@ GRANT SELECT ON ObjectGroup TO administrator;
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.object_group_member (
-    id                  numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_ID'),
+    id                  numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
     gid                 numeric(12) NOT NULL,
     object              numeric(12) NOT NULL,
     CONSTRAINT fk_object_group_member_gid FOREIGN KEY (gid) REFERENCES db.object_group(id),
@@ -1059,7 +1059,7 @@ GRANT SELECT ON ObjectGroupMember TO administrator;
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.object_file (
-    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_ID'),
+    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
     object		numeric(12) NOT NULL,
     load_date		timestamp DEFAULT NOW() NOT NULL,
     file_hash		text NOT NULL,
@@ -1299,7 +1299,7 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.object_data_type (
-    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_ID'),
+    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
     code        	varchar(30) NOT NULL,
     name 		varchar(50) NOT NULL,
     description		text
@@ -1353,7 +1353,7 @@ GRANT SELECT ON ObjectDataType TO administrator;
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.object_data (
-    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_ID'),
+    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
     object		numeric(12) NOT NULL,
     type		numeric(12) NOT NULL,
     code        	varchar(30) NOT NULL,

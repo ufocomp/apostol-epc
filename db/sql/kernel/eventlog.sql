@@ -3,7 +3,7 @@
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.log (
-    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_EVENTLOG'),
+    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_LOG'),
     object		numeric(12),
     type		char DEFAULT 'M' NOT NULL,
     datetime		timestamp DEFAULT NOW() NOT NULL,

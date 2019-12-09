@@ -3204,9 +3204,6 @@ DECLARE
   lHost		inet default null;
 
   message	text;
-
-  vDepName	text;
-  vWorkPlace	text;
 BEGIN
   SELECT userid, host, department, workplace
     INTO nUserId, iHost, nDepartment, nWorkPlace
@@ -3544,6 +3541,8 @@ SELECT AddMemberToWorkPlace(CreateGroup('operator', 'Операторы', 'Гр�
 SELECT AddMemberToWorkPlace(CreateGroup('user', 'Пользователи', 'Группа для внешних пользователей системы'), GetWorkPlace('W:1:0:5'));
 
 SELECT AddMemberToGroup(CreateUser('admin', 'admin', 'Администратор', null, 'Администратор системы', true, false, GetDepartment('root')), GetGroup('administrator'));
+
 SELECT CreateUser('daemon', 'daemon', 'Демон', null, 'Пользователь для API');
-SELECT CreateUser('apibot', 'apibot', 'Системная служба', null, 'API клиент');
+SELECT CreateUser('apibot', 'apibot', 'Системная служба API', null, 'API клиент');
 SELECT CreateUser('mailbot', 'mailbot', 'Почтовый клиент', null, 'Почтовый клиент');
+SELECT CreateUser('ocpp', 'ocpp', 'Системная служба OCPP', null, 'OCPP клиент');

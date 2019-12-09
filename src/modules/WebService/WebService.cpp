@@ -27,15 +27,25 @@ Author:
 #include "WebService.hpp"
 //----------------------------------------------------------------------------------------------------------------------
 
+#include <openssl/sha.h>
+#include "rapidxml.hpp"
+//----------------------------------------------------------------------------------------------------------------------
+
 extern "C++" {
 
 namespace Apostol {
 
-    namespace Module {
+    namespace WebService {
+
+        CString to_string(unsigned long Value) {
+            TCHAR szString[_INT_T_LEN + 1] = {0};
+            sprintf(szString, "%lu", Value);
+            return CString(szString);
+        }
 
         //--------------------------------------------------------------------------------------------------------------
 
-        //-- CWebService --------------------------------------------------------------------------------------------------
+        //-- CWebService -----------------------------------------------------------------------------------------------
 
         //--------------------------------------------------------------------------------------------------------------
 
@@ -64,10 +74,37 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        void CWebService::ExceptionToJson(int ErrorCode, Delphi::Exception::Exception *AException, CString& Json) {
+        void CWebService::DebugRequest(CRequest *ARequest) {
+            DebugMessage("\n[%p] Request:\n%s %s HTTP/%d.%d\n", ARequest, ARequest->Method.c_str(), ARequest->Uri.c_str(), ARequest->VMajor, ARequest->VMinor);
 
+            for (int i = 0; i < ARequest->Headers.Count(); i++)
+                DebugMessage("%s: %s\n", ARequest->Headers[i].Name.c_str(), ARequest->Headers[i].Value.c_str());
+
+            if (!ARequest->Content.IsEmpty())
+                DebugMessage("\n%s\n", ARequest->Content.c_str());
+        }
+        //--------------------------------------------------------------------------------------------------------------
+
+        void CWebService::DebugReply(CReply *AReply) {
             TCHAR ch;
-            LPCTSTR lpMessage = AException->what();
+            CString String;
+            CMemoryStream Stream;
+
+            AReply->ToBuffers(&Stream);
+            Stream.Position(0);
+
+            for (size_t i = 0; i < Stream.Size(); ++i) {
+                Stream.Read(&ch, 1);
+                if (ch != '\r')
+                    String.Append(ch);
+            }
+
+            DebugMessage("\n[%p] Reply:\n%s\n", AReply, String.c_str());
+        }
+        //--------------------------------------------------------------------------------------------------------------
+        void CWebService::ExceptionToJson(int ErrorCode, const std::exception &AException, CString& Json) {
+            TCHAR ch;
+            LPCTSTR lpMessage = AException.what();
             CString Message;
 
             while ((ch = *lpMessage++) != 0) {
@@ -88,54 +125,12 @@ namespace Apostol {
 
                 CReply::status_type LStatus = CReply::internal_server_error;
 
-                ExceptionToJson(0, AException, LReply->Content);
+                ExceptionToJson(0, *AException, LReply->Content);
 
                 LConnection->SendReply(LStatus);
             }
 
             Log()->Error(APP_LOG_EMERG, 0, AException->what());
-        }
-        //--------------------------------------------------------------------------------------------------------------
-
-        void CWebService::RowToJson(const CStringList &Row, CString &Json) {
-            Json = "{";
-
-            for (int I = 0; I < Row.Count(); ++I) {
-                if (I > 0) {
-                    Json += ", ";
-                }
-
-                const CString &Name = Row.Names(I);
-                const CString &Value = Row.Values(Name);
-
-                Json += "\"";
-                Json += Name;
-                Json += "\"";
-
-                if (Name == _T("session")) {
-                    Json += ": ";
-                    if (Value == _T("<null>")) {
-                        Json += _T("null");
-                    } else {
-                        Json += "\"";
-                        Json += Value;
-                        Json += "\"";
-                    }
-                } else if (Name == _T("result")) {
-                    Json += ": ";
-                    if (Value == _T("t")) {
-                        Json += _T("true");
-                    } else {
-                        Json += _T("false");
-                    }
-                } else {
-                    Json += ": \"";
-                    Json += Value;
-                    Json += "\"";
-                }
-            }
-
-            Json += "}";
         }
         //--------------------------------------------------------------------------------------------------------------
 
@@ -245,7 +240,7 @@ namespace Apostol {
                     QueryToJson(APollQuery, LReply->Content);
                     LStatus = CReply::ok;
                 } catch (Delphi::Exception::Exception &E) {
-                    ExceptionToJson(0, &E, LReply->Content);
+                    ExceptionToJson(0, E, LReply->Content);
                     Log()->Error(APP_LOG_EMERG, 0, E.what());
                 }
 
@@ -259,7 +254,7 @@ namespace Apostol {
                     try {
                         QueryToJson(APollQuery, LJob->Result());
                     } catch (Delphi::Exception::Exception &E) {
-                        ExceptionToJson(0, &E, LJob->Result());
+                        ExceptionToJson(0, E, LJob->Result());
                         Log()->Error(APP_LOG_EMERG, 0, E.what());
                     }
                 }
@@ -269,16 +264,13 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        bool CWebService::QueryStart(CHTTPServerConnection *AConnection, const CStringList& ASQL) {
+        bool CWebService::QueryStart(CHTTPServerConnection *AConnection, const CStringList& SQL) {
             auto LQuery = GetQuery(AConnection);
 
-            if (LQuery == nullptr) {
-                Log()->Error(APP_LOG_ALERT, 0, "QueryStart: GetQuery() failed!");
-                AConnection->SendStockReply(CReply::internal_server_error);
-                return false;
-            }
+            if (LQuery == nullptr)
+                throw Delphi::Exception::Exception("QueryStart: GetQuery() failed!");
 
-            LQuery->SQL() = ASQL;
+            LQuery->SQL() = SQL;
 
             if (LQuery->QueryStart() != POLL_QUERY_START_ERROR) {
                 if (m_Version == 2) {
@@ -330,35 +322,105 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        void CWebService::DoGet(CHTTPServerConnection *AConnection) {
+        void CWebService::DoWWW(CHTTPServerConnection *AConnection) {
+            auto LServer = dynamic_cast<CHTTPServer *> (AConnection->Server());
             auto LRequest = AConnection->Request();
+            auto LReply = AConnection->Reply();
 
-            CString JobId = LRequest->Uri.SubString(1);
+            TCHAR szExt[PATH_MAX] = {0};
 
-            if (JobId.Length() != APOSTOL_MODULE_UID_LENGTH) {
+            LReply->ContentType = CReply::html;
+
+            // Decode url to path.
+            CString LRequestPath;
+            if (!LServer->URLDecode(LRequest->Uri, LRequestPath)) {
                 AConnection->SendStockReply(CReply::bad_request);
                 return;
             }
 
-            auto LJob = m_Jobs->FindJobById(JobId);
+            // Request path must be absolute and not contain "..".
+            if (LRequestPath.empty() || LRequestPath.front() != '/' || LRequestPath.find("..") != CString::npos) {
+                AConnection->SendStockReply(CReply::bad_request);
+                return;
+            }
 
-            if (LJob == nullptr) {
+            // If path ends in slash (i.e. is a directory) then add "index.html".
+            if (LRequestPath.back() == '/') {
+                LRequestPath += "index.html";
+            }
+
+            // Open the file to send back.
+            const CString LFullPath = LServer->DocRoot() + LRequestPath;
+            if (!FileExists(LFullPath.c_str())) {
                 AConnection->SendStockReply(CReply::not_found);
                 return;
             }
 
-            if (LJob->Result().IsEmpty()) {
-                AConnection->SendStockReply(CReply::accepted);
+            LReply->Content.LoadFromFile(LFullPath.c_str());
+
+            // Fill out the CReply to be sent to the client.
+            AConnection->SendReply(CReply::ok, Mapping::ExtToType(ExtractFileExt(szExt, LRequestPath.c_str())));
+        }
+        //--------------------------------------------------------------------------------------------------------------
+
+        void CWebService::DoGet(CHTTPServerConnection *AConnection) {
+            auto LRequest = AConnection->Request();
+            auto LReply = AConnection->Reply();
+
+            CStringList LUri;
+            SplitColumns(LRequest->Uri.c_str(), LRequest->Uri.Size(), &LUri, '/');
+
+            if (LUri.Count() < 3) {
+                DoWWW(AConnection);
                 return;
             }
 
-            auto LReply = AConnection->Reply();
+            const auto& LService = LUri[0].Lower();
+            const auto& LVersion = LUri[1].Lower();
+            const auto& LCommand = LUri[2].Lower();
+            const auto& LAction = LUri.Count() == 4 ? LUri[3].Lower() : "";
 
-            LReply->Content = LJob->Result();
+            if (LVersion == "v1") {
+                m_Version = 1;
+            } else if (LVersion == "v2") {
+                m_Version = 2;
+            }
 
-            AConnection->SendReply(CReply::ok);
+            if (LService != "api" || (m_Version == -1)) {
+                DoWWW(AConnection);
+                return;
+            }
 
-            delete LJob;
+            CString LRoute;
+            for (int I = 2; I < LUri.Count(); ++I) {
+                LRoute.Append('/');
+                LRoute.Append(LUri[I]);
+            }
+
+            try {
+                if (LCommand == "ping") {
+
+                    AConnection->SendStockReply(CReply::ok);
+
+                } else if (LCommand == "time") {
+
+                    LReply->Content << "{\"serverTime\": " << to_string(MsEpoch()) << "}";
+
+                    AConnection->SendReply(CReply::ok);
+
+                } else {
+
+                    AConnection->SendStockReply(CReply::not_found);
+
+                }
+            } catch (std::exception &e) {
+                CReply::status_type LStatus = CReply::internal_server_error;
+
+                ExceptionToJson(0, e, LReply->Content);
+
+                AConnection->SendReply(LStatus);
+                Log()->Error(APP_LOG_EMERG, 0, e.what());
+            }
         }
         //--------------------------------------------------------------------------------------------------------------
 
@@ -452,9 +514,22 @@ namespace Apostol {
         //--------------------------------------------------------------------------------------------------------------
 
         void CWebService::Execute(CHTTPServerConnection *AConnection) {
+
             int i = 0;
             auto LRequest = AConnection->Request();
             auto LReply = AConnection->Reply();
+
+            DebugMessage("[%p][%s:%d][%d]", AConnection, AConnection->Socket()->Binding()->PeerIP(),
+                         AConnection->Socket()->Binding()->PeerPort(), AConnection->Socket()->Binding()->Handle());
+
+            DebugRequest(AConnection->Request());
+
+            static auto OnReply = [](CObject *Sender) {
+                auto LConnection = dynamic_cast<CHTTPServerConnection *> (Sender);
+                DebugReply(LConnection->Reply());
+            };
+
+            AConnection->OnReply(OnReply);
 
             LReply->Clear();
             LReply->ContentType = CReply::json;

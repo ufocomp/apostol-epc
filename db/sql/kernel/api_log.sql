@@ -3,7 +3,7 @@
 --------------------------------------------------------------------------------
 
 CREATE TABLE api.log (
-    id			numeric PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_APILOG'),
+    id			numeric PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_API_LOG'),
     datetime		timestamp DEFAULT clock_timestamp() NOT NULL,
     username		text NOT NULL DEFAULT session_user,
     api_session		char(40),

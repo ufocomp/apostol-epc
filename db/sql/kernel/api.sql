@@ -164,11 +164,11 @@ AS $$
          s.suid, su.username, su.fullname,
          s.department, d.code, d.name,
          s.workplace, w.sid, w.name
-    FROM db.session s INNER JOIN users cu ON cu.id = s.userid
+    FROM db.session s INNER JOIN cs ON cs.session = s.key 
+                      INNER JOIN users cu ON cu.id = s.userid
                       INNER JOIN users su ON su.id = s.suid
                       INNER JOIN department d ON d.id = s.department
                       INNER JOIN workplace w ON w.id = s.workplace
-   WHERE s.key = (SELECT session FROM cs)
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -2223,7 +2223,7 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  arTables := array_cat(null, ARRAY['account']);
+  arTables := array_cat(null, ARRAY['client', 'charge_point']);
 
   IF array_position(arTables, pTable) IS NULL THEN
     PERFORM IncorrectValueInArray(pTable, 'sql/api/table', arTables);
@@ -4028,7 +4028,7 @@ DECLARE
 BEGIN
   FOR r IN
     SELECT id, file_hash AS hash, file_name AS name, file_path AS path, file_size AS size, file_date AS date
-      FROM db.db.object_file
+      FROM db.object_file
      WHERE object = pObject
      ORDER BY load_date desc, file_path, file_name
   LOOP
@@ -4971,8 +4971,7 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE VIEW api.calendar
 AS
   SELECT *
-    FROM ObjectCalendar
-   WHERE StateTypeCode <> 'deleted';
+    FROM ObjectCalendar;
 
 GRANT SELECT ON api.calendar TO daemon;
 
@@ -5432,6 +5431,411 @@ WHEN others THEN
   GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
   id := null;
   result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- CLIENT ----------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- api.client ------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.client
+AS
+  SELECT * FROM ObjectClient;
+
+GRANT SELECT ON api.client TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.add_client --------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Добавляет нового клиента.
+ * @param {varchar} pType - Tип клиента
+ * @param {varchar} pCode - ИНН - для юридического лица | Имя пользователя (login) | null
+ * @param {numeric} pUserId - Идентификатор пользователя системы | null
+ * @param {jsonb} pName - Полное наименование компании/Ф.И.О.
+ * @param {jsonb} pPhone - Телефоны
+ * @param {jsonb} pEmail - Электронные адреса
+ * @param {jsonb} pAddress - Почтовые адреса
+ * @param {jsonb} pInfo - Дополнительная информация
+ * @param {text} pDescription - Информация о клиенте
+ * @out param {numeric} id - Идентификатор клиента
+ * @out param {boolean} result - Результат
+ * @out param {text} error - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.add_client (
+  pType		varchar,
+  pCode		varchar,
+  pUserId	numeric,
+  pName		jsonb,
+  pPhone	jsonb default null,
+  pEmail	jsonb default null,
+  pAddress	jsonb default null,
+  pInfo 	jsonb default null,
+  pDescription	text default null,
+  OUT id	numeric,
+  OUT result	boolean,
+  OUT error	text
+) RETURNS 	record
+AS $$
+DECLARE
+  r		record;
+  nClient	numeric;
+  arTypes	text[];
+  arKeys	text[];
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  pType := lower(pType);
+  arTypes := array_cat(arTypes, ARRAY['entity', 'natural', 'sole']);
+  IF array_position(arTypes, pType) IS NULL THEN
+    PERFORM IncorrectCode(pType, arTypes);
+  END IF;
+
+  arKeys := array_cat(arKeys, ARRAY['name', 'short', 'first', 'last', 'middle']);
+  PERFORM CheckJsonbKeys('add_client', arKeys, pName);
+
+  nClient := CreateClient(null, GetType(pType || '.client'), pCode, pUserId, pPhone, pEmail, pAddress, pInfo, pDescription);
+
+  FOR r IN SELECT * FROM jsonb_to_record(pName) AS x(name varchar, short varchar, first varchar, last varchar, middle varchar)
+  LOOP
+    PERFORM NewClientName(nClient, r.name, r.short, r.first, r.last, r.middle);
+  END LOOP;
+
+  id := nClient;
+
+  SELECT * INTO result, error FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  id := null;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.upd_client --------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Обновляет данные клиента.
+ * @param {numeric} pId - Идентификатор клиента (api.get_client)
+ * @param {varchar} pType - Tип клиента
+ * @param {varchar} pCode - ИНН - для юридического лица | Имя пользователя (login) | null
+ * @param {numeric} pUserId - Идентификатор пользователя системы | null
+ * @param {jsonb} pName - Полное наименование компании/Ф.И.О.
+ * @param {jsonb} pPhone - Телефоны
+ * @param {jsonb} pEmail - Электронные адреса
+ * @param {jsonb} pAddress - Почтовые адреса
+ * @param {jsonb} pInfo - Дополнительная информация
+ * @param {text} pDescription - Информация о клиенте
+ * @out param {numeric} id - Идентификатор клиента
+ * @out param {boolean} result - Результат
+ * @out param {text} error - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.upd_client (
+  pId		numeric,
+  pType		varchar,
+  pCode		varchar,
+  pUserId	numeric,
+  pName		jsonb,
+  pPhone	jsonb default null,
+  pEmail	jsonb default null,
+  pAddress	jsonb default null,
+  pInfo 	jsonb default null,
+  pDescription	text default null,
+  OUT id	numeric,
+  OUT result	boolean,
+  OUT error	text
+) RETURNS 	record
+AS $$
+DECLARE
+  r		record;
+  nType         numeric;
+  nClient	numeric;
+  arTypes	text[];
+  arKeys	text[];
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  SELECT c.id INTO nClient FROM db.client c WHERE c.id = pId;
+  IF NOT FOUND THEN
+    PERFORM ObjectNotFound('клиент', 'id', pId);
+  END IF;
+
+  IF pType IS NOT NULL THEN
+    pType := lower(pType);
+    arTypes := array_cat(arTypes, ARRAY['entity', 'natural', 'sole']);
+    IF array_position(arTypes, pType) IS NULL THEN
+      PERFORM IncorrectCode(pType, arTypes);
+    END IF;
+    nType := GetType(pType || '.client');
+  ELSE
+    SELECT type INTO nType FROM db.object WHERE id = pId;
+  END IF;
+
+  arKeys := array_cat(arKeys, ARRAY['name', 'short', 'first', 'last', 'middle']);
+  PERFORM CheckJsonbKeys('upd_client', arKeys, pName);
+
+  PERFORM EditClient(nClient, null, nType, pCode, pUserId, pPhone, pEmail, pAddress, pInfo, pDescription);
+
+  FOR r IN SELECT * FROM jsonb_to_record(pName) AS x(name varchar, short varchar, first varchar, last varchar, middle varchar)
+  LOOP
+    PERFORM EditClientName(nClient, r.name, r.short, r.first, r.last, r.middle);
+  END LOOP;
+
+  id := nClient;
+
+  SELECT * INTO result, error FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  id := null;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_client --------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает клиента
+ * @param {numeric} pId - Идентификатор клиента
+ * @return {api.client} - Клиент
+ */
+CREATE OR REPLACE FUNCTION api.get_client (
+  pId		numeric
+) RETURNS	api.client
+AS $$
+  SELECT * FROM api.client WHERE id = pId
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.lst_client --------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает список клиентов.
+ * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
+ * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
+ * @param {integer} pLimit - Лимит по количеству строк
+ * @param {integer} pOffSet - Пропустить указанное число строк
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
+ * @return {SETOF api.client} - Клиенты
+ */
+CREATE OR REPLACE FUNCTION api.lst_client (
+  pSearch	jsonb default null,
+  pFilter	jsonb default null,
+  pLimit	integer default null,
+  pOffSet	integer default null,
+  pOrderBy	jsonb default null
+) RETURNS	SETOF api.client
+AS $$
+BEGIN
+  RETURN QUERY EXECUTE CreateApiSql('api', 'client', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- OCPP ------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- VIEW api.charge_point -------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.charge_point
+AS
+  SELECT * FROM ObjectChargePoint;
+
+GRANT SELECT ON api.charge_point TO daemon;
+
+--------------------------------------------------------------------------------
+-- FUNCTION api.add_charge_point -----------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.add_charge_point (
+  pProtocol	      varchar,
+  pIdentity	      varchar,
+  pName		      varchar,
+  pModel	      varchar,
+  pVendor	      varchar,
+  pVersion	      varchar,
+  pSerialNumber	      varchar,
+  pBoxSerialNumber    varchar,
+  pMeterSerialNumber  varchar,
+  piccid	      varchar,
+  pimsi	              varchar,
+  pDescription	      text default null,
+  OUT id	      numeric,
+  OUT result	      boolean,
+  OUT error	      text
+) RETURNS 	      record
+AS $$
+DECLARE
+  arProtocols         text[];
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  pProtocol := lower(pProtocol);
+  arProtocols := array_cat(arProtocols, ARRAY['soap', 'json']);
+  IF array_position(arProtocols, pProtocol) IS NULL THEN
+    PERFORM IncorrectCode(pProtocol, arProtocols);
+  END IF;
+
+  id := CreateChargePoint(null, GetType(pProtocol || '.charge_point'), pIdentity, pName, pModel, pVendor, pVersion,
+    pSerialNumber, pBoxSerialNumber, pMeterSerialNumber, piccid, pimsi, pDescription);
+
+  SELECT * INTO result, error FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  id := null;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- FUNCTION api.upd_charge_point -----------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.upd_charge_point (
+  pId	              numeric,
+  pProtocol	      varchar default null,
+  pIdentity	      varchar default null,
+  pName		      varchar default null,
+  pModel	      varchar default null,
+  pVendor	      varchar default null,
+  pVersion	      varchar default null,
+  pSerialNumber	      varchar default null,
+  pBoxSerialNumber    varchar default null,
+  pMeterSerialNumber  varchar default null,
+  piccid	      varchar default null,
+  pimsi	              varchar default null,
+  pDescription	      text default null,
+  OUT id	      numeric,
+  OUT result	      boolean,
+  OUT error	      text
+) RETURNS 	      record
+AS $$
+DECLARE
+  nId                 numeric;
+  nType               numeric;
+  arProtocols         text[];
+BEGIN
+  id := pId;
+
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  SELECT c.id INTO nId FROM db.charge_point c WHERE c.id = pId;
+  IF NOT FOUND THEN
+    PERFORM ObjectNotFound('зарядная станция', 'id', pId);
+  END IF;
+
+  IF pProtocol IS NOT NULL THEN
+    pProtocol := lower(pProtocol);
+    arProtocols := array_cat(arProtocols, ARRAY['soap', 'json']);
+    IF array_position(arProtocols, pProtocol) IS NULL THEN
+      PERFORM IncorrectCode(pProtocol, arProtocols);
+    END IF;
+    nType := GetType(pProtocol || '.charge_point');
+  ELSE
+    SELECT o.type INTO nType FROM db.object o WHERE o.id = pId;
+  END IF;
+
+  id := EditChargePoint(pId, null, nType, pIdentity, pName, pModel, pVendor, pVersion,
+    pSerialNumber, pBoxSerialNumber, pMeterSerialNumber, piccid, pimsi, pDescription);
+
+  SELECT * INTO result, error FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  id := null;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_charge_point --------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает зарядную станцию по идентификатору
+ * @param {numeric} pId - Идентификатор зарядной станции
+ * @return {api.client} - Зарядная станция
+ */
+CREATE OR REPLACE FUNCTION api.get_charge_point (
+  pId		numeric
+) RETURNS	api.charge_point
+AS $$
+  SELECT * FROM api.charge_point WHERE id = pId
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_charge_point --------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает зарядную станцию по строковому идентификатору
+ * @param {numeric} pId - Идентификатор зарядной станции
+ * @return {api.client} - Зарядная станция
+ */
+CREATE OR REPLACE FUNCTION api.get_charge_point (
+  pIdentity	varchar
+) RETURNS	api.charge_point
+AS $$
+  SELECT * FROM api.charge_point WHERE identity = pIdentity
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.lst_charge_point --------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает список зарядных станций.
+ * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
+ * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
+ * @param {integer} pLimit - Лимит по количеству строк
+ * @param {integer} pOffSet - Пропустить указанное число строк
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
+ * @return {SETOF api.client} - Зарядные станции
+ */
+CREATE OR REPLACE FUNCTION api.lst_charge_point (
+  pSearch	jsonb default null,
+  pFilter	jsonb default null,
+  pLimit	integer default null,
+  pOffSet	integer default null,
+  pOrderBy	jsonb default null
+) RETURNS	SETOF api.charge_point
+AS $$
+BEGIN
+  RETURN QUERY EXECUTE CreateApiSql('api', 'charge_point', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER

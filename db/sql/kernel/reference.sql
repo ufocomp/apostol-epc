@@ -189,4 +189,6 @@ AS
          o.state, o.statecode, o.statelabel, o.lastupdate,
          o.owner, o.ownercode, o.ownername, o.created,
          o.oper, o.opercode, o.opername, o.operdate
-    FROM db.reference r INNER JOIN Object o ON o.id = r.object;
+    FROM Reference r INNER JOIN Object o ON o.id = r.object;
+
+GRANT SELECT ON ObjectReference TO administrator;

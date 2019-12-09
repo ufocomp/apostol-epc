@@ -106,20 +106,22 @@ $$ LANGUAGE plpgsql
 -- Document --------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW Document
-AS
-  WITH RECURSIVE devtree(id) AS (
+CREATE OR REPLACE VIEW Document (Id, Object, Department, Description,
+  DepartmentCode, DepartmentName
+) AS
+  WITH RECURSIVE dep_tree(id) AS (
     SELECT id FROM department WHERE id = current_department()
      UNION ALL
     SELECT dp.id
-      FROM db.department dp, devtree dtr
+      FROM db.department dp, dep_tree dtr
      WHERE dp.parent = dtr.id
   )
-  SELECT *
-    FROM db.document
-   WHERE department IN (SELECT id FROM devtree);
+  SELECT d.id, d.object, d.department, d.description, p.code, p.name
+    FROM db.document d INNER JOIN dep_tree dtr    ON d.department = dtr.id
+                       INNER JOIN db.department p ON p.id = d.department;
 
 GRANT SELECT ON Document TO administrator;
+
 --------------------------------------------------------------------------------
 -- ObjectDocument --------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -128,7 +130,7 @@ CREATE OR REPLACE VIEW ObjectDocument (Id, Object, Parent,
   Essence, EssenceCode, EssenceName,
   Class, ClassCode, ClassLabel,
   Type, TypeCode, TypeName, TypeDescription,
-  Label,
+  Label, Description,
   StateType, StateTypeCode, StateTypeName,
   State, StateCode, StateLabel, LastUpdate,
   Owner, OwnerCode, OwnerName, Created,
@@ -136,15 +138,20 @@ CREATE OR REPLACE VIEW ObjectDocument (Id, Object, Parent,
   Department, DepartmentCode, DepartmentName
 )
 AS
+  WITH cu AS (
+    SELECT current_userid() AS owner
+  )
   SELECT d.id, d.object, o.parent,
          o.essence, o.essencecode, o.essencename,
          o.class, o.classcode, o.classlabel,
          o.type, o.typecode, o.typename, o.typedescription,
-         o.label,
+         o.label, d.description,
          o.statetype, o.statetypecode, o.statetypename,
          o.state, o.statecode, o.statelabel, o.lastupdate,
          o.owner, o.ownercode, o.ownername, o.created,
          o.oper, o.opercode, o.opername, o.operdate,
-         d.department, p.code, p.name
-    FROM Document d INNER JOIN db.department p ON p.id = d.department
-                    INNER JOIN Object o        ON o.id = d.object;
+         d.department, d.departmentcode, d.departmentname
+    FROM Document d INNER JOIN Object o        ON o.id = d.object
+                    INNER JOIN cu              ON o.owner = cu.owner;
+
+GRANT SELECT ON ObjectDocument TO administrator;

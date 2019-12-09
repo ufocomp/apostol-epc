@@ -44,12 +44,12 @@ add_compile_options(-DWWWServerName="${PROJECT_DESCRIPTION}")
 
 if (WITH_POSTGRESQL)
     set(PQ_LIB_NAME "pq")
-    add_compile_options("-DDELPHI_POSTGRESQL")
+    add_compile_options("-DWITH_POSTGRESQL")
 endif()
 
 if (WITH_SQLITE3)
     set(SQLITE3_LIB_NAME "sqlite3")
-    add_compile_options("-DDELPHI_SQLITE3")
+    add_compile_options("-DWITH_SQLITE3")
 endif()
 
 set(DELPHI_LIB_DIR "src/lib/delphi")
@@ -62,11 +62,12 @@ include_directories(${DELPHI_LIB_DIR}/src)
 
 # Apostol
 # ----------------------------------------------------------------------------------------------------------------------
-include_directories(src/app src/core src/modules)
+include_directories(src/app src/core src/modules src/lib/rapidxml)
 
 file(GLOB app_files version.h src/app/*.hpp src/app/*.cpp)
 file(GLOB core_files src/core/*.hpp src/core/*.cpp)
 file(GLOB modules_files src/modules/Modules.hpp src/modules/*/*.hpp src/modules/*/*.cpp)
+file(GLOB lib_files src/lib/rapidxml/*.hpp)
 
 # Apostol Core
 # ----------------------------------------------------------------------------------------------------------------------
@@ -102,11 +103,11 @@ target_link_libraries(${CORE_LIB_NAME} dl pthread ${PQ_LIB_NAME} ${SQLITE3_LIB_N
 # Apostol modules
 # ----------------------------------------------------------------------------------------------------------------------
 add_library(${MODULES_LIB_NAME} STATIC ${modules_files})
-target_link_libraries(${MODULES_LIB_NAME} ${CORE_LIB_NAME})
+target_link_libraries(${MODULES_LIB_NAME} ${CORE_LIB_NAME} crypto)
 
 # Apostol
 # ----------------------------------------------------------------------------------------------------------------------
-add_executable(${PROJECT_NAME} ${app_files})
+add_executable(${PROJECT_NAME} ${lib_files} ${app_files})
 target_link_libraries(${PROJECT_NAME} ${MODULES_LIB_NAME})
 
 add_dependencies(${PROJECT_NAME} auto_increment_version)

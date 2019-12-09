@@ -69,7 +69,7 @@ namespace Apostol {
 
             return S;
         }
-#ifdef DELPHI_POSTGRESQL
+#ifdef WITH_POSTGRESQL
         //--------------------------------------------------------------------------------------------------------------
 
         //-- CJob ------------------------------------------------------------------------------------------------------
@@ -109,9 +109,9 @@ namespace Apostol {
             for (int I = 0; I < Count(); ++I) {
                 LJob = Get(I);
                 if (LJob->JobId() == Id)
-                    break;
+                    return LJob;
             }
-            return LJob;
+            return nullptr;
         }
         //--------------------------------------------------------------------------------------------------------------
 
@@ -120,9 +120,9 @@ namespace Apostol {
             for (int I = 0; I < Count(); ++I) {
                 LJob = Get(I);
                 if (LJob->PollQuery() == Query)
-                    break;
+                    return LJob;
             }
-            return LJob;
+            return nullptr;
         }
 #endif
         //--------------------------------------------------------------------------------------------------------------
@@ -207,7 +207,7 @@ namespace Apostol {
             }
         }
         //--------------------------------------------------------------------------------------------------------------
-#ifdef DELPHI_POSTGRESQL
+#ifdef WITH_POSTGRESQL
         void CApostolModule::QueryToResult(CPQPollQuery *APollQuery, CQueryResult &AResult) {
             CPQResult *LResult = nullptr;
             CStringList LFields;

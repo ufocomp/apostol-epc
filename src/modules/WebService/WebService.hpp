@@ -29,13 +29,18 @@ extern "C++" {
 
 namespace Apostol {
 
-    namespace Module {
+    namespace WebService {
 
         typedef struct CDataBase {
             CString Username;
             CString Password;
             CString Session;
         } CDataBase;
+
+        //--------------------------------------------------------------------------------------------------------------
+
+        //-- CWebService -----------------------------------------------------------------------------------------------
+
         //--------------------------------------------------------------------------------------------------------------
 
         class CWebService: public CApostolModule {
@@ -45,13 +50,13 @@ namespace Apostol {
 
             CJobManager *m_Jobs;
 
-            static void RowToJson(const CStringList& Row, CString& Json);
+            static void DebugRequest(CRequest *ARequest);
+            static void DebugReply(CReply *AReply);
+
             static void PQResultToJson(CPQResult *Result, CString& Json);
+            static void QueryToJson(CPQPollQuery *Query, CString& Json);
 
-            void QueryToJson(CPQPollQuery *Query, CString& Json);
-
-            bool QueryStart(CHTTPServerConnection *AConnection, const CStringList& ASQL);
-
+            bool QueryStart(CHTTPServerConnection *AConnection, const CStringList& SQL);
             bool APIRun(CHTTPServerConnection *AConnection, const CString &Route, const CString &jsonString, const CDataBase &DataBase);
 
         protected:
@@ -59,10 +64,12 @@ namespace Apostol {
             void DoGet(CHTTPServerConnection *AConnection);
             void DoPost(CHTTPServerConnection *AConnection);
 
+            static void DoWWW(CHTTPServerConnection *AConnection);
+
             void DoPostgresQueryExecuted(CPQPollQuery *APollQuery) override;
             void DoPostgresQueryException(CPQPollQuery *APollQuery, Delphi::Exception::Exception *AException) override;
 
-            static void ExceptionToJson(int ErrorCode, Delphi::Exception::Exception *AException, CString& Json);
+            static void ExceptionToJson(int ErrorCode, const std::exception &AException, CString& Json);
 
         public:
 
@@ -88,6 +95,6 @@ namespace Apostol {
     }
 }
 
-using namespace Apostol::Module;
+using namespace Apostol::WebService;
 }
 #endif //APOSTOL_WEBSERVICE_HPP

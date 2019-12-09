@@ -5,6 +5,7 @@ SELECT CreateDepartment(null, GetDepartmentType('main'), '0000000000', 'ООО "
 SELECT AddMemberToDepartment(current_userid(), GetDepartment('0000000000'));
 SELECT AddMemberToDepartment(GetUser('mailbot'), GetDepartment('0000000000'));
 SELECT AddMemberToDepartment(GetUser('apibot'), GetDepartment('0000000000'));
+SELECT AddMemberToDepartment(GetUser('ocpp'), GetDepartment('0000000000'));
 
 SELECT SetDefaultDepartment(GetDepartment('0000000000'));
 SELECT SetDepartment(GetDepartment('0000000000'));

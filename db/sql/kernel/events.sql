@@ -114,11 +114,15 @@ CREATE OR REPLACE FUNCTION EventObjectDrop (
   pObject	numeric default context_object()
 ) RETURNS	void
 AS $$
+DECLARE
+  r		record;
 BEGIN
-  DELETE FROM event_log WHERE object = pObject;
+  SELECT label INTO r FROM db.object WHERE id = pObject;
 
-  DELETE FROM object_file WHERE object = pObject;
-  DELETE FROM object_state WHERE object = pObject;
+  DELETE FROM db.log WHERE object = pObject;
+
+  DELETE FROM db.object_file WHERE object = pObject;
+  DELETE FROM db.object_state WHERE object = pObject;
 
   PERFORM WriteToEventLog(NULL, 'W', 2010, '[' || r.label || '] Объект уничтожен.');
 END;
@@ -747,5 +751,129 @@ DECLARE
 BEGIN
   SELECT label INTO r FROM db.object WHERE id = pObject;
   PERFORM WriteToEventLog(NULL, 'W', 2010, '[' || r.label || '] Адрес уничтожен.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- CHARGE_POINT ----------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- EventChargePointCreate ------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventChargePointCreate (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog(pObject, 'M', 1010, 'Зарядная станция создана.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventChargePointOpen --------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventChargePointOpen (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog(pObject, 'M', 1011, 'Зарядная станция открыта на просмотр.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventChargePointEdit --------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventChargePointEdit (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog(pObject, 'M', 1012, 'Зарядная станция изменёна.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventChargePointSave --------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventChargePointSave (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog(pObject, 'M', 1013, 'Зарядная станция сохранёна.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventChargePointEnable ------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventChargePointEnable (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog(pObject, 'M', 1014, 'Зарядная станция включена.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventChargePointDisable -----------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventChargePointDisable (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog(pObject, 'M', 1015, 'Зарядная станция отключена.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventChargePointDelete ------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventChargePointDelete (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog(pObject, 'M', 1016, 'Зарядная станция удалена.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventChargePointRestore -----------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventChargePointRestore (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog(pObject, 'M', 1017, 'Зарядная станция восстановлена.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventChargePointDrop --------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventChargePointDrop (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+DECLARE
+  r		record;
+BEGIN
+  SELECT label INTO r FROM db.object WHERE id = pObject;
+  PERFORM WriteToEventLog(NULL, 'W', 2010, '[' || r.label || '] Зарядная станция уничтожена.');
 END;
 $$ LANGUAGE plpgsql;
