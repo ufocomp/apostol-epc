@@ -2213,7 +2213,7 @@ DECLARE
   vRStr		text;
 
   IsSecurity	boolean;
-  IsExtertal	boolean;
+  IsExternal	boolean;
 
   arTables	text[];
   arValues	text[];
@@ -2232,7 +2232,7 @@ BEGIN
   IsSecurity := false;
   nUserId := current_userid();
 
-  IsExtertal := false;
+  IsExternal := false;
 
   vSelect := coalesce(vWith, '') || 'SELECT ' || coalesce(array_to_string(arColumns, ', '), 't.*') || E'\n  FROM ' || pScheme || '.' || pTable || ' t ' || coalesce(vJoin, '');
 
@@ -2351,9 +2351,9 @@ CREATE OR REPLACE FUNCTION api.get_essence (
   OUT name	varchar
 ) RETURNS	record
 AS $$
-  SELECT id, code, name
-    FROM api.essence
-   WHERE id = pId;
+  SELECT e.id, e.code, e.name
+    FROM api.essence e
+   WHERE e.id = pId;
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
