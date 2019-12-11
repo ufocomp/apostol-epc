@@ -295,7 +295,7 @@ namespace Apostol {
         //--------------------------------------------------------------------------------------------------------------
 
         bool CWebService::APIRun(CHTTPServerConnection *AConnection, const CString &Route, const CString &jsonString,
-                const CDataBase &DataBase) {
+                const CAuthorization &Authorization) {
 
             CStringList SQL;
 
@@ -304,18 +304,21 @@ namespace Apostol {
             if (Route == "/login") {
                 SQL.Last().Format("SELECT * FROM api.run('%s', '%s'::jsonb);",
                                             Route.c_str(), jsonString.IsEmpty() ? "{}" : jsonString.c_str());
-            } else if (!DataBase.Session.IsEmpty()) {
-                SQL.Last().Format("SELECT * FROM api.run('%s', '%s'::jsonb, '%s');",
-                                            Route.c_str(), jsonString.IsEmpty() ? "{}" : jsonString.c_str(), DataBase.Session.c_str());
             } else {
-                SQL.Last().Format("SELECT * FROM api.login('%s', '%s');",
-                                            DataBase.Username.c_str(), DataBase.Password.c_str());
+                if (Authorization.Session.IsEmpty()) {
+                    SQL.Last().Format("SELECT * FROM api.login('%s', '%s');",
+                                      Authorization.Username.c_str(), Authorization.Password.c_str());
 
-                SQL.Add(CString());
-                SQL.Last().Format("SELECT * FROM api.run('%s', '%s'::jsonb);",
-                                            Route.c_str(), jsonString.IsEmpty() ? "{}" : jsonString.c_str());
+                    SQL.Add(CString());
+                    SQL.Last().Format("SELECT * FROM api.run('%s', '%s'::jsonb);",
+                                      Route.c_str(), jsonString.IsEmpty() ? "{}" : jsonString.c_str());
 
-                SQL.Add("SELECT * FROM api.logout();");
+                    SQL.Add("SELECT * FROM api.logout();");
+                } else {
+                    SQL.Last().Format("SELECT * FROM api.run('%s', '%s'::jsonb, '%s');",
+                                      Route.c_str(), jsonString.IsEmpty() ? "{}" : jsonString.c_str(),
+                                      Authorization.Session.c_str());
+                }
             }
 
             return QueryStart(AConnection, SQL);
@@ -375,10 +378,9 @@ namespace Apostol {
                 return;
             }
 
-            const auto& LService = LUri[0].Lower();
-            const auto& LVersion = LUri[1].Lower();
-            const auto& LCommand = LUri[2].Lower();
-            const auto& LAction = LUri.Count() == 4 ? LUri[3].Lower() : "";
+            const auto& LService = LUri[0];
+            const auto& LVersion = LUri[1];
+            const auto& LCommand = LUri[2];
 
             if (LVersion == "v1") {
                 m_Version = 1;
@@ -389,12 +391,6 @@ namespace Apostol {
             if (LService != "api" || (m_Version == -1)) {
                 DoWWW(AConnection);
                 return;
-            }
-
-            CString LRoute;
-            for (int I = 2; I < LUri.Count(); ++I) {
-                LRoute.Append('/');
-                LRoute.Append(LUri[I]);
             }
 
             try {
@@ -410,15 +406,94 @@ namespace Apostol {
 
                 } else {
 
-                    AConnection->SendStockReply(CReply::not_found);
+                    const auto& LAction = LUri.Count() == 4 ? LUri[3] : "";
 
+                    const CString &LAuthorization = LRequest->Headers.Values(_T("authorization"));
+
+                    if (LAuthorization.IsEmpty()) {
+                        AConnection->SendStockReply(CReply::unauthorized);
+                        return;
+                    }
+
+                    CAuthorization Authorization(LAuthorization);
+
+                    if (Authorization.Schema == asSession) {
+                        LReply->AddHeader(_T("Authorization"), _T("Session "));
+                        LReply->Headers.Last().Value += Authorization.Session;
+                    }
+
+                    auto CheckParam = [LRequest, &LAction] (CString& Route, CJSON& Content) {
+
+                        const CString &Id = LRequest->Params["id"];
+                        if (!Id.IsEmpty())
+                            Content.Object().AddPair("id", Id);
+
+                        if (LAction == "Method") {
+                            Route << "/method";
+                        } else if (LAction == "Count") {
+                            Route << "/count";
+                        } else {
+                            if (Id.IsEmpty()) {
+                                Route << "/lst";
+                            } else {
+                                Route << "/get";
+                            }
+                        }
+                    };
+
+                    CJSON Content;
+                    CString Route;
+
+                    if (LCommand == "Method") {
+
+                        const CString& Object = LRequest->Params["object"];
+                        const CString& Class = LRequest->Params["class"];
+                        const CString& State = LRequest->Params["state"];
+                        const CString& ClassCode = LRequest->Params["classcode"];
+                        const CString& StateCode = LRequest->Params["statecode"];
+
+                        Route = "/method/get";
+
+                        if (!Object.IsEmpty())
+                            Content.Object().AddPair("object", Object);
+
+                        if (!State.IsEmpty())
+                            Content.Object().AddPair("state", State);
+
+                        if (!Class.IsEmpty())
+                            Content.Object().AddPair("class", Class);
+
+                        if (!ClassCode.IsEmpty())
+                            Content.Object().AddPair("classcode", ClassCode);
+
+                        if (!StateCode.IsEmpty())
+                            Content.Object().AddPair("statecode", StateCode);
+
+                    } else if (LCommand == "Client") {
+                        Route = "/client";
+                        CheckParam(Route, Content);
+                    } else if (LCommand == "ChargePoint") {
+                        Route = "/charge_point";
+                        CheckParam(Route, Content);
+                    } else if (LCommand == "Card") {
+                        Route = "/card";
+                        CheckParam(Route, Content);
+                    }
+
+                    if (!Route.IsEmpty()) {
+                        if (!APIRun(AConnection, Route, Content.ToString(), Authorization)) {
+                            AConnection->SendStockReply(CReply::internal_server_error);
+                        }
+                    } else {
+                        AConnection->SendStockReply(CReply::not_found);
+                    }
                 }
             } catch (std::exception &e) {
-                CReply::status_type LStatus = CReply::internal_server_error;
-
                 ExceptionToJson(0, e, LReply->Content);
 
-                AConnection->SendReply(LStatus);
+                AConnection->CloseConnection(true);
+                AConnection->SendReply(CReply::bad_request);
+
                 Log()->Error(APP_LOG_EMERG, 0, e.what());
             }
         }
@@ -455,60 +530,40 @@ namespace Apostol {
             CString LRoute;
             for (int I = 2; I < LUri.Count(); ++I) {
                 LRoute.Append('/');
-                LRoute.Append(LUri[I]);
+                LRoute.Append(LUri[I].Lower());
             }
 
             const CString &LAuthorization = LRequest->Headers.Values(_T("authorization"));
 
             if (LAuthorization.IsEmpty()) {
-                if (LRoute.Lower() == "/login") {
-                    if (!APIRun(AConnection, LRoute, LRequest->Content, CDataBase())) {
+
+                if (LRoute == "/login") {
+                    if (!APIRun(AConnection, LRoute, LRequest->Content, CAuthorization())) {
                         AConnection->SendStockReply(CReply::internal_server_error);
                     }
-                    return;
                 } else {
                     AConnection->SendStockReply(CReply::unauthorized);
-                    return;
                 }
+
+                return;
             }
 
-            if (LAuthorization.SubString(0, 5).Lower() == "basic") {
-                const CString LPassphrase(base64_decode(LAuthorization.SubString(6)));
+            try {
+                CAuthorization Authorization(LAuthorization);
 
-                const size_t LPos = LPassphrase.Find(':');
-                if (LPos == CString::npos) {
-                    AConnection->SendStockReply(CReply::bad_request);
-                    return;
+                if (Authorization.Schema == asSession) {
+                    LReply->AddHeader(_T("Authorization"), _T("Session "));
+                    LReply->Headers.Last().Value += Authorization.Session;
                 }
 
-                const CDataBase LDataBase = { LPassphrase.SubString(0, LPos), LPassphrase.SubString(LPos + 1) };
-
-                if (LDataBase.Username.IsEmpty() || LDataBase.Password.IsEmpty()) {
-                    AConnection->SendStockReply(CReply::bad_request);
-                    return;
-                }
-
-                if (!APIRun(AConnection, LRoute, LRequest->Content, LDataBase)) {
+                if (!APIRun(AConnection, LRoute, LRequest->Content, Authorization)) {
                     AConnection->SendStockReply(CReply::internal_server_error);
-                    return;
                 }
-            } else if (LAuthorization.SubString(0, 7).Lower() == "session") {
-                const CDataBase LDataBase = { CString(), CString(), LAuthorization.SubString(8, 40) };
-
-                if (LDataBase.Session.Length() != 40) {
-                    AConnection->SendStockReply(CReply::bad_request);
-                    return;
-                }
-
-                if (!APIRun(AConnection, LRoute, LRequest->Content, LDataBase)) {
-                    AConnection->SendStockReply(CReply::internal_server_error);
-                    return;
-                }
-
-                LReply->AddHeader(_T("Authorization"), _T("session "));
-                LReply->Headers.Last().Value += LDataBase.Session;
-            } else {
-                AConnection->SendStockReply(CReply::bad_request);
+            } catch (Delphi::Exception::Exception &E) {
+                ExceptionToJson(0, E, LReply->Content);
+                AConnection->CloseConnection(true);
+                AConnection->SendReply(CReply::bad_request);
+                Log()->Error(APP_LOG_EMERG, 0, E.what());
             }
         }
         //--------------------------------------------------------------------------------------------------------------

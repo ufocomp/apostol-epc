@@ -2223,7 +2223,7 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  arTables := array_cat(null, ARRAY['client', 'charge_point']);
+  arTables := array_cat(null, ARRAY['client', 'card', 'charge_point']);
 
   IF array_position(arTables, pTable) IS NULL THEN
     PERFORM IncorrectValueInArray(pTable, 'sql/api/table', arTables);
@@ -2930,21 +2930,19 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 /**
  * Возвращает методы объекта.
+ * @param {numeric} pClass - Идентификатор класса
  * @param {numeric} pState - Идентификатор состояния
- * @param {numeric} pClass - Идентификатор класса 
- * @param {numeric} pParent - Идентификатор метода родителя
  * @out param {numeric} id - Идентификатор метода
  * @out param {numeric} parent - Идентификатор метода родителя
  * @out param {numeric} action - Идентификатор действия
  * @out param {varchar} actioncode - Код действия
  * @out param {text} label - Описание метода
- * @out param {boolean} hidden - Скрытый метод: Да/Нет
+ * @out param {boolean} visible - Скрытый метод: Да/Нет
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.get_method (
-  pState		numeric,
   pClass		numeric,
-  pUserId		numeric default current_userid(),
+  pState		numeric default null,
   OUT id		numeric,
   OUT parent		numeric,
   OUT action		numeric,
@@ -2956,7 +2954,7 @@ AS $$
   SELECT m.id, m.parent, m.action, m.actioncode, m.label, m.visible
     FROM api.method m
    WHERE m.class = pClass
-     AND m.state = pState
+     AND m.state = coalesce(pState, m.state)
    ORDER BY m.sequence
 $$ LANGUAGE SQL
    SECURITY DEFINER
@@ -4146,56 +4144,20 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION GetJsonMethods (
-  pState	numeric,
   pClass	numeric,
-  pUserId	numeric default current_userid(),
-  pUseCache	boolean default null
+  pState	numeric
 ) RETURNS	json
 AS $$
 DECLARE
   arResult	json[];
   r		record;
 BEGIN
-  IF coalesce(pUseCache, true) THEN
-/*
-    FOR r IN 
-      SELECT id, parent, action, actioncode, label, visible, enable
-        FROM cache.method 
-       WHERE class = pClass 
-         AND state = pState 
-         AND userid = pUserId
-    LOOP
-      arResult := array_append(arResult, row_to_json(r));
-    END LOOP;
-*/
-  ELSE
-
-    FOR r IN SELECT * FROM api.get_method(pState, pClass, pUserId)
-    LOOP
-      arResult := array_append(arResult, row_to_json(r));
-    END LOOP;
-
-  END IF;
+  FOR r IN SELECT * FROM api.get_method(pClass, pState)
+  LOOP
+    arResult := array_append(arResult, row_to_json(r));
+  END LOOP;
 
   RETURN array_to_json(arResult);
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- GetJsonbMethods -------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION GetJsonbMethods (
-  pState	numeric,
-  pClass	numeric,
-  pUserId	numeric default current_userid(),
-  pUseCache	boolean default null
-) RETURNS	jsonb
-AS $$
-BEGIN
-  RETURN GetJsonMethods(pState, pClass, pUserId, pUseCache);
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
@@ -5583,7 +5545,7 @@ BEGIN
     END IF;
     nType := GetType(pType || '.client');
   ELSE
-    SELECT type INTO nType FROM db.object WHERE id = pId;
+    SELECT o.type INTO nType FROM db.object o WHERE o.id = pId;
   END IF;
 
   arKeys := array_cat(arKeys, ARRAY['name', 'short', 'first', 'last', 'middle']);
@@ -5654,7 +5616,184 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- OCPP ------------------------------------------------------------------------
+-- CARD ------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- api.card --------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.card
+AS
+  SELECT * FROM ObjectCard;
+
+GRANT SELECT ON api.card TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.add_card ----------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Добавляет карту.
+ * @param {varchar} pType - Tип карты
+ * @param {varchar} pCode - Код карты
+ * @param {numeric} pClient - Идентификатор клиента
+ * @param {text} pDescription - Описание
+ * @out param {numeric} id - Идентификатор карты
+ * @out param {boolean} result - Результат
+ * @out param {text} error - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.add_card (
+  pType		varchar,
+  pCode		varchar,
+  pClient	numeric,
+  pDescription	text default null,
+  OUT id	numeric,
+  OUT result	boolean,
+  OUT error	text
+) RETURNS 	record
+AS $$
+DECLARE
+  nCard 	numeric;
+  arTypes	text[];
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  pType := lower(pType);
+  arTypes := array_cat(arTypes, ARRAY['plastic']);
+  IF array_position(arTypes, pType) IS NULL THEN
+    PERFORM IncorrectCode(pType, arTypes);
+  END IF;
+
+  nCard := CreateCard(null, GetType(pType || '.card'), pCode, pClient, pDescription);
+
+  id := nCard;
+
+  SELECT * INTO result, error FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  id := null;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.upd_card ----------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Обновляет данные карты.
+ * @param {numeric} pId - Идентификатор карты (api.get_card)
+ * @param {varchar} pType - Tип карты
+ * @param {varchar} pCode - Код карты
+ * @param {numeric} pClient - Идентификатор клиента
+ * @param {text} pDescription - Описание
+ * @out param {numeric} id - Идентификатор карты
+ * @out param {boolean} result - Результат
+ * @out param {text} error - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.upd_card (
+  pId		numeric,
+  pType		varchar default null,
+  pCode		varchar default null,
+  pClient	numeric default null,
+  pDescription	text default null,
+  OUT id	numeric,
+  OUT result	boolean,
+  OUT error	text
+) RETURNS 	record
+AS $$
+DECLARE
+  nType         numeric;
+  nCard 	numeric;
+  arTypes	text[];
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  SELECT c.id INTO nCard FROM db.card c WHERE c.id = pId;
+  IF NOT FOUND THEN
+    PERFORM ObjectNotFound('карта', 'id', pId);
+  END IF;
+
+  IF pType IS NOT NULL THEN
+    pType := lower(pType);
+    arTypes := array_cat(arTypes, ARRAY['plastic']);
+    IF array_position(arTypes, pType) IS NULL THEN
+      PERFORM IncorrectCode(pType, arTypes);
+    END IF;
+    nType := GetType(pType || '.card');
+  ELSE
+    SELECT o.type INTO nType FROM db.object o WHERE o.id = pId;
+  END IF;
+
+  PERFORM EditCard(nCard, null, nType, pCode, pClient, pDescription);
+
+  id := nCard;
+
+  SELECT * INTO result, error FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  id := null;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_card --------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает клиента
+ * @param {numeric} pId - Идентификатор клиента
+ * @return {api.card} - Клиент
+ */
+CREATE OR REPLACE FUNCTION api.get_card (
+  pId		numeric
+) RETURNS	api.card
+AS $$
+  SELECT * FROM api.card WHERE id = pId
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.lst_card --------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает список клиентов.
+ * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
+ * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
+ * @param {integer} pLimit - Лимит по количеству строк
+ * @param {integer} pOffSet - Пропустить указанное число строк
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
+ * @return {SETOF api.card} - Клиенты
+ */
+CREATE OR REPLACE FUNCTION api.lst_card (
+  pSearch	jsonb default null,
+  pFilter	jsonb default null,
+  pLimit	integer default null,
+  pOffSet	integer default null,
+  pOrderBy	jsonb default null
+) RETURNS	SETOF api.card
+AS $$
+BEGIN
+  RETURN QUERY EXECUTE CreateApiSql('api', 'card', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- CHARGE POINT ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
@@ -5786,7 +5925,7 @@ $$ LANGUAGE plpgsql
 /**
  * Возвращает зарядную станцию по идентификатору
  * @param {numeric} pId - Идентификатор зарядной станции
- * @return {api.client} - Зарядная станция
+ * @return {api.charge_point} - Зарядная станция
  */
 CREATE OR REPLACE FUNCTION api.get_charge_point (
   pId		numeric
@@ -5803,7 +5942,7 @@ $$ LANGUAGE SQL
 /**
  * Возвращает зарядную станцию по строковому идентификатору
  * @param {numeric} pId - Идентификатор зарядной станции
- * @return {api.client} - Зарядная станция
+ * @return {api.charge_point} - Зарядная станция
  */
 CREATE OR REPLACE FUNCTION api.get_charge_point (
   pIdentity	varchar
@@ -5824,7 +5963,7 @@ $$ LANGUAGE SQL
  * @param {integer} pLimit - Лимит по количеству строк
  * @param {integer} pOffSet - Пропустить указанное число строк
  * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
- * @return {SETOF api.client} - Зарядные станции
+ * @return {SETOF api.charge_point} - Зарядные станции
  */
 CREATE OR REPLACE FUNCTION api.lst_charge_point (
   pSearch	jsonb default null,
