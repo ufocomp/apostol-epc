@@ -574,7 +574,7 @@ namespace Apostol {
             int i = 0;
             auto LRequest = AConnection->Request();
             auto LReply = AConnection->Reply();
-
+#ifdef _DEBUG
             DebugMessage("[%p][%s:%d][%d]", AConnection, AConnection->Socket()->Binding()->PeerIP(),
                          AConnection->Socket()->Binding()->PeerPort(), AConnection->Socket()->Binding()->Handle());
 
@@ -586,7 +586,7 @@ namespace Apostol {
             };
 
             AConnection->OnReply(OnReply);
-
+#endif
             LReply->Clear();
             LReply->ContentType = CReply::json;
 
