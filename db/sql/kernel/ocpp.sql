@@ -29,10 +29,10 @@ CREATE INDEX ON ocpp.log (action);
 CREATE INDEX ON ocpp.log (datetime);
 
 --------------------------------------------------------------------------------
--- ocpp.WriteTolog -------------------------------------------------------------
+-- ocpp.WriteToLog -------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION ocpp.WriteTolog (
+CREATE OR REPLACE FUNCTION ocpp.WriteToLog (
   pIdentity	text,
   pAction	text,
   pRequest	jsonb default null,
