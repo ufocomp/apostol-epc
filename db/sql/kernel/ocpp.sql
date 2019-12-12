@@ -204,6 +204,8 @@ BEGIN
 
   vStatus := ocpp.GetIdTagStatus(nChargePoint, idTag);
 
+  nCard := GetCard(idTag);
+
   nId := StartTransaction(nCard, nChargePoint, connectorId, meterStart, reservationId, dateStart);
 
   RETURN json_build_object('transactionId', nId, 'idTagInfo', json_build_object('expiryDate', GetISOTime(current_timestamp at time zone 'utc' + interval '1 day') , 'status', vStatus));
@@ -227,7 +229,7 @@ DECLARE
   arKeys	text[];
   vStatus	text;
 
-  Balance	integer;
+  Balance	integer default 0;
 
   idTag		text;
   transactionId	integer;
@@ -250,7 +252,9 @@ BEGIN
   Data := pRequest->>'transactionData';
   dateStop := pRequest->>'timestamp';
 
-  Balance := StopTransaction(transactionId, meterStop, reason, Data, dateStop);
+  IF (transactionId > 0) THEN
+    Balance := StopTransaction(transactionId, meterStop, reason, Data, dateStop);
+  END IF;
 
   IF idTag IS NOT NULL THEN
     nChargePoint := GetChargePoint(pIdentity);
@@ -616,9 +620,9 @@ BEGIN
     UPDATE ocpp.log SET response = jResponse, runtime = age(clock_timestamp(), tsBegin) WHERE id = nLogId;
 
     RETURN json_build_object('result', true, 'response', jResponse);
-  EXCEPTION
-  WHEN others THEN
-    GET STACKED DIAGNOSTICS vError = MESSAGE_TEXT;
+--  EXCEPTION
+--  WHEN others THEN
+--    GET STACKED DIAGNOSTICS vError = MESSAGE_TEXT;
   END;
 
   PERFORM SetErrorMessage(vError);
@@ -628,13 +632,13 @@ BEGIN
   UPDATE ocpp.log SET response = jResponse, runtime = age(clock_timestamp(), tsBegin) WHERE id = nLogId;
 
   RETURN json_build_object('result', false, 'response', jResponse);
-EXCEPTION
-WHEN others THEN
-  GET STACKED DIAGNOSTICS vError = MESSAGE_TEXT;
+--EXCEPTION
+--WHEN others THEN
+  --GET STACKED DIAGNOSTICS vError = MESSAGE_TEXT;
 
-  PERFORM SetErrorMessage(vError);
+  --PERFORM SetErrorMessage(vError);
 
-  RETURN json_build_object('result', false, 'response', json_build_object('error', vError));
+  --RETURN json_build_object('result', false, 'response', json_build_object('error', vError));
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER

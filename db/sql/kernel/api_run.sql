@@ -216,7 +216,7 @@ BEGIN
         RETURN NEXT row_to_json(api.set_language(r.language));
       END LOOP;
 
-    WHEN '/eventlog' THEN
+    WHEN '/event/log' THEN
 
       IF pJson IS NOT NULL THEN
         arKeys := array_cat(arKeys, ARRAY['object', 'type', 'username', 'code', 'datefrom', 'dateto']);
@@ -227,13 +227,13 @@ BEGIN
 
       FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(object numeric, type char, username varchar, code numeric, datefrom timestamp, dateto timestamp)
       LOOP
-        FOR e IN SELECT * FROM api.eventlog(r.object, r.type, r.username, r.code, r.datefrom, r.dateto)
+        FOR e IN SELECT * FROM api.event_log(r.object, r.type, r.username, r.code, r.datefrom, r.dateto)
         LOOP
           RETURN NEXT row_to_json(e);
         END LOOP;
       END LOOP;
 
-    WHEN '/eventlog/add' THEN
+    WHEN '/event/add' THEN
 
       IF pJson IS NULL THEN
         PERFORM JsonIsEmpty();
@@ -271,6 +271,23 @@ BEGIN
         END LOOP;
 
       END IF;
+
+    WHEN '/ocpp/log' THEN
+
+      IF pJson IS NOT NULL THEN
+        arKeys := array_cat(arKeys, ARRAY['identity', 'action', 'datefrom', 'dateto']);
+        PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+      ELSE
+        pJson := '{}';
+      END IF;
+
+      FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(identity varchar, action varchar, datefrom timestamp, dateto timestamp)
+      LOOP
+        FOR e IN SELECT * FROM api.ocpp_log(r.identity, r.action, r.datefrom, r.dateto)
+        LOOP
+          RETURN NEXT row_to_json(e);
+        END LOOP;
+      END LOOP;
 
     WHEN '/user/upd' THEN
 
@@ -2431,6 +2448,23 @@ BEGIN
       FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(fields jsonb, search jsonb, filter jsonb, reclimit integer, recoffset integer, orderby jsonb, usecache boolean)
       LOOP
         FOR e IN EXECUTE format('SELECT %s FROM api.lst_charge_point($1, $2, $3, $4, $5)', JsonbToFields(r.fields, GetColumns('charge_point', 'api'))) USING r.search, r.filter, r.reclimit, r.recoffset, r.orderby
+        LOOP
+          RETURN NEXT row_to_json(e);
+        END LOOP;
+      END LOOP;
+
+    WHEN '/charge_point/status' THEN
+
+      IF pJson IS NOT NULL THEN
+        arKeys := array_cat(arKeys, ARRAY['fields', 'search', 'filter', 'reclimit', 'recoffset', 'orderby', 'usecache']);
+        PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+      ELSE
+        pJson := '{}';
+      END IF;
+
+      FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(fields jsonb, search jsonb, filter jsonb, reclimit integer, recoffset integer, orderby jsonb, usecache boolean)
+      LOOP
+        FOR e IN EXECUTE format('SELECT %s FROM api.status_charge_point($1, $2, $3, $4, $5)', JsonbToFields(r.fields, GetColumns('status_notification', 'api'))) USING r.search, r.filter, r.reclimit, r.recoffset, r.orderby
         LOOP
           RETURN NEXT row_to_json(e);
         END LOOP;

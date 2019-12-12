@@ -492,18 +492,18 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- EVENTLOG --------------------------------------------------------------------
+-- EVENT LOG -------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW api.eventlog
+CREATE OR REPLACE VIEW api.event_log
 AS
   SELECT e.*, coalesce(u.fullname, e.username) as fullname, u.email, u.description
     FROM EventLog e LEFT JOIN users u ON u.username = e.username;
 
-GRANT SELECT ON api.eventlog TO daemon;
+GRANT SELECT ON api.event_log TO daemon;
 
 --------------------------------------------------------------------------------
--- api.eventlog ----------------------------------------------------------------
+-- api.event_log ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Журнал событий.
@@ -515,17 +515,17 @@ GRANT SELECT ON api.eventlog TO daemon;
  * @param {timestamp} pDateTo - Дата окончания периода
  * @return {SETOF VEventLog} - Записи
  */
-CREATE OR REPLACE FUNCTION api.eventlog (
+CREATE OR REPLACE FUNCTION api.event_log (
   pObject	numeric default null,
   pType		char default null,
   pUserName	varchar default null,
   pCode		numeric default null,
   pDateFrom	timestamp default null,
   pDateTo	timestamp default null
-) RETURNS	SETOF api.eventlog
+) RETURNS	SETOF api.event_log
 AS $$
   SELECT *
-    FROM api.eventlog
+    FROM api.event_log
    WHERE coalesce(object, 0) = coalesce(pObject, object, 0)
      AND type = coalesce(pType, type)
      AND username = coalesce(pUserName, username)
@@ -2223,7 +2223,7 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  arTables := array_cat(null, ARRAY['client', 'card', 'charge_point']);
+  arTables := array_cat(null, ARRAY['client', 'card', 'charge_point', 'status_notification']);
 
   IF array_position(arTables, pTable) IS NULL THEN
     PERFORM IncorrectValueInArray(pTable, 'sql/api/table', arTables);
@@ -5793,6 +5793,50 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
+-- OCPP ------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- OCPP LOG -------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.ocpp_log
+AS
+  SELECT * FROM ocppLog;
+
+GRANT SELECT ON api.ocpp_log TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.ocpp_log ----------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Журнал событий.
+ * @param {varchar} pIdentity - Идентификатор зарядной станции
+ * @param {varchar} pAction - Действие
+ * @param {timestamp} pDateFrom - Дата начала периода
+ * @param {timestamp} pDateTo - Дата окончания периода
+ * @return {SETOF api.ocpp_log} - Записи
+ */
+CREATE OR REPLACE FUNCTION api.ocpp_log (
+  pIdentity	varchar default null,
+  pAction	varchar default null,
+  pDateFrom	timestamp default null,
+  pDateTo	timestamp default null
+) RETURNS	SETOF api.ocpp_log
+AS $$
+  SELECT *
+    FROM api.ocpp_log
+   WHERE identity = coalesce(pIdentity, identity)
+     AND action = coalesce(pAction, action)
+     AND datetime >= coalesce(pDateFrom, MINDATE())
+     AND datetime < coalesce(pDateTo, MAXDATE())
+   ORDER BY datetime DESC
+   LIMIT 50
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
 -- CHARGE POINT ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -5803,7 +5847,21 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE VIEW api.charge_point
 AS
   SELECT * FROM ObjectChargePoint;
-
+/*
+  SELECT o.id, o.object, o.parent,
+         o.essence, o.essencecode, o.essencename,
+         o.class, o.classcode, o.classlabel,
+         o.type, o.typecode, o.typename, o.typedescription,
+         o.identity, o.name, o.label, o.description,
+         o.model, o.vendor, o.version, o.serialnumber, o.boxserialnumber, o.meterserialnumber,
+         o.iccid, o.imsi,
+         s.status, s.errorcode, s.info, s.validfromdate as statusdate,
+         o.statetype, o.statetypecode, o.statetypename,
+         o.state, o.statecode, o.statelabel, o.lastupdate,
+         o.owner, o.ownercode, o.ownername, o.created,
+         o.oper, o.opercode, o.opername, o.operdate
+    FROM ObjectChargePoint o LEFT JOIN StatusNotification s ON s.chargepoint = o.id AND s.connectorid = 0 AND current_timestamp at time zone 'utc' BETWEEN s.validfromdate AND s.validtodate;
+*/
 GRANT SELECT ON api.charge_point TO daemon;
 
 --------------------------------------------------------------------------------
@@ -5975,6 +6033,43 @@ CREATE OR REPLACE FUNCTION api.lst_charge_point (
 AS $$
 BEGIN
   RETURN QUERY EXECUTE CreateApiSql('api', 'charge_point', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- VIEW api.status_notification ------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.status_notification
+AS
+  SELECT * FROM StatusNotification;
+
+GRANT SELECT ON api.status_notification TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.status_charge_point -----------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает уведомление о статусе зарядных станций.
+ * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
+ * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
+ * @param {integer} pLimit - Лимит по количеству строк
+ * @param {integer} pOffSet - Пропустить указанное число строк
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
+ * @return {SETOF api.status_notification} - уведомление о статусе
+ */
+CREATE OR REPLACE FUNCTION api.status_charge_point (
+  pSearch	jsonb default null,
+  pFilter	jsonb default null,
+  pLimit	integer default null,
+  pOffSet	integer default null,
+  pOrderBy	jsonb default null
+) RETURNS	SETOF api.status_notification
+AS $$
+BEGIN
+  RETURN QUERY EXECUTE CreateApiSql('api', 'status_notification', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER

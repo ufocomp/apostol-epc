@@ -52,6 +52,7 @@ namespace Apostol {
         CWebService::CWebService(CModuleManager *AManager) : CApostolModule(AManager) {
             m_Version = -1;
             m_Jobs = new CJobManager();
+            m_Headers.Add("Authorization");
             InitMethods();
         }
         //--------------------------------------------------------------------------------------------------------------
