@@ -301,6 +301,36 @@ AS
 GRANT SELECT ON StatusNotification TO administrator;
 
 --------------------------------------------------------------------------------
+-- GetJsonStatusNotification ---------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetJsonStatusNotification (
+  pChargePoint  numeric,
+  pConnectorId  integer default null,
+  pDate         timestamptz default current_timestamp at time zone 'utc'
+) RETURNS	json
+AS $$
+DECLARE
+  arResult	json[];
+  r		record;
+BEGIN
+  FOR r IN
+  SELECT *
+    FROM StatusNotification
+   WHERE chargepoint = pChargePoint
+     AND connectorid = coalesce(pConnectorId, connectorid)
+     AND pDate BETWEEN validfromdate AND validtodate
+  LOOP
+    arResult := array_append(arResult, row_to_json(r));
+  END LOOP;
+
+  RETURN array_to_json(arResult);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
 -- db.transaction --------------------------------------------------------------
 --------------------------------------------------------------------------------
 

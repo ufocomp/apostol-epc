@@ -5837,6 +5837,72 @@ $$ LANGUAGE SQL
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
+-- STATUS NOTIFICATION ---------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- VIEW api.status_notification ------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.status_notification
+AS
+  SELECT * FROM StatusNotification;
+
+GRANT SELECT ON api.status_notification TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.get_charge_point_status -------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает уведомление о статусе зарядной станций
+ * @param {numeric} pChargePoint - Идентификатор зарядной станции
+ * @param {integer} pConnectorId - Идентификатор разъёма зарядной станции
+ * @param {timestamptz} pData - Дата и время
+ * @return {api.status_notification} - Зарядная станция
+ */
+CREATE OR REPLACE FUNCTION api.get_charge_point_status (
+  pChargePoint  numeric,
+  pConnectorId  integer default null,
+  pDate         timestamptz default current_timestamp at time zone 'utc'
+) RETURNS	SETOF api.status_notification
+AS $$
+  SELECT *
+    FROM api.status_notification
+   WHERE chargepoint = pChargePoint
+     AND connectorid = coalesce(pConnectorId, connectorid)
+     AND pDate BETWEEN validfromdate AND validtodate
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.status_charge_point -----------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает уведомление о статусе зарядных станций.
+ * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
+ * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
+ * @param {integer} pLimit - Лимит по количеству строк
+ * @param {integer} pOffSet - Пропустить указанное число строк
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
+ * @return {SETOF api.status_notification} - уведомление о статусе
+ */
+CREATE OR REPLACE FUNCTION api.status_charge_point (
+  pSearch	jsonb default null,
+  pFilter	jsonb default null,
+  pLimit	integer default null,
+  pOffSet	integer default null,
+  pOrderBy	jsonb default null
+) RETURNS	SETOF api.status_notification
+AS $$
+BEGIN
+  RETURN QUERY EXECUTE CreateApiSql('api', 'status_notification', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
 -- CHARGE POINT ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -5846,22 +5912,8 @@ $$ LANGUAGE SQL
 
 CREATE OR REPLACE VIEW api.charge_point
 AS
-  SELECT * FROM ObjectChargePoint;
-/*
-  SELECT o.id, o.object, o.parent,
-         o.essence, o.essencecode, o.essencename,
-         o.class, o.classcode, o.classlabel,
-         o.type, o.typecode, o.typename, o.typedescription,
-         o.identity, o.name, o.label, o.description,
-         o.model, o.vendor, o.version, o.serialnumber, o.boxserialnumber, o.meterserialnumber,
-         o.iccid, o.imsi,
-         s.status, s.errorcode, s.info, s.validfromdate as statusdate,
-         o.statetype, o.statetypecode, o.statetypename,
-         o.state, o.statecode, o.statelabel, o.lastupdate,
-         o.owner, o.ownercode, o.ownername, o.created,
-         o.oper, o.opercode, o.opername, o.operdate
-    FROM ObjectChargePoint o LEFT JOIN StatusNotification s ON s.chargepoint = o.id AND s.connectorid = 0 AND current_timestamp at time zone 'utc' BETWEEN s.validfromdate AND s.validtodate;
-*/
+  SELECT *, GetJsonStatusNotification(id) as StatusNotification FROM ObjectChargePoint;
+
 GRANT SELECT ON api.charge_point TO daemon;
 
 --------------------------------------------------------------------------------
@@ -6033,43 +6085,6 @@ CREATE OR REPLACE FUNCTION api.lst_charge_point (
 AS $$
 BEGIN
   RETURN QUERY EXECUTE CreateApiSql('api', 'charge_point', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- VIEW api.status_notification ------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE VIEW api.status_notification
-AS
-  SELECT * FROM StatusNotification;
-
-GRANT SELECT ON api.status_notification TO daemon;
-
---------------------------------------------------------------------------------
--- api.status_charge_point -----------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Возвращает уведомление о статусе зарядных станций.
- * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
- * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
- * @param {integer} pLimit - Лимит по количеству строк
- * @param {integer} pOffSet - Пропустить указанное число строк
- * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
- * @return {SETOF api.status_notification} - уведомление о статусе
- */
-CREATE OR REPLACE FUNCTION api.status_charge_point (
-  pSearch	jsonb default null,
-  pFilter	jsonb default null,
-  pLimit	integer default null,
-  pOffSet	integer default null,
-  pOrderBy	jsonb default null
-) RETURNS	SETOF api.status_notification
-AS $$
-BEGIN
-  RETURN QUERY EXECUTE CreateApiSql('api', 'status_notification', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER

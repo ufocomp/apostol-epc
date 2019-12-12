@@ -23,6 +23,7 @@ DECLARE
   e		record;
 
   nKey		integer;
+  arJson	json[];
 
   tsBegin	timestamp;
 
@@ -103,6 +104,35 @@ BEGIN
       LOOP
         RETURN NEXT row_to_json(r);
       END LOOP;
+
+    WHEN '/run' THEN
+
+      IF pJson IS NULL THEN
+        PERFORM JsonIsEmpty();
+      END IF;
+
+      arKeys := array_cat(arKeys, ARRAY['key', 'route', 'json']);
+      PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+
+      IF jsonb_typeof(pJson) = 'array' THEN
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(key text, route text, json jsonb)
+        LOOP
+          FOR e IN SELECT * FROM api.run(r.route, r.json)
+          LOOP
+            arJson := array_append(arJson, (row_to_json(e)->>'run')::json);
+          END LOOP;
+
+          RETURN NEXT jsonb_build_object('key', coalesce(r.key, IntToStr(nKey)), 'route', r.route, 'json', array_to_json(arJson)::jsonb);
+
+          arJson := null;
+          nKey := nKey + 1;
+        END LOOP;
+
+      ELSE
+
+        PERFORM IncorrectJsonType(jsonb_typeof(pJson), 'array');
+
+      END IF;
 
     WHEN '/current/session' THEN
 
