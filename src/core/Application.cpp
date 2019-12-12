@@ -228,6 +228,11 @@ namespace Apostol {
             LogFile = Log()->AddLogFile(Config()->AccessLog().c_str(), 0);
             LogFile->LogType(ltAccess);
 
+#ifdef WITH_POSTGRESQL
+            LogFile = Log()->AddLogFile(Config()->PostgresLog().c_str(), 0);
+            LogFile->LogType(ltPostgres);
+#endif
+
 #ifdef _DEBUG
             const CString &Debug = Config()->LogFiles().Values(_T("debug"));
             if (Debug.IsEmpty()) {
