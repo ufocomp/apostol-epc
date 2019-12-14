@@ -95,6 +95,9 @@ namespace Apostol {
 
             static void DebugRequest(CRequest *ARequest);
             static void DebugReply(CReply *AReply);
+            static void DebugConnection(CHTTPServerConnection *AConnection);
+
+            static void ExceptionToJson(int ErrorCode, const std::exception &AException, CString& Json);
 
             static void PQResultToJson(CPQResult *Result, CString& Json);
             static void QueryToJson(CPQPollQuery *Query, CString& Json);
@@ -111,8 +114,6 @@ namespace Apostol {
 
             void DoPostgresQueryExecuted(CPQPollQuery *APollQuery) override;
             void DoPostgresQueryException(CPQPollQuery *APollQuery, Delphi::Exception::Exception *AException) override;
-
-            static void ExceptionToJson(int ErrorCode, const std::exception &AException, CString& Json);
 
         public:
 

@@ -76,7 +76,7 @@ namespace Apostol {
         //--------------------------------------------------------------------------------------------------------------
 
         void CWebService::DebugRequest(CRequest *ARequest) {
-            DebugMessage("\n[%p] Request:\n%s %s HTTP/%d.%d\n", ARequest, ARequest->Method.c_str(), ARequest->Uri.c_str(), ARequest->VMajor, ARequest->VMinor);
+            DebugMessage("[%p] Request:\n%s %s HTTP/%d.%d\n", ARequest, ARequest->Method.c_str(), ARequest->Uri.c_str(), ARequest->VMajor, ARequest->VMinor);
 
             for (int i = 0; i < ARequest->Headers.Count(); i++)
                 DebugMessage("%s: %s\n", ARequest->Headers[i].Name.c_str(), ARequest->Headers[i].Value.c_str());
@@ -87,22 +87,35 @@ namespace Apostol {
         //--------------------------------------------------------------------------------------------------------------
 
         void CWebService::DebugReply(CReply *AReply) {
-            TCHAR ch;
-            CString String;
-            CMemoryStream Stream;
+            DebugMessage("[%p] Reply:\nHTTP/%d.%d %d %s\n", AReply, AReply->VMajor, AReply->VMinor, AReply->Status, AReply->StatusText.c_str());
 
-            AReply->ToBuffers(&Stream);
-            Stream.Position(0);
+            for (int i = 0; i < AReply->Headers.Count(); i++)
+                DebugMessage("%s: %s\n", AReply->Headers[i].Name.c_str(), AReply->Headers[i].Value.c_str());
 
-            for (size_t i = 0; i < Stream.Size(); ++i) {
-                Stream.Read(&ch, 1);
-                if (ch != '\r')
-                    String.Append(ch);
-            }
-
-            DebugMessage("\n[%p] Reply:\n%s\n", AReply, String.c_str());
+            if (!AReply->Content.IsEmpty())
+                DebugMessage("\n%s\n", AReply->Content.c_str());
         }
         //--------------------------------------------------------------------------------------------------------------
+
+        void CWebService::DebugConnection(CHTTPServerConnection *AConnection) {
+            DebugMessage("\n[%p] [%s:%d] [%d] ", AConnection, AConnection->Socket()->Binding()->PeerIP(),
+                         AConnection->Socket()->Binding()->PeerPort(), AConnection->Socket()->Binding()->Handle());
+
+            DebugRequest(AConnection->Request());
+
+            static auto OnReply = [](CObject *Sender) {
+                auto LConnection = dynamic_cast<CHTTPServerConnection *> (Sender);
+
+                DebugMessage("\n[%p] [%s:%d] [%d] ", LConnection, LConnection->Socket()->Binding()->PeerIP(),
+                             LConnection->Socket()->Binding()->PeerPort(), LConnection->Socket()->Binding()->Handle());
+
+                DebugReply(LConnection->Reply());
+            };
+
+            AConnection->OnReply(OnReply);
+        }
+        //--------------------------------------------------------------------------------------------------------------
+
         void CWebService::ExceptionToJson(int ErrorCode, const std::exception &AException, CString& Json) {
             TCHAR ch;
             LPCTSTR lpMessage = AException.what();
@@ -570,22 +583,12 @@ namespace Apostol {
         //--------------------------------------------------------------------------------------------------------------
 
         void CWebService::Execute(CHTTPServerConnection *AConnection) {
-
             int i = 0;
+
             auto LRequest = AConnection->Request();
             auto LReply = AConnection->Reply();
 #ifdef _DEBUG
-            DebugMessage("[%p][%s:%d][%d]", AConnection, AConnection->Socket()->Binding()->PeerIP(),
-                         AConnection->Socket()->Binding()->PeerPort(), AConnection->Socket()->Binding()->Handle());
-
-            DebugRequest(AConnection->Request());
-
-            static auto OnReply = [](CObject *Sender) {
-                auto LConnection = dynamic_cast<CHTTPServerConnection *> (Sender);
-                DebugReply(LConnection->Reply());
-            };
-
-            AConnection->OnReply(OnReply);
+            DebugConnection(AConnection);
 #endif
             LReply->Clear();
             LReply->ContentType = CReply::json;

@@ -376,7 +376,7 @@ BEGIN
     END IF;
   END IF;
 
-  RETURN json_build_object('currentTime', GetISOTime(), 'interval', 60, 'status', vStatus);
+  RETURN json_build_object('currentTime', GetISOTime(), 'interval', 600, 'status', vStatus);
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
