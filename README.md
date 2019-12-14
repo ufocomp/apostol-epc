@@ -1,4 +1,4 @@
-# apostol-electro
+# apostol-epc
 
 **Apostol Electro** - RESTful API Service, исходные коды на C++.
 
@@ -46,7 +46,7 @@ sudo apt-get install build-essential libssl-dev libcurl4-openssl-dev make cmake 
 
 Для установки **Apostol Electro** (без Git) необходимо:
 
-1. Скачать **Apostol Electro** по [ссылке](https://github.com/ufocomp/apostol-electro/archive/master.zip);
+1. Скачать **Apostol Electro** по [ссылке](https://github.com/ufocomp/epc/archive/master.zip);
 1. Распаковать;
 1. Скачать **libdelphi** по [ссылке](https://github.com/ufocomp/libdelphi/archive/master.zip);
 1. Распаковать в `src/lib/delphi`;
@@ -55,19 +55,19 @@ sudo apt-get install build-essential libssl-dev libcurl4-openssl-dev make cmake 
 
 Для установки **Модуля сделок** с помощью Git выполните:
 ~~~
-git clone https://github.com/ufocomp/apostol-electro.git
+git clone https://github.com/ufocomp/epc.git
 ~~~
 
 Чтобы добавить **libdelphi** в проект с помощью Git выполните:
 ~~~
-cd apostol-electro/src/lib
+cd epc/src/lib
 git clone https://github.com/ufocomp/libdelphi.git delphi
 cd ../../../
 ~~~
 
 ###### Сборка:
 ~~~
-cd apostol-electro
+cd epc
 cmake -DCMAKE_BUILD_TYPE=Release . -B cmake-build-release
 ~~~
 
@@ -85,9 +85,9 @@ sudo make install
 
 Файл конфигурации и необходимые для работы файлы, в зависимости от варианта установки, будут расположены в: 
 ~~~
-/etc/apostol-electro
+/etc/epc
 или
-~/apostol-electro
+~/epc
 ~~~
 
 ЗАПУСК 
