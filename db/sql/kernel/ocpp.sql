@@ -4,12 +4,12 @@
 
 CREATE TABLE ocpp.log (
     id			numeric PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_OCPP_LOG'),
-    datetime		timestamp DEFAULT clock_timestamp() NOT NULL,
-    username		text NOT NULL DEFAULT session_user,
-    identity		text NOT NULL,
+    datetime	timestamp DEFAULT clock_timestamp() NOT NULL,
+    username	text NOT NULL DEFAULT session_user,
+    identity	text NOT NULL,
     action		text NOT NULL,
     request		jsonb,
-    response		jsonb,
+    response	jsonb,
     runtime		interval
 );
 
@@ -85,16 +85,16 @@ AS
 
 CREATE OR REPLACE FUNCTION ocpp.GetIdTagStatus (
   pChargePoint	numeric,
-  pIdTag	text
-) RETURNS	text
+  pIdTag        text
+) RETURNS       text
 AS $$
 DECLARE
-  nId		numeric;
-  nCard		numeric;
+  nId           numeric;
+  nCard         numeric;
 
-  card		record;
+  card          record;
 
-  Status	text;
+  Status        text;
 BEGIN
   Status := 'Invalid';
 
@@ -169,23 +169,23 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION ocpp.StartTransaction (
-  pIdentity	text,
-  pRequest	jsonb
-) RETURNS	json
+  pIdentity     text,
+  pRequest      jsonb
+) RETURNS       json
 AS $$
 DECLARE
-  nId		numeric;
+  nId           numeric;
   nChargePoint	numeric;
-  nCard		numeric;
+  nCard         numeric;
 
-  arKeys	text[];
-  vStatus	text;
+  arKeys        text[];
+  vStatus       text;
 
-  idTag		text;
+  idTag         text;
   connectorId	integer;
   meterStart	integer;
   reservationId	integer;
-  dateStart	timestamp;
+  dateStart     timestamp;
 BEGIN
   IF pRequest IS NULL THEN
     PERFORM JsonIsEmpty();
@@ -219,24 +219,24 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION ocpp.StopTransaction (
-  pIdentity	text,
-  pRequest	jsonb
-) RETURNS	json
+  pIdentity     text,
+  pRequest      jsonb
+) RETURNS       json
 AS $$
 DECLARE
   nChargePoint	numeric;
 
-  arKeys	text[];
-  vStatus	text;
+  arKeys        text[];
+  vStatus       text;
 
-  Balance	integer default 0;
+  Balance       integer default 0;
 
-  idTag		text;
-  transactionId	integer;
-  meterStop	integer;
-  reason	text;
-  Data		json;
-  dateStop	timestamp;
+  idTag         text;
+  transactionId integer;
+  meterStop     integer;
+  reason        text;
+  Data          json;
+  dateStop      timestamp;
 BEGIN
   IF pRequest IS NULL THEN
     PERFORM JsonIsEmpty();
@@ -275,15 +275,15 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION ocpp.MeterValues (
-  pIdentity	text,
-  pRequest	jsonb default null
-) RETURNS	json
+  pIdentity     text,
+  pRequest      jsonb default null
+) RETURNS       json
 AS $$
 DECLARE
-  nId		numeric;
-  nChargePoint	numeric;
+  nId           numeric;
+  nChargePoint  numeric;
 
-  arKeys	text[];
+  arKeys        text[];
 
   connectorId	integer;
   transactionId	integer;
@@ -315,27 +315,27 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION ocpp.BootNotification (
-  pIdentity	text,
-  pRequest	jsonb
-) RETURNS	json
+  pIdentity	    text,
+  pRequest	    jsonb
+) RETURNS	    json
 AS $$
 DECLARE
   nChargePoint	numeric;
-  nType		numeric;
+  nType		    numeric;
 
-  point		record;
+  point		    record;
 
-  arKeys	text[];
-  vStatus	text;
+  arKeys	    text[];
+  vStatus	    text;
 
   chargeBoxSerialNumber		text;
-  chargePointModel		text;
+  chargePointModel		    text;
   chargePointSerialNumber	text;
-  chargePointVendor		text;
-  firmwareVersion		text;
-  meterSerialNumber		text;
-  iccid				text;
-  imsi				text;
+  chargePointVendor		    text;
+  firmwareVersion		    text;
+  meterSerialNumber		    text;
+  iccid				        text;
+  imsi				        text;
 BEGIN
   IF pRequest IS NULL THEN
     PERFORM JsonIsEmpty();
@@ -387,22 +387,22 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION ocpp.StatusNotification (
-  pIdentity	text,
-  pRequest	jsonb
-) RETURNS	json
+  pIdentity	        text,
+  pRequest	        jsonb
+) RETURNS	        json
 AS $$
 DECLARE
-  nId			numeric;
-  nChargePoint		numeric;
+  nId			    numeric;
+  nChargePoint      numeric;
 
-  arKeys		text[];
+  arKeys            text[];
 
-  connectorId		integer;
-  status		text;
-  errorCode		text;
-  info			text;
-  timestamp		timestamp;
-  vendorId		text;
+  connectorId       integer;
+  status		    text;
+  errorCode		    text;
+  info			    text;
+  timestamp		    timestamp;
+  vendorId		    text;
   vendorErrorCode	text;
 BEGIN
   IF pRequest IS NULL THEN
@@ -490,9 +490,9 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION ocpp.Heartbeat (
-  pIdentity	text,
-  pRequest	jsonb default null
-) RETURNS	json
+  pIdentity	    text,
+  pRequest	    jsonb default null
+) RETURNS	    json
 AS $$
 DECLARE
   nChargePoint	numeric;
@@ -510,14 +510,14 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION ocpp.SetSession (
-) RETURNS	text
+) RETURNS	    text
 AS $$
 DECLARE
-  nUserId	numeric;
-  nDepartment	numeric;
-  nWorkPlace	numeric;
+  nUserId	    numeric;
+  nArea         numeric;
+  nInterface	numeric;
 
-  vSession	text;
+  vSession	    text;
 BEGIN
   IF session_user <> 'ocpp' THEN
     PERFORM AccessDeniedForUser(session_user);
@@ -529,11 +529,11 @@ BEGIN
     SELECT key INTO vSession FROM db.session WHERE userid = nUserId;
 
     IF NOT FOUND THEN
-      nDepartment := GetDefaultDepartment(nUserId);
-      nWorkPlace := GetDefaultWorkPlace(nUserId);
+      nArea := GetDefaultArea(nUserId);
+      nInterface := GetDefaultInterface(nUserId);
 
-      INSERT INTO db.session (userid, department, workplace, host)
-      VALUES (nUserId, nDepartment, nWorkPlace, null)
+      INSERT INTO db.session (userid, area, interface, host)
+      VALUES (nUserId, nArea, nInterface, null)
       RETURNING key INTO vSession;
     END IF;
 

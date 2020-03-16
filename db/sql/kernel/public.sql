@@ -618,6 +618,22 @@ $$ LANGUAGE plpgsql;
 GRANT EXECUTE ON FUNCTION result_success() TO PUBLIC;
 
 --------------------------------------------------------------------------------
+-- FUNCTION GetISOTime ---------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetISOTime (
+  pTime		timestamp default current_timestamp at time zone 'utc'
+)
+RETURNS 	text
+AS $$
+BEGIN
+  RETURN replace(to_char(pTime, 'YYYY-MM-DD#HH24:MI:SS.MSZ'), '#', 'T');
+END;
+$$ LANGUAGE plpgsql;
+
+GRANT EXECUTE ON FUNCTION GetISOTime(timestamp) TO PUBLIC;
+
+--------------------------------------------------------------------------------
 -- quote_literal_json ----------------------------------------------------------
 --------------------------------------------------------------------------------
 
