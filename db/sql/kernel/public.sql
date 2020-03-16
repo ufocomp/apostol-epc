@@ -611,24 +611,84 @@ RETURNS 	record
 AS $$
 BEGIN
   result := true;
-  message := 'Success';
+  message := 'Успешно.';
 END;
 $$ LANGUAGE plpgsql;
 
 GRANT EXECUTE ON FUNCTION result_success() TO PUBLIC;
 
 --------------------------------------------------------------------------------
--- FUNCTION GetISOTime ---------------------------------------------------------
+-- quote_literal_json ----------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION GetISOTime (
-  pTime		timestamp default current_timestamp at time zone 'utc'
-)
-RETURNS 	text
+CREATE OR REPLACE FUNCTION quote_literal_json (
+  pStr		text
+) RETURNS	text
 AS $$
+DECLARE
+  l		integer;
+  c		integer;
 BEGIN
-  RETURN replace(to_char(pTime, 'YYYY-MM-DD#HH24:MI:SS.MSZ'), '#', 'T');
+  l := position('->>' in pStr);
+  IF l > 0 THEN
+    c := position(')' in SubStr(pStr, l + 3));
+    IF position(E'\'' in pStr) = 0 THEN
+      IF c > 0 THEN
+        pStr := SubStr(pStr, 1, l + 2) || quote_literal(SubStr(pStr, l + 3, c - 1)) || ')';
+      ELSE
+        pStr := SubStr(pStr, 1, l + 2) || quote_literal(SubStr(pStr, l + 3));
+      END IF;
+    END IF;
+  END IF;
+  RETURN pStr;
 END;
 $$ LANGUAGE plpgsql;
 
-GRANT EXECUTE ON FUNCTION GetISOTime(timestamp) TO PUBLIC;
+GRANT EXECUTE ON FUNCTION quote_literal_json(text) TO PUBLIC;
+
+--------------------------------------------------------------------------------
+-- array_quote_literal_json ----------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION array_quote_literal_json (
+  pArray	anyarray
+) RETURNS	anyarray
+AS $$
+DECLARE
+  i		integer;
+  l		integer;
+  vStr		text;
+BEGIN
+  FOR i IN 1..array_length(pArray, 1)
+  LOOP
+    vStr := pArray[i];
+    l := position('->>' in vStr);
+    IF l > 0 THEN
+      IF position(E'\'' in vStr) = 0 THEN
+        pArray[i] := SubString(vStr from 1 for l + 2) || quote_literal(SubString(vStr from l + 3));
+      END IF;
+    END IF;
+  END LOOP;
+
+  RETURN pArray;
+END;
+$$ LANGUAGE plpgsql;
+
+GRANT EXECUTE ON FUNCTION array_quote_literal_json(anyarray) TO PUBLIC;
+
+--------------------------------------------------------------------------------
+-- random_between --------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION random_between (
+  low     int,
+  high    int
+) RETURNS int
+AS
+$$
+BEGIN
+  RETURN floor(random() * (high - low + 1) + low);
+END;
+$$ language 'plpgsql' STRICT;
+
+GRANT EXECUTE ON FUNCTION random_between(int, int) TO PUBLIC;

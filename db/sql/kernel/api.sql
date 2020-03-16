@@ -20,13 +20,13 @@
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.login (
-  pUserName	text,
-  pPassword	text,
-  pHost		inet default null,
+  pUserName     text,
+  pPassword     text,
+  pHost         inet default null,
   OUT session	text,
   OUT result	boolean,
   OUT message	text
-) RETURNS	record
+) RETURNS       record
 AS $$
 BEGIN
   session := Login(pUserName, pPassword, pHost);
@@ -50,12 +50,12 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.slogin (
-  pSession	text,
-  pHost		inet default null,
+  pSession      text,
+  pHost         inet default null,
   OUT session	text,
   OUT result	boolean,
   OUT message	text
-) RETURNS	record
+) RETURNS       record
 AS $$
 BEGIN
   session := pSession;
@@ -78,11 +78,11 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.logout (
-  pSession	text default current_session(),
+  pSession	    text default current_session(),
   pLogoutAll	boolean default false,
   OUT result	boolean,
   OUT message	text
-) RETURNS	record
+) RETURNS	    record
 AS $$
 BEGIN
   result := Logout(pSession, pLogoutAll);
@@ -105,11 +105,11 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.su (
-  pUserName	text,
-  pPassword	text,
+  pUserName	    text,
+  pPassword	    text,
   OUT result	boolean,
   OUT message	text
-) RETURNS	record
+) RETURNS	    record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
@@ -132,9 +132,11 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 /**
  * Возвращает информацию о виртуальном пользователе.
- * @out param {numeric} userid - Идентификатор виртуального пользователя
+ * @out param {numeric} id - Идентификатор участника
+ * @out param {numeric} userid - Идентификатор виртуального пользователя (учётной записи)
  * @out param {varchar} username - Имя виртуального пользователя (login)
  * @out param {text} fullname - Ф.И.О. виртуального пользователя
+ * @out param {text} phone - Телефон виртуального пользователя
  * @out param {text} email - Электронный адрес виртуального пользователя
  * @out param {numeric} session_userid - Идентификатор учётной записи виртуального пользователя сессии
  * @out param {varchar} session_username - Имя виртуального пользователя сессии (login)
@@ -142,33 +144,36 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.whoami (
-  OUT userid		numeric,
-  OUT username		varchar,
-  OUT fullname		text,
-  OUT email		text,
+  OUT id                numeric,
+  OUT userid            numeric,
+  OUT username          varchar,
+  OUT fullname          text,
+  OUT phone             text,
+  OUT email             text,
   OUT session_userid	numeric,
   OUT session_username	varchar,
-  OUT session_fullname	text,
-  OUT department	numeric,
-  OUT department_code	varchar,
-  OUT department_name	varchar,
-  OUT workplace		numeric,
-  OUT workplace_sid	varchar,
-  OUT workplace_name	varchar
-) RETURNS		SETOF record
+  OUT session_fullname  text,
+  OUT area              numeric,
+  OUT area_code         varchar,
+  OUT area_name	        varchar,
+  OUT interface         numeric,
+  OUT interface_sid     varchar,
+  OUT interface_name    varchar
+) RETURNS SETOF record
 AS $$
   WITH cs AS (
       SELECT current_session() AS session
   )
-  SELECT s.userid, cu.username, cu.fullname, cu.email,
+  SELECT p.id, s.userid, cu.username, cu.fullname, cu.phone, cu.email,
          s.suid, su.username, su.fullname,
-         s.department, d.code, d.name,
-         s.workplace, w.sid, w.name
-    FROM db.session s INNER JOIN cs ON cs.session = s.key 
+         s.area, a.code, a.name,
+         s.interface, i.sid, i.name
+    FROM db.session s INNER JOIN cs ON cs.session = s.key
                       INNER JOIN users cu ON cu.id = s.userid
                       INNER JOIN users su ON su.id = s.suid
-                      INNER JOIN department d ON d.id = s.department
-                      INNER JOIN workplace w ON w.id = s.workplace
+                      INNER JOIN db.area a ON a.id = s.area
+                      INNER JOIN db.interface i ON i.id = s.interface
+  		               LEFT JOIN db.client p ON p.userid = s.userid;
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -238,34 +243,34 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.current_department ------------------------------------------------------
+-- api.current_area ------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Возвращает данные текущего подразделения.
- * @return {department} - Подразделение
+ * Возвращает данные текущей зоны.
+ * @return {area} - Зона
  */
-CREATE OR REPLACE FUNCTION api.current_department (
-) RETURNS	department
+CREATE OR REPLACE FUNCTION api.current_area (
+) RETURNS	area
 AS $$
-  SELECT * FROM department WHERE id = current_department();
+  SELECT * FROM area WHERE id = current_area();
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.set_department ----------------------------------------------------------
+-- api.set_area ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Устанавливает подразделение.
- * @param {numeric} pDepartment - Идентификатор подразделения
+ * Устанавливает зону.
+ * @param {numeric} pArea - Идентификатор зоны
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.set_department (
-  pDepartment	numeric,
+CREATE OR REPLACE FUNCTION api.set_area (
+  pArea	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -273,11 +278,11 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  PERFORM SetDepartment(pDepartment);
-  SELECT * INTO result, error FROM result_success();
+  PERFORM SetArea(pArea);
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -285,34 +290,34 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.current_workplace -------------------------------------------------------
+-- api.current_interface -------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Возвращает данные текущего рабочего места.
- * @return {workplace} - Рабочее место
+ * Возвращает данные текущего интерфейса.
+ * @return {interface} - Интерфейс
  */
-CREATE OR REPLACE FUNCTION api.current_workplace (
-) RETURNS 	workplace
+CREATE OR REPLACE FUNCTION api.current_interface (
+) RETURNS 	interface
 AS $$
-  SELECT * FROM workplace WHERE id = current_workplace();
+  SELECT * FROM interface WHERE id = current_interface();
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.set_workplace -----------------------------------------------------------
+-- api.set_interface -----------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Устанавливает рабочее место.
- * @param {numeric} pWorkPlace - Идентификатор рабочего места
+ * Устанавливает интерфейс.
+ * @param {numeric} pInterface - Идентификатор интерфейса
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.set_workplace (
-  pWorkPlace	numeric,
+CREATE OR REPLACE FUNCTION api.set_interface (
+  pInterface	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -320,11 +325,11 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  PERFORM SetWorkPlace(pWorkPlace);
-  SELECT * INTO result, error FROM result_success();
+  PERFORM SetInterface(pInterface);
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -332,13 +337,13 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.operdate ----------------------------------------------------------------
+-- api.oper_date ---------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Возвращает дату операционного дня.
  * @return {timestamp} - Дата операционного дня
  */
-CREATE OR REPLACE FUNCTION api.operdate()
+CREATE OR REPLACE FUNCTION api.oper_date()
 RETURNS 	timestamp
 AS $$
 BEGIN
@@ -355,13 +360,13 @@ $$ LANGUAGE plpgsql
  * Устанавливает дату операционного дня.
  * @param {timestamp} pOperDate - Дата операционного дня
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.set_operdate (
   pOperDate 	timestamp,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -370,10 +375,10 @@ BEGIN
   END IF;
 
   PERFORM SetOperDate(pOperDate);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -387,13 +392,13 @@ $$ LANGUAGE plpgsql
  * Устанавливает дату операционного дня.
  * @param {timestamptz} pOperDate - Дата операционного дня
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.set_operdate (
   pOperDate 	timestamptz,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -402,10 +407,10 @@ BEGIN
   END IF;
 
   PERFORM SetOperDate(pOperDate);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -434,13 +439,13 @@ $$ LANGUAGE SQL
  * Устанавливает по идентификатору текущий язык.
  * @param {numeric} pLang - Идентификатор языка
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.set_language (
   pLang		numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -449,10 +454,10 @@ BEGIN
   END IF;
 
   PERFORM SetLanguage(pLang);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -466,13 +471,13 @@ $$ LANGUAGE plpgsql
  * Устанавливает по идентификатору текущий язык.
  * @param {text} pCode - Код языка
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.set_language (
   pCode 	text default 'ru',
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -481,10 +486,10 @@ BEGIN
   END IF;
 
   PERFORM SetLanguage(pCode);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -503,7 +508,7 @@ AS
 GRANT SELECT ON api.event_log TO daemon;
 
 --------------------------------------------------------------------------------
--- api.event_log ----------------------------------------------------------------
+-- api.event_log ---------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Журнал событий.
@@ -516,7 +521,6 @@ GRANT SELECT ON api.event_log TO daemon;
  * @return {SETOF VEventLog} - Записи
  */
 CREATE OR REPLACE FUNCTION api.event_log (
-  pObject	numeric default null,
   pType		char default null,
   pUserName	varchar default null,
   pCode		numeric default null,
@@ -526,8 +530,7 @@ CREATE OR REPLACE FUNCTION api.event_log (
 AS $$
   SELECT *
     FROM api.event_log
-   WHERE coalesce(object, 0) = coalesce(pObject, object, 0)
-     AND type = coalesce(pType, type)
+   WHERE type = coalesce(pType, type)
      AND username = coalesce(pUserName, username)
      AND code = coalesce(pCode, code)
      AND datetime >= coalesce(pDateFrom, MINDATE())
@@ -539,16 +542,15 @@ $$ LANGUAGE SQL
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.write_to_event_log ------------------------------------------------------
+-- api.write_to_log ------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION api.write_to_event_log (
-  pObject	numeric,
+CREATE OR REPLACE FUNCTION api.write_to_log (
   pType		text,
   pCode		numeric,
   pText		text,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS	record
 AS $$
 BEGIN
@@ -556,12 +558,12 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  PERFORM WriteToEventLog(pObject, pType, pCode, pText);
+  PERFORM WriteToEventLog(pType, pCode, pText);
 
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -583,35 +585,33 @@ $$ LANGUAGE plpgsql
  * @param {text} pPhone - Телефон
  * @param {text} pEmail - Электронный адрес
  * @param {text} pDescription - Описание
- * @param {text[]} pGroups - Группа: ARRAY['Строковый идентификатор группы', ...]
  * @out param {numeric} id - Id учётной записи
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_user (
-  pUserName	varchar,
-  pPassword	text,
-  pFullName	text,
-  pPhone	text default null,
-  pEmail	text default null,
-  pDescription	text default null,
-  pGroups	text[] default null,
-  OUT id	numeric,
-  OUT result	boolean,
-  OUT error	text
-) RETURNS 	record
+  pUserName     varchar,
+  pPassword     text,
+  pFullName     text,
+  pPhone        text default null,
+  pEmail        text default null,
+  pDescription  text default null,
+  OUT id        numeric,
+  OUT result    boolean,
+  OUT message   text
+) RETURNS       record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
-  id := CreateUser(pUserName, pPassword, pFullName, pPhone, pEmail, pDescription, pGroups);
-  SELECT * INTO result, error FROM result_success();
+  id := CreateUser(pUserName, pPassword, pFullName, pPhone, pEmail, pDescription);
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   id := null;
   result := false;
 END;
@@ -620,7 +620,7 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.upd_user ----------------------------------------------------------------
+-- api.update_user -------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Обновляет учётную запись пользователя.
@@ -635,10 +635,10 @@ $$ LANGUAGE plpgsql
  * @param {boolean} pPasswordNotChange - Установить запрет на смену пароля самим пользователем
  * @out {numeric} id - Идентификатор учетной записи
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.upd_user (
+CREATE OR REPLACE FUNCTION api.update_user (
   pId			numeric,
   pUserName		varchar,
   pPassword		text,
@@ -650,7 +650,7 @@ CREATE OR REPLACE FUNCTION api.upd_user (
   pPasswordNotChange	boolean,
   OUT id		numeric,
   OUT result		boolean,
-  OUT error		text
+  OUT message		text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -661,10 +661,10 @@ BEGIN
   END IF;
 
   PERFORM UpdateUser(pId, pUserName, pPassword, pFullName, pPhone, pEmail, pDescription, pPasswordChange, pPasswordNotChange);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -679,28 +679,28 @@ $$ LANGUAGE plpgsql
  * @param {numeric} pId - Идентификатор учётной записи пользователя
  * @out {numeric} id - Идентификатор учётной записи пользователя
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.del_user (
   pId		numeric,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
   id := pId;
- 
+
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM DeleteUser(pId);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -743,13 +743,13 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.lst_user ----------------------------------------------------------------
+-- api.list_user ---------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Возвращает учётные записи пользователей.
  * @return {SETOF users} - Учётные записи пользователей
  */
-CREATE OR REPLACE FUNCTION api.lst_user (
+CREATE OR REPLACE FUNCTION api.list_user (
   pId		numeric default null
 ) RETURNS	SETOF users
 AS $$
@@ -786,7 +786,7 @@ $$ LANGUAGE plpgsql
  * @param {text} pOldPass - Старый пароль
  * @param {text} pNewPass - Новый пароль
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.change_password (
@@ -794,7 +794,7 @@ CREATE OR REPLACE FUNCTION api.change_password (
   pOldPass		text,
   pNewPass		text,
   OUT result		boolean,
-  OUT error		text
+  OUT message		text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -803,14 +803,14 @@ BEGIN
   END IF;
 
   result := CheckPassword(GetUserName(pId), pOldPass);
-  error := GetErrorMessage();
+  message := GetErrorMessage();
 
   IF result THEN
     PERFORM SetPassword(pId, pNewPass);
   END IF;
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -866,17 +866,15 @@ $$ LANGUAGE SQL
  * Блокирует учётную запись пользователя.
  * @param {numeric} pId - Идентификатор учётной записи пользователя
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки/результата
+ * @out param {text} message - Текст ошибки/результата
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.user_lock (
   pId		numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
-DECLARE
-  nId		numeric;
 BEGIN
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
@@ -884,10 +882,10 @@ BEGIN
 
   PERFORM UserLock(pId);
 
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -901,17 +899,15 @@ $$ LANGUAGE plpgsql
  * Снимает блокировку с учётной записи пользователя.
  * @param {numeric} pId - Идентификатор учётной записи пользователя
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки/результата
+ * @out param {text} message - Текст ошибки/результата
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.user_unlock (
   pId			numeric,
   OUT result		boolean,
-  OUT error		text
+  OUT message		text
 ) RETURNS 		record
 AS $$
-DECLARE
-  nId		numeric;
 BEGIN
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
@@ -919,10 +915,10 @@ BEGIN
 
   PERFORM UserUnlock(pId);
 
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -963,7 +959,7 @@ $$ LANGUAGE SQL
  * @param {char} pType - Тип: A - allow; D - denied'
  * @param {text} pIpTable - IP-адреса в виде одной строки
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки/результата
+ * @out param {text} message - Текст ошибки/результата
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.set_user_iptable (
@@ -971,11 +967,9 @@ CREATE OR REPLACE FUNCTION api.set_user_iptable (
   pType			char,
   pIpTable		text,
   OUT result		boolean,
-  OUT error		text
+  OUT message		text
 ) RETURNS 		record
 AS $$
-DECLARE
-  nId		numeric;
 BEGIN
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
@@ -983,10 +977,10 @@ BEGIN
 
   PERFORM SetIPTableStr(pId, pType, pIpTable);
 
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -1007,7 +1001,7 @@ $$ LANGUAGE plpgsql
  * @param {text} pDescription - Описание
  * @out param {numeric} id - Id учётной записи
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_group (
@@ -1016,7 +1010,7 @@ CREATE OR REPLACE FUNCTION api.add_group (
   pDescription	text default null,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -1025,10 +1019,10 @@ BEGIN
   END IF;
 
   id := CreateGroup(pGroupName, pFullName, pDescription);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   id := null;
   result := false;
 END;
@@ -1037,7 +1031,7 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.upd_group ---------------------------------------------------------------
+-- api.update_group ------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Обновляет учётные данные группы.
@@ -1047,17 +1041,17 @@ $$ LANGUAGE plpgsql
  * @param {text} pDescription - Описание
  * @out {numeric} id - Идентификатор группы
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.upd_group (
+CREATE OR REPLACE FUNCTION api.update_group (
   pId			numeric,
   pGroupName		varchar,
   pFullName		text,
   pDescription		text,
   OUT id		numeric,
   OUT result		boolean,
-  OUT error		text
+  OUT message		text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1068,10 +1062,10 @@ BEGIN
   END IF;
 
   PERFORM UpdateGroup(pId, pGroupName, pFullName, pDescription);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -1086,14 +1080,14 @@ $$ LANGUAGE plpgsql
  * @param {numeric} pId - Идентификатор группы
  * @out {numeric} id - Идентификатор группы
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.del_group (
   pId		numeric,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -1104,10 +1098,10 @@ BEGIN
   END IF;
 
   PERFORM DeleteGroup(pId);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -1122,38 +1116,26 @@ $$ LANGUAGE plpgsql
  * @return {record} - Группа
  */
 CREATE OR REPLACE FUNCTION api.get_group (
-  pId			numeric,
-  OUT id		numeric,
-  OUT username		varchar,
-  OUT fullname		text,
-  OUT description       text
-) RETURNS		record
+  pId			numeric
+) RETURNS		groups
 AS $$
-  SELECT id, username, fullname, description 
-    FROM groups 
-   WHERE id = pId
+  SELECT * FROM groups WHERE id = pId
      AND current_session() IS NOT NULL;
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.lst_group ---------------------------------------------------------------
+-- api.list_group --------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Возвращает список групп.
  * @return {record} - Группы
  */
-CREATE OR REPLACE FUNCTION api.lst_group (
-  OUT id		numeric,
-  OUT username		varchar,
-  OUT fullname		text,
-  OUT description       text
-) RETURNS		SETOF record
+CREATE OR REPLACE FUNCTION api.list_group (
+) RETURNS		SETOF groups
 AS $$
-  SELECT id, username, fullname, description 
-    FROM groups
-   WHERE current_session() IS NOT NULL;
+  SELECT * FROM groups WHERE current_session() IS NOT NULL;
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -1166,14 +1148,14 @@ $$ LANGUAGE SQL
  * @param {numeric} pMember - Идентификатор пользователя
  * @param {numeric} pGroup - Идентификатор группы
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.member_group_add (
   pMember		numeric,
   pGroup		numeric,
   OUT result		boolean,
-  OUT error		text
+  OUT message		text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1182,10 +1164,10 @@ BEGIN
   END IF;
 
   PERFORM AddMemberToGroup(pMember, pGroup);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -1200,14 +1182,14 @@ $$ LANGUAGE plpgsql
  * @param {numeric} pMember - Идентификатор пользователя
  * @param {numeric} pGroup - Идентификатор группы, при null удаляет все группы для указанного пользователя
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.member_group_del (
   pMember		numeric,
   pGroup		numeric,
   OUT result		boolean,
-  OUT error		text
+  OUT message		text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1216,10 +1198,10 @@ BEGIN
   END IF;
 
   PERFORM DeleteGroupForMember(pMember, pGroup);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -1234,14 +1216,14 @@ $$ LANGUAGE plpgsql
  * @param {numeric} pGroup - Идентификатор группы
  * @param {numeric} pMember - Идентификатор пользователя, при null удаляет всех пользователей из указанной группы
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.group_member_del (
   pGroup		numeric,
   pMember		numeric default null,
   OUT result		boolean,
-  OUT error		text
+  OUT message		text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1250,10 +1232,10 @@ BEGIN
   END IF;
 
   PERFORM DeleteMemberFromGroup(pGroup, pMember);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -1322,7 +1304,7 @@ CREATE OR REPLACE FUNCTION api.is_user_role (
   pRole			numeric,
   pUser			numeric default current_userid(),
   OUT result		boolean,
-  OUT error		text
+  OUT message		text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1330,11 +1312,11 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  error := 'Успешно.';
+  message := 'Успешно.';
   result := IsUserRole(pRole, pUser);
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -1349,7 +1331,7 @@ CREATE OR REPLACE FUNCTION api.is_user_role (
   pRole			text,
   pUser			text default session_username(),
   OUT result		boolean,
-  OUT error		text
+  OUT message		text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1357,11 +1339,11 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  error := 'Успешно.';
+  message := 'Успешно.';
   result := IsUserRole(pRole, pUser);
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -1369,32 +1351,29 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- DEPARTMENT ------------------------------------------------------------------
+-- AREA ------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW api.department_type
+CREATE OR REPLACE VIEW api.area_type
 AS
-  SELECT * FROM DepartmentType;
+  SELECT * FROM AreaType;
 
-GRANT SELECT ON api.department_type TO daemon;
+GRANT SELECT ON api.area_type TO daemon;
 
 --------------------------------------------------------------------------------
--- api.get_department_type -----------------------------------------------------
+-- api.get_area_type -----------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Позвращает тип подразделения.
- * @param {numeric} pId - Идентификатор типа подразделения
+ * Позвращает тип зоны.
+ * @param {numeric} pId - Идентификатор типа зоны
  * @return {record} - Запись
  */
-CREATE OR REPLACE FUNCTION api.get_department_type (
-  pId		numeric,
-  OUT id	numeric,
-  OUT code	varchar,
-  OUT name	varchar
-) RETURNS	record
+CREATE OR REPLACE FUNCTION api.get_area_type (
+  pId		numeric
+) RETURNS	api.area_type
 AS $$
-  SELECT id, code, name
-    FROM api.department_type
+  SELECT *
+    FROM api.area_type
    WHERE id = pId;
 $$ LANGUAGE SQL
    SECURITY DEFINER
@@ -1402,28 +1381,28 @@ $$ LANGUAGE SQL
 
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW api.department
+CREATE OR REPLACE VIEW api.area
 AS
-  SELECT * FROM Department;
+  SELECT * FROM Area;
 
-GRANT SELECT ON api.department TO daemon;
+GRANT SELECT ON api.area TO daemon;
 
 --------------------------------------------------------------------------------
--- api.add_department ----------------------------------------------------------
+-- api.add_area ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Создаёт подразделение.
+ * Создаёт зону.
  * @param {numeric} pParent - Идентификатор "родителя"
  * @param {numeric} pType - Идентификатор типа
  * @param {varchar} pCode - Код
  * @param {varchar} pName - Наименование
  * @param {text} pDescription - Описание
- * @out param {numeric} id - Id подразделения
+ * @out param {numeric} id - Id зоны
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.add_department (
+CREATE OR REPLACE FUNCTION api.add_area (
   pParent	numeric,
   pType		numeric,
   pCode		varchar,
@@ -1431,7 +1410,7 @@ CREATE OR REPLACE FUNCTION api.add_department (
   pDescription	text default null,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -1439,11 +1418,11 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  id := CreateDepartment(pParent, pType, pCode, pName, pDescription);
-  SELECT * INTO result, error FROM result_success();
+  id := CreateArea(pParent, pType, pCode, pName, pDescription);
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   id := null;
   result := false;
 END;
@@ -1452,11 +1431,11 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.upd_department ----------------------------------------------------------
+-- api.update_area -------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Обновляет подразделение.
- * @param {numeric} pId - Идентификатор подразделения
+ * Обновляет зону.
+ * @param {numeric} pId - Идентификатор зоны
  * @param {numeric} pParent - Идентификатор "родителя"
  * @param {numeric} pType - Идентификатор типа
  * @param {varchar} pCode - Код
@@ -1464,12 +1443,12 @@ $$ LANGUAGE plpgsql
  * @param {text} pDescription - Описание
  * @param {timestamptz} pValidFromDate - Дата открытия
  * @param {timestamptz} pValidToDate - Дата закрытия
- * @out param {numeric} id - Id подразделения
+ * @out param {numeric} id - Id зоны
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.upd_department (
+CREATE OR REPLACE FUNCTION api.update_area (
   pId			numeric,
   pParent		numeric default null,
   pType			numeric default null,
@@ -1480,7 +1459,7 @@ CREATE OR REPLACE FUNCTION api.upd_department (
   pValidToDate		timestamptz default null,
   OUT id		numeric,
   OUT result		boolean,
-  OUT error		text
+  OUT message		text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1490,11 +1469,11 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  PERFORM EditDepartment(pId, pParent, pType, pCode, pName, pDescription, pValidFromDate, pValidToDate);
-  SELECT * INTO result, error FROM result_success();
+  PERFORM EditArea(pId, pParent, pType, pCode, pName, pDescription, pValidFromDate, pValidToDate);
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -1502,21 +1481,21 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.del_department ----------------------------------------------------------
+-- api.del_area ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Удаляет подразделение.
- * @param {numeric} pId - Идентификатор подразделения
- * @out {numeric} id - Идентификатор подразделения
+ * Удаляет зону.
+ * @param {numeric} pId - Идентификатор зоны
+ * @out {numeric} id - Идентификатор зоны
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.del_department (
+CREATE OR REPLACE FUNCTION api.del_area (
   pId		numeric,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -1526,11 +1505,11 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  PERFORM DeleteDepartment(pId);
-  SELECT * INTO result, error FROM result_success();
+  PERFORM DeleteArea(pId);
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -1538,73 +1517,52 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.lst_department ----------------------------------------------------------
+-- api.list_area ---------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Возвращает список подразделений.
  * @return {record} - Группы
  */
-CREATE OR REPLACE FUNCTION api.lst_department (
-  OUT id		numeric,
-  OUT type		numeric,
-  OUT typecode		varchar,
-  OUT typename		varchar,
-  OUT code		varchar,
-  OUT name		varchar,
-  OUT description       text,
-  OUT validfromdate	timestamp,
-  OUT validtodate	timestamp
-) RETURNS		SETOF record
+CREATE OR REPLACE FUNCTION api.list_area (
+) RETURNS		SETOF api.area
 AS $$
-  SELECT id, type, typecode, typename, code, name, description, validfromdate, validtodate 
-    FROM api.department;
+  SELECT * FROM api.area;
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.get_department ----------------------------------------------------------
+-- api.get_area ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Возвращает данные подразделения.
- * @return {record} - Данные подразделения
+ * Возвращает данные зоны.
+ * @return {record} - Данные зоны
  */
-CREATE OR REPLACE FUNCTION api.get_department (
-  pId			numeric,
-  OUT id		numeric,
-  OUT type		numeric,
-  OUT typecode		varchar,
-  OUT typename		varchar,
-  OUT code		varchar,
-  OUT name		varchar,
-  OUT description       text,
-  OUT validfromdate	timestamp,
-  OUT validtodate	timestamp
-) RETURNS		record
+CREATE OR REPLACE FUNCTION api.get_area (
+  pId			numeric
+) RETURNS		api.area
 AS $$
-  SELECT id, type, typecode, typename, code, name, description, validfromdate, validtodate 
-    FROM api.department
-   WHERE id = pId;
+  SELECT * FROM api.area WHERE id = pId;
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.member_department_add ---------------------------------------------------
+-- api.member_area_add ---------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Добавляет пользователя или группу в подразделение.
+ * Добавляет пользователя или группу в зону.
  * @param {numeric} pMember - Идентификатор пользователя/группы
- * @param {numeric} pDepartment - Идентификатор подразделения
+ * @param {numeric} pArea - Идентификатор зоны
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.member_department_add (
+CREATE OR REPLACE FUNCTION api.member_area_add (
   pMember		numeric,
-  pDepartment		numeric,
+  pArea		numeric,
   OUT result		boolean,
-  OUT error		text
+  OUT message		text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1612,11 +1570,11 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  PERFORM AddMemberToDepartment(pMember, pDepartment);
-  SELECT * INTO result, error FROM result_success();
+  PERFORM AddMemberToArea(pMember, pArea);
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -1624,21 +1582,21 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.member_department_del ---------------------------------------------------
+-- api.member_area_del ---------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Удаляет подразделение для пользователя.
+ * Удаляет зону для пользователя.
  * @param {numeric} pMember - Идентификатор пользователя
- * @param {numeric} pDepartment - Идентификатор подразделения, при null удаляет все подразделения для указанного пользователя
+ * @param {numeric} pArea - Идентификатор зоны, при null удаляет все зоны для указанного пользователя
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.member_department_del (
+CREATE OR REPLACE FUNCTION api.member_area_del (
   pMember		numeric,
-  pDepartment		numeric,
+  pArea			numeric,
   OUT result		boolean,
-  OUT error		text
+  OUT message		text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1646,11 +1604,11 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  PERFORM DeleteDepartmentForMember(pMember, pDepartment);
-  SELECT * INTO result, error FROM result_success();
+  PERFORM DeleteAreaForMember(pMember, pArea);
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -1658,21 +1616,21 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.department_member_del ---------------------------------------------------
+-- api.area_member_del ---------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Удаляет пользователя из подразделения.
- * @param {numeric} pDepartment - Идентификатор подразделения
- * @param {numeric} pMember - Идентификатор пользователя, при null удаляет всех пользователей из указанного подразделения
+ * Удаляет пользователя из зоны.
+ * @param {numeric} pArea - Идентификатор зоны
+ * @param {numeric} pMember - Идентификатор пользователя, при null удаляет всех пользователей из указанного зоны
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.department_member_del (
-  pDepartment		numeric,
+CREATE OR REPLACE FUNCTION api.area_member_del (
+  pArea		numeric,
   pMember		numeric default null,
   OUT result		boolean,
-  OUT error		text
+  OUT message		text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1680,11 +1638,11 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  PERFORM DeleteMemberFromDepartment(pDepartment, pMember);
-  SELECT * INTO result, error FROM result_success();
+  PERFORM DeleteMemberFromArea(pArea, pMember);
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -1692,24 +1650,24 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- VIEW api.member_department --------------------------------------------------
+-- VIEW api.member_area --------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW api.member_department
+CREATE OR REPLACE VIEW api.member_area
 AS
-  SELECT * FROM MemberDepartment;
+  SELECT * FROM MemberArea;
 
-GRANT SELECT ON api.member_department TO daemon;
+GRANT SELECT ON api.member_area TO daemon;
 
 --------------------------------------------------------------------------------
--- api.department_member -------------------------------------------------------
+-- api.area_member -------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Возвращает список участников подразделения.
+ * Возвращает список участников зоны.
  * @return {SETOF record} - Запись
  */
-CREATE OR REPLACE FUNCTION api.department_member (
-  pDepartmentId		numeric,
+CREATE OR REPLACE FUNCTION api.area_member (
+  pAreaId		numeric,
   OUT id		numeric,
   OUT type		char,
   OUT username		varchar,
@@ -1721,45 +1679,41 @@ CREATE OR REPLACE FUNCTION api.department_member (
 ) RETURNS		SETOF record
 AS $$
   SELECT g.id, 'G' AS type, g.username, g.fullname, null AS email, g.description, null AS status, g.system
-    FROM api.member_department m INNER JOIN groups g ON g.id = m.memberid
-   WHERE m.department = pDepartmentId
+    FROM api.member_area m INNER JOIN groups g ON g.id = m.memberid
+   WHERE m.area = pAreaId
      AND current_session() IS NOT NULL
   UNION ALL
   SELECT u.id, 'U' AS type, u.username, u.fullname, u.email, u.description, u.status, u.system
-    FROM api.member_department m INNER JOIN users u ON u.id = m.memberid
-   WHERE m.department = pDepartmentId
+    FROM api.member_area m INNER JOIN users u ON u.id = m.memberid
+   WHERE m.area = pAreaId
      AND current_session() IS NOT NULL;
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.member_department -------------------------------------------------------
+-- api.member_area -------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Возвращает подразделения доступные участнику.
- * @return {record} - Данные подразделения
+ * Возвращает зоны доступные участнику.
+ * @return {record} - Данные зоны
  */
-CREATE OR REPLACE FUNCTION api.member_department (
-  pUserId		numeric default current_userid(),
-  OUT id		numeric,
-  OUT code		varchar,
-  OUT name		varchar,
-  OUT description       text
-) RETURNS		SETOF record
+CREATE OR REPLACE FUNCTION api.member_area (
+  pUserId		numeric default current_userid()
+) RETURNS		SETOF api.area
 AS $$
-  SELECT id, code, name, description
-    FROM api.department
+  SELECT *
+    FROM api.area
    WHERE id in (
-     SELECT department FROM db.member_department WHERE member = (
+     SELECT area FROM db.member_area WHERE member = (
        SELECT id FROM db.user WHERE id = pUserId
      )
    )
    UNION ALL
-  SELECT id, code, name, description
-    FROM api.department
+  SELECT *
+    FROM api.area
    WHERE id in (
-     SELECT department FROM db.member_department WHERE member IN (
+     SELECT area FROM db.member_area WHERE member IN (
        SELECT userid FROM db.member_group WHERE member = (
          SELECT id FROM db.user WHERE id = pUserId
        )
@@ -1770,33 +1724,33 @@ $$ LANGUAGE SQL
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- WORKPLACE -------------------------------------------------------------------
+-- INTERFACE -------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW api.workplace
+CREATE OR REPLACE VIEW api.interface
 AS
-  SELECT * FROM WorkPlace;
+  SELECT * FROM Interface;
 
-GRANT SELECT ON api.workplace TO daemon;
+GRANT SELECT ON api.interface TO daemon;
 
 --------------------------------------------------------------------------------
--- api.add_workplace -----------------------------------------------------------
+-- api.add_interface -----------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Создаёт рабочее место.
+ * Создаёт интерфейс.
  * @param {varchar} pName - Наименование
  * @param {text} pDescription - Описание
- * @out param {numeric} id - Идентификатор рабочего места
+ * @out param {numeric} id - Идентификатор интерфейса
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.add_workplace (
+CREATE OR REPLACE FUNCTION api.add_interface (
   pName		varchar,
   pDescription	text default null,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -1804,11 +1758,11 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  id := CreateWorkPlace(pName, pDescription);
-  SELECT * INTO result, error FROM result_success();
+  id := CreateInterface(pName, pDescription);
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   id := null;
   result := false;
 END;
@@ -1817,25 +1771,25 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.upd_workplace -----------------------------------------------------------
+-- api.update_interface --------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Обновляет рабочее место.
- * @param {numeric} pId - Идентификатор рабочего места
+ * Обновляет интерфейс.
+ * @param {numeric} pId - Идентификатор интерфейса
  * @param {varchar} pName - Наименование
  * @param {text} pDescription - Описание
- * @out param {numeric} id - Идентификатор рабочего места
+ * @out param {numeric} id - Идентификатор интерфейса
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.upd_workplace (
+CREATE OR REPLACE FUNCTION api.update_interface (
   pId		numeric,
   pName		varchar,
   pDescription	text default null,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -1845,11 +1799,11 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  PERFORM UpdateWorkPlace(pId, pName, pDescription);
-  SELECT * INTO result, error FROM result_success();
+  PERFORM UpdateInterface(pId, pName, pDescription);
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -1857,21 +1811,21 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.del_workplace -----------------------------------------------------------
+-- api.del_interface -----------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Удаляет рабочее место.
- * @param {numeric} pId - Идентификатор рабочего места
- * @out {numeric} id - Идентификатор рабочего места
+ * Удаляет интерфейс.
+ * @param {numeric} pId - Идентификатор интерфейса
+ * @out {numeric} id - Идентификатор интерфейса
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.del_workplace (
+CREATE OR REPLACE FUNCTION api.del_interface (
   pId		numeric,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -1881,11 +1835,11 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  PERFORM DeleteWorkPlace(pId);
-  SELECT * INTO result, error FROM result_success();
+  PERFORM DeleteInterface(pId);
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -1893,43 +1847,37 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.get_workplace -----------------------------------------------------------
+-- api.get_interface -----------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Возвращает данные рабочего места.
- * @return {record} - Данные рабочего места
+ * Возвращает данные интерфейса.
+ * @return {record} - Данные интерфейса
  */
-CREATE OR REPLACE FUNCTION api.get_workplace (
-  pId			numeric,
-  OUT id		numeric,
-  OUT sid		varchar,
-  OUT name		varchar,
-  OUT description       text
-) RETURNS		record
+CREATE OR REPLACE FUNCTION api.get_interface (
+  pId			numeric
+) RETURNS		api.interface
 AS $$
-  SELECT id, sid, name, description
-    FROM api.workplace
-   WHERE id = pId;
+  SELECT * FROM api.interface WHERE id = pId;
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.member_workplace_add ---------------------------------------------------
+-- api.member_interface_add ----------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Добавляет пользователя или группу к рабочему месту.
  * @param {numeric} pMember - Идентификатор пользователя/группы
- * @param {numeric} pWorkPlace - Идентификатор рабочего места
+ * @param {numeric} pInterface - Идентификатор интерфейса
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.member_workplace_add (
+CREATE OR REPLACE FUNCTION api.member_interface_add (
   pMember		numeric,
-  pWorkPlace		numeric,
+  pInterface		numeric,
   OUT result		boolean,
-  OUT error		text
+  OUT message		text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1937,11 +1885,11 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  PERFORM AddMemberToWorkPlace(pMember, pWorkPlace);
-  SELECT * INTO result, error FROM result_success();
+  PERFORM AddMemberToInterface(pMember, pInterface);
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -1949,21 +1897,21 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.member_workplace_del ----------------------------------------------------
+-- api.member_interface_del ----------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Удаляет рабочее место для пользователя или группу.
+ * Удаляет интерфейс для пользователя или группу.
  * @param {numeric} pMember - Идентификатор пользователя/группы
- * @param {numeric} pWorkPlace - Идентификатор рабочего места, при null удаляет все рабочие места для указанного пользователя
+ * @param {numeric} pInterface - Идентификатор интерфейса, при null удаляет все рабочие места для указанного пользователя
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.member_workplace_del (
+CREATE OR REPLACE FUNCTION api.member_interface_del (
   pMember		numeric,
-  pWorkPlace		numeric,
+  pInterface		numeric,
   OUT result		boolean,
-  OUT error		text
+  OUT message		text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1971,11 +1919,11 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  PERFORM DeleteWorkPlaceForMember(pMember, pWorkPlace);
-  SELECT * INTO result, error FROM result_success();
+  PERFORM DeleteInterfaceForMember(pMember, pInterface);
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -1983,21 +1931,21 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.workplace_member_del ----------------------------------------------------
+-- api.interface_member_del ----------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Удаляет пользователя или группу из рабочего места.
- * @param {numeric} pWorkPlace - Идентификатор рабочего места
- * @param {numeric} pMember - Идентификатор пользователя/группы, при null удаляет всех пользователей из указанного рабочего места
+ * Удаляет пользователя или группу из интерфейса.
+ * @param {numeric} pInterface - Идентификатор интерфейса
+ * @param {numeric} pMember - Идентификатор пользователя/группы, при null удаляет всех пользователей из указанного интерфейса
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.workplace_member_del (
-  pWorkPlace		numeric,
+CREATE OR REPLACE FUNCTION api.interface_member_del (
+  pInterface		numeric,
   pMember		numeric default null,
   OUT result		boolean,
-  OUT error		text
+  OUT message		text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -2005,11 +1953,11 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  PERFORM DeleteMemberFromWorkPlace(pWorkPlace, pMember);
-  SELECT * INTO result, error FROM result_success();
+  PERFORM DeleteMemberFromInterface(pInterface, pMember);
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -2017,24 +1965,24 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.member_workplace --------------------------------------------------------
+-- api.member_interface --------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW api.member_workplace
+CREATE OR REPLACE VIEW api.member_interface
 AS
-  SELECT * FROM MemberWorkPlace;
+  SELECT * FROM MemberInterface;
 
-GRANT SELECT ON api.member_workplace TO daemon;
+GRANT SELECT ON api.member_interface TO daemon;
 
 --------------------------------------------------------------------------------
--- api.workplace_member --------------------------------------------------------
+-- api.interface_member --------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Возвращает список участников рабочего места.
+ * Возвращает список участников интерфейса.
  * @return {SETOF record} - Запись
  */
-CREATE OR REPLACE FUNCTION api.workplace_member (
-  pWorkPlaceId		numeric,
+CREATE OR REPLACE FUNCTION api.interface_member (
+  pInterfaceId		numeric,
   OUT id		numeric,
   OUT type		char,
   OUT username		varchar,
@@ -2046,45 +1994,41 @@ CREATE OR REPLACE FUNCTION api.workplace_member (
 ) RETURNS		SETOF record
 AS $$
   SELECT g.id, 'G' AS type, g.username, g.fullname, null AS email, g.description, null AS status, g.system
-    FROM api.member_workplace m INNER JOIN groups g ON g.id = m.memberid
-   WHERE m.workplace = pWorkPlaceId
+    FROM api.member_interface m INNER JOIN groups g ON g.id = m.memberid
+   WHERE m.interface = pInterfaceId
      AND current_session() IS NOT NULL
   UNION ALL
   SELECT u.id, 'U' AS type, u.username, u.fullname, u.email, u.description, u.status, u.system
-    FROM api.member_workplace m INNER JOIN users u ON u.id = m.memberid
-   WHERE m.workplace = pWorkPlaceId
+    FROM api.member_interface m INNER JOIN users u ON u.id = m.memberid
+   WHERE m.interface = pInterfaceId
      AND current_session() IS NOT NULL;
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.member_workplace --------------------------------------------------------
+-- api.member_interface --------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Возвращает рабочее места доступные участнику.
- * @return {record} - Данные рабочего места
+ * @return {record} - Данные интерфейса
  */
-CREATE OR REPLACE FUNCTION api.member_workplace (
-  pUserId		numeric default current_userid(),
-  OUT id		numeric,
-  OUT sid		varchar,
-  OUT name		varchar,
-  OUT description       text
-) RETURNS		SETOF record
+CREATE OR REPLACE FUNCTION api.member_interface (
+  pUserId		numeric default current_userid()
+) RETURNS		SETOF api.interface
 AS $$
-  SELECT id, sid, name, description
-    FROM api.workplace
+  SELECT *
+    FROM api.interface
    WHERE id in (
-     SELECT workplace FROM db.member_workplace WHERE member = (
+     SELECT interface FROM db.member_interface WHERE member = (
        SELECT id FROM db.user WHERE id = pUserId
      )
    )
    UNION ALL
-  SELECT id, sid, name, description
-    FROM api.workplace
+  SELECT *
+    FROM api.interface
    WHERE id in (
-     SELECT workplace FROM db.member_workplace WHERE member IN (
+     SELECT interface FROM db.member_interface WHERE member IN (
        SELECT userid FROM db.member_group WHERE member = (
          SELECT id FROM db.user WHERE id = pUserId
        )
@@ -2097,65 +2041,6 @@ $$ LANGUAGE SQL
 --------------------------------------------------------------------------------
 -- API -------------------------------------------------------------------------
 --------------------------------------------------------------------------------
-
---------------------------------------------------------------------------------
--- quote_literal_json ----------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION quote_literal_json (
-  pStr		text
-) RETURNS	text
-AS $$
-DECLARE
-  l		integer;
-  c		integer;
-BEGIN
-  l := position('->>' in pStr);
-  IF l > 0 THEN
-    c := position(')' in SubStr(pStr, l + 3));
-    IF position(E'\'' in pStr) = 0 THEN
-      IF c > 0 THEN
-        pStr := SubStr(pStr, 1, l + 2) || quote_literal(SubStr(pStr, l + 3, c - 1)) || ')';
-      ELSE
-        pStr := SubStr(pStr, 1, l + 2) || quote_literal(SubStr(pStr, l + 3));
-      END IF;
-    END IF;
-  END IF;
-  RETURN pStr;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- array_quote_literal_json ----------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION array_quote_literal_json (
-  pArray	anyarray
-) RETURNS	anyarray
-AS $$
-DECLARE
-  i		integer;
-  l		integer;
-  vStr		text;
-BEGIN
-  FOR i IN 1..array_length(pArray, 1)
-  LOOP
-    vStr := pArray[i];
-    l := position('->>' in vStr);
-    IF l > 0 THEN
-      IF position(E'\'' in vStr) = 0 THEN
-        pArray[i] := SubString(vStr from 1 for l + 2) || quote_literal(SubString(vStr from l + 3));
-      END IF;
-    END IF;
-  END LOOP;
-
-  RETURN pArray;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
 -- CreateApiSql ----------------------------------------------------------------
@@ -2380,7 +2265,7 @@ GRANT SELECT ON api.class TO daemon;
  * @param {boolean} pAbstract - Абстрактный (Да/Нет)
  * @out param {numeric} id - Id класса
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_class (
@@ -2391,7 +2276,7 @@ CREATE OR REPLACE FUNCTION api.add_class (
   pAbstract	boolean default true,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -2400,10 +2285,10 @@ BEGIN
   END IF;
 
   id := AddClass(pParent, pType, pCode, pLabel, pAbstract);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   id := null;
   result := false;
 END;
@@ -2412,7 +2297,7 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.upd_class ---------------------------------------------------------------
+-- api.update_class ------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Обновляет класс.
@@ -2424,10 +2309,10 @@ $$ LANGUAGE plpgsql
  * @param {boolean} pAbstract - Абстрактный (Да/Нет)
  * @out {numeric} id - Идентификатор класса
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.upd_class (
+CREATE OR REPLACE FUNCTION api.update_class (
   pId		numeric,
   pParent	numeric,
   pType		numeric,
@@ -2436,7 +2321,7 @@ CREATE OR REPLACE FUNCTION api.upd_class (
   pAbstract	boolean default true,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -2447,10 +2332,10 @@ BEGIN
   END IF;
 
   PERFORM EditClass(pId, pParent, pType, pCode, pLabel, pAbstract);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -2465,14 +2350,14 @@ $$ LANGUAGE plpgsql
  * @param {numeric} pId - Идентификатор класса
  * @out {numeric} id - Идентификатор класса
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.del_class (
   pId		numeric,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -2483,10 +2368,10 @@ BEGIN
   END IF;
 
   PERFORM DeleteClass(pId);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -2501,46 +2386,25 @@ $$ LANGUAGE plpgsql
  * @return {record} - Запись
  */
 CREATE OR REPLACE FUNCTION api.get_class (
-  pId			numeric,
-  OUT id		numeric,
-  OUT parent		numeric,
-  OUT essence		numeric,
-  OUT essencecode	varchar,
-  OUT essenceename	text,
-  OUT level		integer,
-  OUT code		varchar,
-  OUT label		text,
-  OUT abstract		boolean
-) RETURNS		SETOF record
+  pId			numeric
+) RETURNS		SETOF api.class
 AS $$
-  SELECT id, parent, essence, essencecode, essencename, level, code, label, abstract
-    FROM api.class
-   WHERE id = pId
+  SELECT * FROM api.class WHERE id = pId
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.lst_class ---------------------------------------------------------------
+-- api.list_class --------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Возвращает список классов.
  * @return {SETOF record} - Записи
  */
-CREATE OR REPLACE FUNCTION api.lst_class (
-  OUT id		numeric,
-  OUT parent		numeric,
-  OUT essence		numeric,
-  OUT essencecode	varchar,
-  OUT essenceename	text,
-  OUT level		integer,
-  OUT code		varchar,
-  OUT label		text,
-  OUT abstract		boolean
-) RETURNS		SETOF record
+CREATE OR REPLACE FUNCTION api.list_class (
+) RETURNS		SETOF api.class
 AS $$
-  SELECT id, parent, essence, essencecode, essencename, level, code, label, abstract
-    FROM api.class
+  SELECT * FROM api.class
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -2571,15 +2435,10 @@ GRANT SELECT ON api.state TO daemon;
  * @return {record} - Запись
  */
 CREATE OR REPLACE FUNCTION api.get_state_type (
-  pId		numeric,
-  OUT id	numeric,
-  OUT code	varchar,
-  OUT name	varchar
-) RETURNS	record
+  pId		numeric
+) RETURNS	api.state_type
 AS $$
-  SELECT id, code, name
-    FROM api.state_type
-   WHERE id = pId;
+  SELECT * FROM api.state_type WHERE id = pId;
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -2613,7 +2472,7 @@ $$ LANGUAGE SQL
  * @param {integer} pSequence - Очередность
  * @out param {numeric} id - Идентификатор состояния
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_state (
@@ -2624,7 +2483,7 @@ CREATE OR REPLACE FUNCTION api.add_state (
   pSequence	integer,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -2633,10 +2492,10 @@ BEGIN
   END IF;
 
   id := AddState(pClass, pType, pCode, pLabel, pSequence);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   id := null;
   result := false;
 END;
@@ -2645,7 +2504,7 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.upd_state ---------------------------------------------------------------
+-- api.update_state ------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Обновляет состояние.
@@ -2657,10 +2516,10 @@ $$ LANGUAGE plpgsql
  * @param {integer} pSequence - Очередность
  * @out param {numeric} id - Идентификатор состояния
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.upd_state (
+CREATE OR REPLACE FUNCTION api.update_state (
   pId		numeric,
   pClass	numeric default null,
   pType		numeric default null,
@@ -2669,7 +2528,7 @@ CREATE OR REPLACE FUNCTION api.upd_state (
   pSequence	integer default null,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -2680,10 +2539,10 @@ BEGIN
   END IF;
 
   PERFORM EditState(pId, pClass, pType, pCode, pLabel, pSequence);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -2698,28 +2557,28 @@ $$ LANGUAGE plpgsql
  * @param {numeric} pId - Идентификатор состояния
  * @out param {numeric} id - Идентификатор состояния
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.del_state (
   pId		numeric,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
   id := pId;
- 
+
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM DeleteState(pId);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -2734,18 +2593,10 @@ $$ LANGUAGE plpgsql
  * @return {record} - Состояние
  */
 CREATE OR REPLACE FUNCTION api.get_state (
-  pId			numeric,
-  OUT id		numeric,
-  OUT type		numeric,
-  OUT typecode		varchar,
-  OUT typename		text,
-  OUT code		varchar,
-  OUT label		text
-) RETURNS		record
+  pId			numeric
+) RETURNS		api.state
 AS $$
-  SELECT id, type, typecode, typename, code, label
-    FROM api.state 
-   WHERE id = pId
+  SELECT * FROM api.state WHERE id = pId
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -2803,7 +2654,7 @@ $$ LANGUAGE SQL
  * @param {boolean} pVisible - Видимый: Да/Нет
  * @out param {numeric} id - Идентификатор метода
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_method (
@@ -2817,7 +2668,7 @@ CREATE OR REPLACE FUNCTION api.add_method (
   pVisible	boolean,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -2826,10 +2677,10 @@ BEGIN
   END IF;
 
   id := AddMethod(pParent, pClass, pState, pAction, pCode, pLabel, pSequence, pVisible);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   id := null;
   result := false;
 END;
@@ -2838,7 +2689,7 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.upd_method --------------------------------------------------------------
+-- api.update_method -----------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Обновляет метод (операцию).
@@ -2853,10 +2704,10 @@ $$ LANGUAGE plpgsql
  * @param {boolean} pVisible - Видимый: Да/Нет
  * @out param {numeric} id - Идентификатор метода
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.upd_method (
+CREATE OR REPLACE FUNCTION api.update_method (
   pId		numeric,
   pParent	numeric default null,
   pClass	numeric default null,
@@ -2868,7 +2719,7 @@ CREATE OR REPLACE FUNCTION api.upd_method (
   pVisible	boolean default null,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -2879,10 +2730,10 @@ BEGIN
   END IF;
 
   PERFORM EditMethod(pId, pParent, pClass, pState, pAction, pCode, pLabel, pSequence, pVisible);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -2897,28 +2748,28 @@ $$ LANGUAGE plpgsql
  * @param {numeric} pId - Идентификатор метода
  * @out param {numeric} id - Идентификатор метода
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.del_method (
   pId		numeric,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
   id := pId;
- 
+
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM DeleteMethod(pId);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -2932,6 +2783,7 @@ $$ LANGUAGE plpgsql
  * Возвращает методы объекта.
  * @param {numeric} pClass - Идентификатор класса
  * @param {numeric} pState - Идентификатор состояния
+ * @param {numeric} pAction - Идентификатор действия
  * @out param {numeric} id - Идентификатор метода
  * @out param {numeric} parent - Идентификатор метода родителя
  * @out param {numeric} action - Идентификатор действия
@@ -2943,6 +2795,7 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION api.get_method (
   pClass		numeric,
   pState		numeric default null,
+  pAction		numeric default null,
   OUT id		numeric,
   OUT parent		numeric,
   OUT action		numeric,
@@ -2955,6 +2808,7 @@ AS $$
     FROM api.method m
    WHERE m.class = pClass
      AND m.state = coalesce(pState, m.state)
+     AND m.action = coalesce(pAction, m.action)
    ORDER BY m.sequence
 $$ LANGUAGE SQL
    SECURITY DEFINER
@@ -2980,7 +2834,7 @@ GRANT SELECT ON api.transition TO daemon;
  * @param {varchar} pNewState - Идентификатор нового состояния
  * @out param {numeric} id - Идентификатор перехода
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_transition (
@@ -2989,7 +2843,7 @@ CREATE OR REPLACE FUNCTION api.add_transition (
   pNewState	numeric,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -2998,10 +2852,10 @@ BEGIN
   END IF;
 
   id := AddTransition(pState, pMethod, pNewState);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   id := null;
   result := false;
 END;
@@ -3010,7 +2864,7 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.upd_transition ----------------------------------------------------------
+-- api.update_transition -------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Обновляет переход в новое состояние.
@@ -3020,17 +2874,17 @@ $$ LANGUAGE plpgsql
  * @param {varchar} pNewState - Идентификатор нового состояния
  * @out param {numeric} id - Идентификатор перехода
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.upd_transition (
+CREATE OR REPLACE FUNCTION api.update_transition (
   pId		numeric,
   pState	numeric default null,
   pMethod	numeric default null,
   pNewState	numeric default null,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -3041,10 +2895,10 @@ BEGIN
   END IF;
 
   PERFORM EditTransition(pId, pState, pMethod, pNewState);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -3059,28 +2913,28 @@ $$ LANGUAGE plpgsql
  * @param {numeric} pId - Идентификатор перехода
  * @out param {numeric} id - Идентификатор перехода
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.del_transition (
   pId		numeric,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
   id := pId;
- 
+
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM DeleteTransition(pId);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -3095,28 +2949,10 @@ $$ LANGUAGE plpgsql
  * @return {record} - Запись
  */
 CREATE OR REPLACE FUNCTION api.get_transition (
-  pId			numeric,
-  OUT id		numeric,
-  OUT state		numeric,
-  OUT statetypecode	varchar,
-  OUT statetypename	varchar,
-  OUT statecode		varchar,
-  OUT statelabel	text,
-  OUT method		numeric,
-  OUT methodcode	varchar,
-  OUT methodlabel	text,
-  OUT newstate		numeric,
-  OUT newstatetypecode	varchar,
-  OUT newstatetypename	varchar,
-  OUT newstatecode	varchar,
-  OUT newstatelabel	text
-) RETURNS		record
+  pId		numeric
+) RETURNS	api.transition
 AS $$
-  SELECT id, state, statetypecode, statetypename, statecode, statelabel, 
-         method, methodcode, methodlabel,
-         newstate, newstatetypecode, newstatetypename, newstatecode, newstatelabel
-    FROM api.transition
-   WHERE id = pId
+  SELECT * FROM api.transition WHERE id = pId
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -3147,15 +2983,10 @@ GRANT SELECT ON api.event TO daemon;
  * @return {record} - Запись
  */
 CREATE OR REPLACE FUNCTION api.get_event_type (
-  pId		numeric,
-  OUT id	numeric,
-  OUT code	varchar,
-  OUT name	varchar
-) RETURNS	record
+  pId		numeric
+) RETURNS	api.event_type
 AS $$
-  SELECT id, code, name
-    FROM api.event_type
-   WHERE id = pId;
+  SELECT * FROM api.event_type WHERE id = pId;
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -3174,7 +3005,7 @@ $$ LANGUAGE SQL
  * @param {boolean} pEnabled - Включен: Да/Нет
  * @out param {numeric} id - Идентификатор события
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_event (
@@ -3187,7 +3018,7 @@ CREATE OR REPLACE FUNCTION api.add_event (
   pEnabled	boolean,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -3196,10 +3027,10 @@ BEGIN
   END IF;
 
   id := AddEvent(pClass, pType, pAction, pLabel, pText, pSequence, pEnabled);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   id := null;
   result := false;
 END;
@@ -3208,7 +3039,7 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.upd_event ---------------------------------------------------------------
+-- api.update_event ------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Обновляет событие.
@@ -3222,10 +3053,10 @@ $$ LANGUAGE plpgsql
  * @param {boolean} pEnabled - Включен: Да/Нет
  * @out param {numeric} id - Идентификатор события
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.upd_event (
+CREATE OR REPLACE FUNCTION api.update_event (
   pId		numeric,
   pClass	numeric default null,
   pType		numeric default null,
@@ -3236,7 +3067,7 @@ CREATE OR REPLACE FUNCTION api.upd_event (
   pEnabled	boolean default null,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -3247,10 +3078,10 @@ BEGIN
   END IF;
 
   PERFORM EditEvent(pId, pClass, pType, pAction, pLabel, pText, pSequence, pEnabled);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -3265,28 +3096,28 @@ $$ LANGUAGE plpgsql
  * @param {numeric} pId - Идентификатор события
  * @out param {numeric} id - Идентификатор события
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.del_state (
   pId		numeric,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
   id := pId;
- 
+
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM DeleteEvent(pId);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -3301,24 +3132,10 @@ $$ LANGUAGE plpgsql
  * @return {record} - Запись
  */
 CREATE OR REPLACE FUNCTION api.get_event (
-  pId			numeric,
-  OUT id		numeric,
-  OUT class		numeric,
-  OUT type		numeric,
-  OUT typecode		varchar,
-  OUT typename		varchar,
-  OUT action		numeric,
-  OUT actioncode	varchar,
-  OUT actionname	varchar,
-  OUT label		text,
-  OUT text		text,
-  OUT sequence		integer,
-  OUT enabled		boolean
-) RETURNS		record
+  pId		numeric
+) RETURNS	api.event
 AS $$
-  SELECT id, class, type, typecode, typename, action, actioncode, actionname, label, text, sequence, enabled
-    FROM api.event 
-   WHERE id = pId
+  SELECT * FROM api.event WHERE id = pId
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -3334,6 +3151,19 @@ AS
 GRANT SELECT ON api.type TO daemon;
 
 --------------------------------------------------------------------------------
+-- api.type --------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.type (
+  pEssence	numeric
+) RETURNS	SETOF api.type
+AS $$
+  SELECT * FROM api.type WHERE essence = pEssence;
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
 -- api.add_type ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
@@ -3344,7 +3174,7 @@ GRANT SELECT ON api.type TO daemon;
  * @param {text} pDescription - Описание
  * @out param {numeric} id - Идентификатор типа
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_type (
@@ -3354,7 +3184,7 @@ CREATE OR REPLACE FUNCTION api.add_type (
   pDescription	text default null,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -3363,10 +3193,10 @@ BEGIN
   END IF;
 
   id := AddType(pClass, pCode, pName, pDescription);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   id := null;
   result := false;
 END;
@@ -3375,7 +3205,7 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.upd_type ----------------------------------------------------------------
+-- api.update_type -------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Обновляет тип.
@@ -3386,10 +3216,10 @@ $$ LANGUAGE plpgsql
  * @param {text} pDescription - Описание
  * @out param {numeric} id - Идентификатор типа
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.upd_type (
+CREATE OR REPLACE FUNCTION api.update_type (
   pId		numeric,
   pClass	numeric default null,
   pCode		varchar default null,
@@ -3397,7 +3227,7 @@ CREATE OR REPLACE FUNCTION api.upd_type (
   pDescription	text default null,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -3408,10 +3238,10 @@ BEGIN
   END IF;
 
   PERFORM EditType(pId, pClass, pCode, pName, pDescription);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -3426,28 +3256,28 @@ $$ LANGUAGE plpgsql
  * @param {numeric} pId - Идентификатор типа
  * @out param {numeric} id - Идентификатор типа
  * @out param {numeric} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.del_type (
   pId		numeric,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
   id := pId;
- 
+
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM DeleteType(pId);
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -3462,36 +3292,25 @@ $$ LANGUAGE plpgsql
  * @return {Type} - Тип
  */
 CREATE OR REPLACE FUNCTION api.get_type (
-  pId			numeric,
-  OUT id		numeric,
-  OUT code		varchar,
-  OUT name		text,
-  OUT description	text
+  pId			numeric
 ) RETURNS		record
 AS $$
-  SELECT id, code, name, description
-    FROM api.type
-   WHERE id = pId
+  SELECT * FROM api.type WHERE id = pId
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.lst_type ----------------------------------------------------------------
+-- api.list_type ---------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Возвращает тип списоком.
  * @return {SETOF record} - Записи
  */
-CREATE OR REPLACE FUNCTION api.lst_type (
-  OUT id		numeric,
-  OUT code		varchar,
-  OUT name		text,
-  OUT description	text
-) RETURNS		SETOF record
+CREATE OR REPLACE FUNCTION api.list_type (
+) RETURNS		SETOF api.type
 AS $$
-  SELECT id, code, name, description
-    FROM api.type 
+  SELECT * FROM api.type
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -3511,502 +3330,6 @@ AS
   SELECT * FROM language;
 
 GRANT SELECT ON api.language TO daemon;
-
---------------------------------------------------------------------------------
--- JSON ------------------------------------------------------------------------
---------------------------------------------------------------------------------
-
---------------------------------------------------------------------------------
--- JsonToIntArray --------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION JsonToIntArray (
-  pJson		json
-) RETURNS	integer[]
-AS $$
-DECLARE
-  r		record;
-  result	integer[];
-BEGIN
-  IF json_typeof(pJson) = 'array' THEN
-    
-    FOR r IN SELECT * FROM json_array_elements_text(pJson)
-    LOOP
-      result := array_append(result, r.value::integer);
-    END LOOP;
-
-  ELSE
-
-    FOR r IN SELECT * FROM json_each_text(pJson)
-    LOOP
-      result := array_append(result, r.value::integer);
-    END LOOP;
-
-  END IF;
-
-  RETURN result;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- JsonbToIntArray -------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION JsonbToIntArray (
-  pJson		jsonb
-) RETURNS	integer[]
-AS $$
-DECLARE
-  r		record;
-  result	integer[];
-BEGIN
-  IF jsonb_typeof(pJson) = 'array' THEN
-    
-    FOR r IN SELECT * FROM jsonb_array_elements_text(pJson)
-    LOOP
-      result := array_append(result, r.value::integer);
-    END LOOP;
-
-  ELSE
-
-    FOR r IN SELECT * FROM jsonb_each_text(pJson)
-    LOOP
-      result := array_append(result, r.value::integer);
-    END LOOP;
-
-  END IF;
-
-  RETURN result;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- JsonToNumArray --------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION JsonToNumArray (
-  pJson		json
-) RETURNS	numeric[]
-AS $$
-DECLARE
-  r		record;
-  result	numeric[];
-BEGIN
-  IF json_typeof(pJson) = 'array' THEN
-    
-    FOR r IN SELECT * FROM json_array_elements_text(pJson)
-    LOOP
-      result := array_append(result, r.value::numeric);
-    END LOOP;
-
-  ELSE
-
-    FOR r IN SELECT * FROM json_each_text(pJson)
-    LOOP
-      result := array_append(result, r.value::numeric);
-    END LOOP;
-
-  END IF;
-
-  RETURN result;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- JsonbToNumArray -------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION JsonbToNumArray (
-  pJson		jsonb
-) RETURNS	numeric[]
-AS $$
-DECLARE
-  r		record;
-  result	numeric[];
-BEGIN
-  IF jsonb_typeof(pJson) = 'array' THEN
-    
-    FOR r IN SELECT * FROM jsonb_array_elements_text(pJson)
-    LOOP
-      result := array_append(result, r.value::numeric);
-    END LOOP;
-
-  ELSE
-
-    FOR r IN SELECT * FROM jsonb_each_text(pJson)
-    LOOP
-      result := array_append(result, r.value::numeric);
-    END LOOP;
-
-  END IF;
-
-  RETURN result;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- JsonToStrArray --------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION JsonToStrArray (
-  pJson		json
-) RETURNS	text[]
-AS $$
-DECLARE
-  r		record;
-  result	text[];
-BEGIN
-  IF json_typeof(pJson) = 'array' THEN
-    
-    FOR r IN SELECT * FROM json_array_elements_text(pJson)
-    LOOP
-      result := array_append(result, r.value);
-    END LOOP;
-
-  ELSE
-
-    FOR r IN SELECT * FROM json_each_text(pJson)
-    LOOP
-      result := array_append(result, r.value);
-    END LOOP;
-
-  END IF;
-
-  RETURN result;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- JsonbToStrArray -------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION JsonbToStrArray (
-  pJson		jsonb
-) RETURNS	text[]
-AS $$
-DECLARE
-  r		record;
-  result	text[];
-BEGIN
-  IF jsonb_typeof(pJson) = 'array' THEN
-    
-    FOR r IN SELECT * FROM jsonb_array_elements_text(pJson)
-    LOOP
-      result := array_append(result, r.value);
-    END LOOP;
-
-  ELSE
-
-    FOR r IN SELECT * FROM jsonb_each_text(pJson)
-    LOOP
-      result := array_append(result, r.value);
-    END LOOP;
-
-  END IF;
-
-  RETURN result;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- JsonToBoolArray -------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION JsonToBoolArray (
-  pJson		json
-) RETURNS	boolean[]
-AS $$
-DECLARE
-  r		record;
-  result	boolean[];
-BEGIN
-  IF json_typeof(pJson) = 'array' THEN
-    
-    FOR r IN SELECT * FROM json_array_elements_text(pJson)
-    LOOP
-      result := array_append(result, r.value::boolean);
-    END LOOP;
-
-  ELSE
-
-    FOR r IN SELECT * FROM json_each_text(pJson)
-    LOOP
-      result := array_append(result, r.value::boolean);
-    END LOOP;
-
-  END IF;
-
-  RETURN result;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- JsonbToBoolArray ------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION JsonbToBoolArray (
-  pJson		jsonb
-) RETURNS	boolean[]
-AS $$
-DECLARE
-  r		record;
-  result	boolean[];
-BEGIN
-  IF jsonb_typeof(pJson) = 'array' THEN
-    
-    FOR r IN SELECT * FROM jsonb_array_elements_text(pJson)
-    LOOP
-      result := array_append(result, r.value::boolean);
-    END LOOP;
-
-  ELSE
-
-    FOR r IN SELECT * FROM jsonb_each_text(pJson)
-    LOOP
-      result := array_append(result, r.value::boolean);
-    END LOOP;
-
-  END IF;
-
-  RETURN result;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- jsonb_array_to_string -------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION jsonb_array_to_string (
-  pJson		jsonb,
-  pSep		text
-) RETURNS	text
-AS $$
-DECLARE
-  r		record;
-  arStr		text[];
-BEGIN
-  IF jsonb_typeof(pJson) = 'array' THEN
-    
-    FOR r IN SELECT * FROM jsonb_array_elements_text(pJson)
-    LOOP
-      arStr := array_append(arStr, quote_nullable(r.value));
-    END LOOP;
-
-  ELSE
-    PERFORM IncorrectJsonType(jsonb_typeof(pJson), 'array');
-  END IF;
-
-  RETURN array_to_string(arStr, pSep, '*');
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- CheckJsonKeys ---------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION CheckJsonKeys (
-  pRoute	text,
-  pKeys		text[],
-  pJson		json
-) RETURNS	void
-AS $$
-DECLARE
-  e		record;
-  r		record;
-BEGIN
-  IF json_typeof(pJson) = 'array' THEN
-    
-    FOR e IN SELECT * FROM json_array_elements(pJson)
-    LOOP
-      FOR r IN SELECT * FROM json_each_text(e.value)
-      LOOP
-        IF array_position(pKeys, r.key) IS NULL THEN
-          PERFORM IncorrectJsonKey(pRoute, r.key, pKeys);
-        END IF;
-      END LOOP;
-    END LOOP;
-
-  ELSE
-
-    FOR r IN SELECT * FROM json_each_text(pJson)
-    LOOP
-      IF array_position(pKeys, r.key) IS NULL THEN
-        PERFORM IncorrectJsonKey(pRoute, r.key, pKeys);
-      END IF;
-    END LOOP;
-
-  END IF;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- CheckJsonbKeys --------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION CheckJsonbKeys (
-  pRoute	text,
-  pKeys		text[],
-  pJson		jsonb
-) RETURNS	void
-AS $$
-DECLARE
-  e		record;
-  r		record;
-BEGIN
-  IF jsonb_typeof(pJson) = 'array' THEN
-    
-    FOR e IN SELECT * FROM jsonb_array_elements(pJson)
-    LOOP
-      FOR r IN SELECT * FROM jsonb_each_text(e.value)
-      LOOP
-        IF array_position(pKeys, r.key) IS NULL THEN
-          PERFORM IncorrectJsonKey(pRoute, r.key, pKeys);
-        END IF;
-      END LOOP;
-    END LOOP;
-
-  ELSE
-
-    FOR r IN SELECT * FROM jsonb_each_text(pJson)
-    LOOP
-      IF array_position(pKeys, r.key) IS NULL THEN
-        PERFORM IncorrectJsonKey(pRoute, r.key, pKeys);
-      END IF;
-    END LOOP;
-
-  END IF;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- CheckJsonValues -------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION CheckJsonValues (
-  pArrayName	text,
-  pArray	anyarray,
-  pJson		json
-) RETURNS	void
-AS $$
-DECLARE
-  r		record;
-BEGIN
-  IF json_typeof(pJson) = 'array' THEN
-    
-    FOR r IN SELECT * FROM json_array_elements_text(pJson)
-    LOOP
-      IF array_position(pArray, coalesce(r.value, '<null>')) IS NULL THEN
-        PERFORM IncorrectValueInArray(coalesce(r.value, '<null>'), pArrayName, pArray);
-      END IF;
-    END LOOP;
-
-  ELSE
-    PERFORM IncorrectJsonType(json_typeof(pJson), 'array');
-  END IF;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- CheckJsonbValues ------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION CheckJsonbValues (
-  pArrayName	text,
-  pArray	anyarray,
-  pJson		jsonb
-) RETURNS	void
-AS $$
-DECLARE
-  r		record;
-BEGIN
-  IF jsonb_typeof(pJson) = 'array' THEN
-    
-    FOR r IN SELECT * FROM jsonb_array_elements_text(pJson)
-    LOOP
-      IF array_position(pArray, coalesce(r.value, '<null>')) IS NULL THEN
-        PERFORM IncorrectValueInArray(coalesce(r.value, '<null>'), pArrayName, pArray);
-      END IF;
-    END LOOP;
-
-  ELSE
-    PERFORM IncorrectJsonType(jsonb_typeof(pJson), 'array');
-  END IF;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- JsonToFields ----------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION JsonToFields (
-  pJson		json,
-  pFields	text[]
-) RETURNS	text
-AS $$
-DECLARE
-  vFields	text;
-BEGIN
-  IF pJson IS NOT NULL THEN
-    PERFORM CheckJsonValues('fields', pFields, pJson);
-
-    RETURN array_to_string(array_quote_literal_json(JsonToStrArray(pJson)), ',');
-  END IF;
-
-  RETURN '*';
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- JsonbToFields ---------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION JsonbToFields (
-  pJson		jsonb,
-  pFields	text[]
-) RETURNS	text
-AS $$
-DECLARE
-  vFields	text;
-BEGIN
-  IF pJson IS NOT NULL THEN
---    PERFORM CheckJsonbValues('fields', pFields, pJson);
-
-    RETURN array_to_string(array_quote_literal_json(JsonbToStrArray(pJson)), ',');
-  END IF;
-
-  RETURN '*';
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
 -- OBJECT ----------------------------------------------------------------------
@@ -4062,7 +3385,7 @@ CREATE OR REPLACE FUNCTION api.set_object_json_files (
   pObject	numeric,
   pFiles	jsonb,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 DECLARE
@@ -4103,13 +3426,13 @@ BEGIN
       END IF;
     END LOOP;
 
-    SELECT * INTO result, error FROM result_success();
+    SELECT * INTO result, message FROM result_success();
   ELSE
     PERFORM JsonIsEmpty();
   END IF;
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -4150,7 +3473,7 @@ CREATE OR REPLACE FUNCTION GetJsonMethods (
 AS $$
 DECLARE
   arResult	json[];
-  r		record;
+  r		    record;
 BEGIN
   FOR r IN SELECT * FROM api.get_method(pClass, pState)
   LOOP
@@ -4173,7 +3496,7 @@ CREATE OR REPLACE FUNCTION GetJsonGroups (
 AS $$
 DECLARE
   arResult	json[];
-  r		record;
+  r		    record;
 BEGIN
   FOR r IN SELECT * FROM api.member_user(pMember)
   LOOP
@@ -4193,22 +3516,24 @@ $$ LANGUAGE plpgsql
  * Выполняет действие над объектом.
  * @param {numeric} pObject - Идентификатор объекта
  * @param {numeric} pAction - Идентификатор действия
+ * @param {jsonb} pForm - Форма в формате JSON
  * @out param {numeric} id - Идентификатор объекта
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.run_action (
-  pObject	numeric,
-  pAction	numeric,
-  OUT id	numeric,
+  pObject	    numeric,
+  pAction	    numeric,
+  pForm		    jsonb default null,
+  OUT id	    numeric,
   OUT result	boolean,
-  OUT error	text
-) RETURNS	record
+  OUT message	text
+) RETURNS	    record
 AS $$
 DECLARE
-  nId		numeric;
-  nMethod	numeric;
+  nId		    numeric;
+  nMethod	    numeric;
 BEGIN
   id := pObject;
 
@@ -4232,12 +3557,12 @@ BEGIN
     PERFORM MethodActionNotFound(pObject, pAction);
   END IF;
 
-  PERFORM ExecuteObjectAction(pObject, pAction);
+  PERFORM ExecuteObjectAction(pObject, pAction, pForm);
 
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -4251,23 +3576,24 @@ $$ LANGUAGE plpgsql
  * Выполняет действие над объектом по коду.
  * @param {numeric} pObject - Идентификатор объекта
  * @param {varchar} pCode - Код действия
+ * @param {jsonb} pForm - Форма в формате JSON
  * @out param {numeric} id - Идентификатор объекта
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.run_action (
-  pObject	numeric,
-  pCode		varchar,
-  OUT id	numeric,
+  pObject	    numeric,
+  pCode		    varchar,
+  pForm		    jsonb default null,
+  OUT id	    numeric,
   OUT result	boolean,
-  OUT error	text
-) RETURNS	record
+  OUT message	text
+) RETURNS	    record
 AS $$
 DECLARE
-  vCode		varchar;
-  arCodes	text[];
-  r		record;
+  arCodes	    text[];
+  r		        record;
 BEGIN
   id := pObject;
 
@@ -4284,10 +3610,10 @@ BEGIN
     PERFORM IncorrectCode(pCode, arCodes);
   END IF;
 
-  SELECT * INTO id, result, error FROM api.run_action(pObject, GetAction(pCode));
+  SELECT * INTO id, result, message FROM api.run_action(pObject, GetAction(pCode), pForm);
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -4301,22 +3627,24 @@ $$ LANGUAGE plpgsql
  * Выполняет метод.
  * @param {numeric} pObject - Идентификатор объекта
  * @param {numeric} pMethod - Идентификатор метода
+ * @param {jsonb} pForm - Форма в формате JSON
  * @out param {numeric} id - Идентификатор объекта
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.run_method (
-  pObject	numeric,
-  pMethod	numeric,
-  OUT id	numeric,
+  pObject	    numeric,
+  pMethod	    numeric,
+  pForm		    jsonb default null,
+  OUT id	    numeric,
   OUT result	boolean,
-  OUT error	text
-) RETURNS	record
+  OUT message	text
+) RETURNS	    record
 AS $$
 DECLARE
-  nId		numeric;
-  nAction	numeric;
+  nId		    numeric;
+  nAction	    numeric;
 BEGIN
   id := pObject;
 
@@ -4340,10 +3668,10 @@ BEGIN
     PERFORM MethodNotFound(pObject, pMethod);
   END IF;
 
-  SELECT * INTO id, result, error FROM api.run_action(pObject, nAction);
+  SELECT * INTO id, result, message FROM api.run_action(pObject, nAction, pForm);
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -4368,21 +3696,21 @@ $$ LANGUAGE SQL
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.object_forcedel ---------------------------------------------------------
+-- api.object_force_del --------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Принудительно "удалят" документ (минуя события документооборота).
  * @param {numeric} pObject - Идентификатор объекта (api.get_document)
  * @out param {numeric} id - Идентификатор заявки
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.object_forcedel (
+CREATE OR REPLACE FUNCTION api.object_force_del (
   pObject	numeric,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS	record
 AS $$
 DECLARE
@@ -4408,11 +3736,11 @@ BEGIN
 
     PERFORM AddObjectState(pObject, nState);
 
-    SELECT * INTO result, error FROM result_success();
+    SELECT * INTO result, message FROM result_success();
   END IF;
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -4550,7 +3878,7 @@ CREATE OR REPLACE FUNCTION api.register_get_reg_key (
   pKey		numeric,
   OUT key	text,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -4560,10 +3888,10 @@ BEGIN
 
   key := get_reg_key(pKey);
 
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -4683,7 +4011,7 @@ $$ LANGUAGE SQL
  * @param {anynonarray} pData - Данные для установки их по указанному имени значения.
  * @out param {numeric} id - Идентификатор заявки
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.register_write (
@@ -4695,7 +4023,7 @@ CREATE OR REPLACE FUNCTION api.register_write (
   pData		anynonarray,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS	record
 AS $$
 DECLARE
@@ -4721,11 +4049,11 @@ BEGIN
   id := RegSetValue(coalesce(pId, RegCreateKey(pKey, pSubKey)), pValueName, vData);
 
   IF id IS NOT NULL THEN
-    SELECT * INTO result, error FROM result_success();
+    SELECT * INTO result, message FROM result_success();
   END IF;
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -4743,7 +4071,7 @@ $$ LANGUAGE plpgsql
  * @param {text} pValueName - Имя устанавливаемого значения. Если значение с таким именем не существует в ключе реестра, функция его создает.
  * @out param {Variant} data - Данные
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.register_read (
@@ -4753,7 +4081,7 @@ CREATE OR REPLACE FUNCTION api.register_read (
   pValueName	text,
   OUT data	Variant,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS	record
 AS $$
 BEGIN
@@ -4765,10 +4093,10 @@ BEGIN
 
   data := RegGetValue(RegOpenKey(pKey, pSubKey), pValueName);
 
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -4784,14 +4112,14 @@ $$ LANGUAGE plpgsql
  * @param {text} pSubKey - Подключ: Указанный подключ должен быть подключем ключа, указанного в параметре pKey. 
                                     Этот подключ не должен начинатся и заканчиваться знаком обратной черты ('\').
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.register_delete_key (
   pKey		text,
   pSubKey	text,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS	record
 AS $$
 BEGIN
@@ -4800,14 +4128,14 @@ BEGIN
   END IF;
 
   IF RegDeleteKey(pKey, pSubKey) THEN
-    SELECT * INTO result, error FROM result_success();
+    SELECT * INTO result, message FROM result_success();
   ELSE
     result := false;
-    error := GetErrorMessage();
+    message := GetErrorMessage();
   END IF;
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -4824,7 +4152,7 @@ $$ LANGUAGE plpgsql
                                     Этот подключ не должен начинатся и заканчиваться знаком обратной черты ('\').
  * @param {text} pValueName - Имя удаляемого значения.
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.register_delete_value (
@@ -4833,7 +4161,7 @@ CREATE OR REPLACE FUNCTION api.register_delete_value (
   pSubKey	text,
   pValueName	text,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS	record
 AS $$
 BEGIN
@@ -4843,18 +4171,18 @@ BEGIN
 
   IF pId IS NOT NULL THEN
     PERFORM DelRegKeyValue(pId);
-    SELECT * INTO result, error FROM result_success();
+    SELECT * INTO result, message FROM result_success();
   ELSE
     IF RegDeleteKeyValue(pKey, pSubKey, pValueName) THEN
-      SELECT * INTO result, error FROM result_success();
+      SELECT * INTO result, message FROM result_success();
     ELSE
       result := false;
-      error := GetErrorMessage();
+      message := GetErrorMessage();
     END IF;
   END IF;
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -4870,14 +4198,14 @@ $$ LANGUAGE plpgsql
  * @param {text} pSubKey - Подключ: Указанный подключ должен быть подключем ключа, указанного в параметре pKey. 
                                     Этот подключ не должен начинатся и заканчиваться знаком обратной черты ('\').
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.register_delete_tree (
   pKey		text,
   pSubKey	text,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS	record
 AS $$
 BEGIN
@@ -4886,14 +4214,14 @@ BEGIN
   END IF;
 
   IF RegDeleteTree(pKey, pSubKey) THEN
-    SELECT * INTO result, error FROM result_success();
+    SELECT * INTO result, message FROM result_success();
   ELSE
     result := false;
-    error := GetErrorMessage();
+    message := GetErrorMessage();
   END IF;
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -4954,7 +4282,7 @@ GRANT SELECT ON api.calendar TO daemon;
  * @param {text} pDescription - Описание
  * @out param {numeric} id - Идентификатор календаря
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_calendar (
@@ -4970,7 +4298,7 @@ CREATE OR REPLACE FUNCTION api.add_calendar (
   pDescription	text default null,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 DECLARE
@@ -5004,10 +4332,10 @@ BEGIN
 
   id := nCalendar;
 
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   id := null;
   result := false;
 END;
@@ -5016,7 +4344,7 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.upd_calendar ------------------------------------------------------------
+-- api.update_calendar ------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Обновляет календарь.
@@ -5033,10 +4361,10 @@ $$ LANGUAGE plpgsql
  * @param {text} pDescription - Описание
  * @out param {numeric} id - Идентификатор календаря
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.upd_calendar (
+CREATE OR REPLACE FUNCTION api.update_calendar (
   pId		numeric,
   pCode		varchar default null,
   pName		varchar default null,
@@ -5050,7 +4378,7 @@ CREATE OR REPLACE FUNCTION api.upd_calendar (
   pDescription	text default null,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 DECLARE
@@ -5092,10 +4420,10 @@ BEGIN
 
   PERFORM EditCalendar(nCalendar, null, null, pCode, pName, pWeek, JsonbToIntArray(pDayOff), aHoliday[2:], pWorkStart, pWorkCount, pRestStart, pRestCount, pDescription);
 
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -5120,7 +4448,7 @@ $$ LANGUAGE SQL
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.lst_calendar ------------------------------------------------------------
+-- api.list_calendar ------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Возвращает календарь списком.
@@ -5132,7 +4460,7 @@ $$ LANGUAGE SQL
  * @param {boolean} pUseCache - Использовать кеш
  * @return {SETOF api.calendar} - Календари
  */
-CREATE OR REPLACE FUNCTION api.lst_calendar (
+CREATE OR REPLACE FUNCTION api.list_calendar (
   pSearch	jsonb default null,
   pFilter	jsonb default null,
   pLimit	integer default null,
@@ -5158,7 +4486,7 @@ $$ LANGUAGE plpgsql
  * @param {date} pDateTo - Дата окончания периода
  * @param {numeric} pUserId - Идентификатор учётной записи пользователя
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.fill_calendar (
@@ -5167,7 +4495,7 @@ CREATE OR REPLACE FUNCTION api.fill_calendar (
   pDateTo	date,
   pUserId	numeric default null,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
@@ -5177,10 +4505,10 @@ BEGIN
 
   PERFORM FillCalendar(pCalendar, pDateFrom, pDateTo, pUserId);
 
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -5208,7 +4536,7 @@ AS
 GRANT SELECT ON api.calendardate TO daemon;
 
 --------------------------------------------------------------------------------
--- FUNCTION api.lst_calendar_date ----------------------------------------------
+-- FUNCTION api.list_calendar_date ----------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Возвращает даты календаря за указанный период и для заданного пользователя.
@@ -5219,7 +4547,7 @@ GRANT SELECT ON api.calendardate TO daemon;
  * @param {numeric} pUserId - Идентификатор учётной записи пользователя
  * @return {SETOF api.calendar_date} - Даты календаря
  */
-CREATE OR REPLACE FUNCTION api.lst_calendar_date (
+CREATE OR REPLACE FUNCTION api.list_calendar_date (
   pCalendar	numeric,
   pDateFrom	date,
   pDateTo	date,
@@ -5232,7 +4560,7 @@ $$ LANGUAGE SQL
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- FUNCTION api.lst_calendar_user ----------------------------------------------
+-- FUNCTION api.list_calendar_user ----------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Возвращает только даты календаря заданного пользователя за указанный период.
@@ -5242,7 +4570,7 @@ $$ LANGUAGE SQL
  * @param {numeric} pUserId - Идентификатор учётной записи пользователя
  * @return {SETOF api.calendar_date} - Даты календаря
  */
-CREATE OR REPLACE FUNCTION api.lst_calendar_user (
+CREATE OR REPLACE FUNCTION api.list_calendar_user (
   pCalendar	numeric,
   pDateFrom	date,
   pDateTo	date,
@@ -5295,7 +4623,7 @@ $$ LANGUAGE SQL
  * @param {numeric} pUserId - Идентификатор учётной записи пользователя
  * @out param {numeric} id - Идентификатор даты календаря
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.set_calendar_date (
@@ -5309,7 +4637,7 @@ CREATE OR REPLACE FUNCTION api.set_calendar_date (
   pUserId	numeric default null,
   OUT id	numeric,
   OUT result	boolean,
-  OUT error	text
+  OUT message	text
 ) RETURNS 	record
 AS $$
 DECLARE
@@ -5337,10 +4665,10 @@ BEGIN
   END IF;
 
   id := nId;
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   id := null;
   result := false;
 END;
@@ -5358,17 +4686,17 @@ $$ LANGUAGE plpgsql
  * @param {numeric} pUserId - Идентификатор учётной записи пользователя
  * @out param {numeric} id - Идентификатор даты календаря
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.del_calendar_date (
-  pCalendar	numeric,
-  pDate		date,
-  pUserId	numeric default null,
-  OUT id	numeric,
+  pCalendar     numeric,
+  pDate         date,
+  pUserId       numeric default null,
+  OUT id        numeric,
   OUT result	boolean,
-  OUT error	text
-) RETURNS 	record
+  OUT message	text
+) RETURNS       record
 AS $$
 DECLARE
   nId		numeric;
@@ -5382,15 +4710,15 @@ BEGIN
   nId := GetCalendarDate(pCalendar, pDate, pUserId);
   IF nId IS NOT NULL THEN
     PERFORM DeleteCalendarDate(nId);
-    SELECT * INTO result, error FROM result_success();
+    SELECT * INTO result, message FROM result_success();
   ELSE
-    error := 'В календаре нет указанной даты для заданного пользователя.';
+    message := 'В календаре нет указанной даты для заданного пользователя.';
   END IF;
 
   id := nId;
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   id := null;
   result := false;
 END;
@@ -5428,29 +4756,29 @@ GRANT SELECT ON api.client TO daemon;
  * @param {text} pDescription - Информация о клиенте
  * @out param {numeric} id - Идентификатор клиента
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_client (
-  pType		varchar,
-  pCode		varchar,
-  pUserId	numeric,
-  pName		jsonb,
-  pPhone	jsonb default null,
-  pEmail	jsonb default null,
-  pAddress	jsonb default null,
-  pInfo 	jsonb default null,
-  pDescription	text default null,
-  OUT id	numeric,
-  OUT result	boolean,
-  OUT error	text
-) RETURNS 	record
+  pType         varchar,
+  pCode         varchar,
+  pUserId       numeric,
+  pName         jsonb,
+  pPhone        jsonb default null,
+  pEmail        jsonb default null,
+  pAddress      jsonb default null,
+  pInfo         jsonb default null,
+  pDescription  text default null,
+  OUT id        numeric,
+  OUT result    boolean,
+  OUT message   text
+) RETURNS       record
 AS $$
 DECLARE
-  r		record;
-  nClient	numeric;
-  arTypes	text[];
-  arKeys	text[];
+  cn            record;
+  nClient       numeric;
+  arTypes       text[];
+  arKeys        text[];
 BEGIN
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
@@ -5458,26 +4786,29 @@ BEGIN
 
   pType := lower(pType);
   arTypes := array_cat(arTypes, ARRAY['entity', 'natural', 'sole']);
-  IF array_position(arTypes, pType) IS NULL THEN
+  IF array_position(arTypes, pType::text) IS NULL THEN
     PERFORM IncorrectCode(pType, arTypes);
   END IF;
 
   arKeys := array_cat(arKeys, ARRAY['name', 'short', 'first', 'last', 'middle']);
   PERFORM CheckJsonbKeys('add_client', arKeys, pName);
 
+  SELECT * INTO cn FROM jsonb_to_record(pName) AS x(name varchar, short varchar, first varchar, last varchar, middle varchar);
+
+  IF pUserId = 0 THEN
+    pUserId := CreateUser(pCode, pCode, cn.short, pPhone->>0, pEmail->>0, cn.name);
+  END IF;
+
   nClient := CreateClient(null, GetType(pType || '.client'), pCode, pUserId, pPhone, pEmail, pAddress, pInfo, pDescription);
 
-  FOR r IN SELECT * FROM jsonb_to_record(pName) AS x(name varchar, short varchar, first varchar, last varchar, middle varchar)
-  LOOP
-    PERFORM NewClientName(nClient, r.name, r.short, r.first, r.last, r.middle);
-  END LOOP;
+  PERFORM NewClientName(nClient, cn.name, cn.short, cn.first, cn.last, cn.middle);
 
   id := nClient;
 
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   id := null;
   result := false;
 END;
@@ -5486,7 +4817,7 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.upd_client --------------------------------------------------------------
+-- api.update_client --------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Обновляет данные клиента.
@@ -5502,31 +4833,31 @@ $$ LANGUAGE plpgsql
  * @param {text} pDescription - Информация о клиенте
  * @out param {numeric} id - Идентификатор клиента
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.upd_client (
-  pId		numeric,
-  pType		varchar,
-  pCode		varchar,
-  pUserId	numeric,
-  pName		jsonb,
-  pPhone	jsonb default null,
-  pEmail	jsonb default null,
-  pAddress	jsonb default null,
-  pInfo 	jsonb default null,
-  pDescription	text default null,
-  OUT id	numeric,
+CREATE OR REPLACE FUNCTION api.update_client (
+  pId           numeric,
+  pType         varchar,
+  pCode         varchar,
+  pUserId       numeric,
+  pName         jsonb,
+  pPhone        jsonb default null,
+  pEmail        jsonb default null,
+  pAddress      jsonb default null,
+  pInfo         jsonb default null,
+  pDescription  text default null,
+  OUT id        numeric,
   OUT result	boolean,
-  OUT error	text
-) RETURNS 	record
+  OUT message	text
+) RETURNS       record
 AS $$
 DECLARE
-  r		record;
+  r             record;
   nType         numeric;
-  nClient	numeric;
-  arTypes	text[];
-  arKeys	text[];
+  nClient       numeric;
+  arTypes       text[];
+  arKeys        text[];
 BEGIN
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
@@ -5549,7 +4880,7 @@ BEGIN
   END IF;
 
   arKeys := array_cat(arKeys, ARRAY['name', 'short', 'first', 'last', 'middle']);
-  PERFORM CheckJsonbKeys('upd_client', arKeys, pName);
+  PERFORM CheckJsonbKeys('update_client', arKeys, pName);
 
   PERFORM EditClient(nClient, null, nType, pCode, pUserId, pPhone, pEmail, pAddress, pInfo, pDescription);
 
@@ -5560,10 +4891,10 @@ BEGIN
 
   id := nClient;
 
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   id := null;
   result := false;
 END;
@@ -5589,7 +4920,7 @@ $$ LANGUAGE SQL
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.lst_client --------------------------------------------------------------
+-- api.list_client -------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Возвращает список клиентов.
@@ -5600,7 +4931,7 @@ $$ LANGUAGE SQL
  * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
  * @return {SETOF api.client} - Клиенты
  */
-CREATE OR REPLACE FUNCTION api.lst_client (
+CREATE OR REPLACE FUNCTION api.list_client (
   pSearch	jsonb default null,
   pFilter	jsonb default null,
   pLimit	integer default null,
@@ -5640,22 +4971,22 @@ GRANT SELECT ON api.card TO daemon;
  * @param {text} pDescription - Описание
  * @out param {numeric} id - Идентификатор карты
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_card (
-  pType		varchar,
-  pCode		varchar,
-  pClient	numeric,
-  pDescription	text default null,
-  OUT id	numeric,
-  OUT result	boolean,
-  OUT error	text
-) RETURNS 	record
+  pType         varchar,
+  pCode         varchar,
+  pClient       numeric,
+  pDescription  text default null,
+  OUT id        numeric,
+  OUT result    boolean,
+  OUT message   text
+) RETURNS       record
 AS $$
 DECLARE
-  nCard 	numeric;
-  arTypes	text[];
+  nCard         numeric;
+  arTypes       text[];
 BEGIN
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
@@ -5671,10 +5002,10 @@ BEGIN
 
   id := nCard;
 
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   id := null;
   result := false;
 END;
@@ -5683,7 +5014,7 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.upd_card ----------------------------------------------------------------
+-- api.update_card -------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Обновляет данные карты.
@@ -5694,24 +5025,24 @@ $$ LANGUAGE plpgsql
  * @param {text} pDescription - Описание
  * @out param {numeric} id - Идентификатор карты
  * @out param {boolean} result - Результат
- * @out param {text} error - Текст ошибки
+ * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.upd_card (
-  pId		numeric,
-  pType		varchar default null,
-  pCode		varchar default null,
-  pClient	numeric default null,
-  pDescription	text default null,
-  OUT id	numeric,
+CREATE OR REPLACE FUNCTION api.update_card (
+  pId           numeric,
+  pType         varchar default null,
+  pCode         varchar default null,
+  pClient       numeric default null,
+  pDescription  text default null,
+  OUT id        numeric,
   OUT result	boolean,
-  OUT error	text
-) RETURNS 	record
+  OUT message	text
+) RETURNS       record
 AS $$
 DECLARE
   nType         numeric;
-  nCard 	numeric;
-  arTypes	text[];
+  nCard         numeric;
+  arTypes       text[];
 BEGIN
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
@@ -5737,10 +5068,10 @@ BEGIN
 
   id := nCard;
 
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   id := null;
   result := false;
 END;
@@ -5749,7 +5080,7 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.get_card --------------------------------------------------------------
+-- api.get_card ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Возвращает клиента
@@ -5766,7 +5097,7 @@ $$ LANGUAGE SQL
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.lst_card --------------------------------------------------------------
+-- api.list_card ---------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Возвращает список клиентов.
@@ -5777,7 +5108,7 @@ $$ LANGUAGE SQL
  * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
  * @return {SETOF api.card} - Клиенты
  */
-CREATE OR REPLACE FUNCTION api.lst_card (
+CREATE OR REPLACE FUNCTION api.list_card (
   pSearch	jsonb default null,
   pFilter	jsonb default null,
   pLimit	integer default null,
@@ -5789,50 +5120,6 @@ BEGIN
   RETURN QUERY EXECUTE CreateApiSql('api', 'card', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
 END;
 $$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- OCPP ------------------------------------------------------------------------
---------------------------------------------------------------------------------
-
---------------------------------------------------------------------------------
--- OCPP LOG -------------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE VIEW api.ocpp_log
-AS
-  SELECT * FROM ocppLog;
-
-GRANT SELECT ON api.ocpp_log TO daemon;
-
---------------------------------------------------------------------------------
--- api.ocpp_log ----------------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Журнал событий.
- * @param {varchar} pIdentity - Идентификатор зарядной станции
- * @param {varchar} pAction - Действие
- * @param {timestamp} pDateFrom - Дата начала периода
- * @param {timestamp} pDateTo - Дата окончания периода
- * @return {SETOF api.ocpp_log} - Записи
- */
-CREATE OR REPLACE FUNCTION api.ocpp_log (
-  pIdentity	varchar default null,
-  pAction	varchar default null,
-  pDateFrom	timestamp default null,
-  pDateTo	timestamp default null
-) RETURNS	SETOF api.ocpp_log
-AS $$
-  SELECT *
-    FROM api.ocpp_log
-   WHERE identity = coalesce(pIdentity, identity)
-     AND action = coalesce(pAction, action)
-     AND datetime >= coalesce(pDateFrom, MINDATE())
-     AND datetime < coalesce(pDateTo, MAXDATE())
-   ORDER BY datetime DESC
-   LIMIT 50
-$$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
@@ -5921,22 +5208,22 @@ GRANT SELECT ON api.charge_point TO daemon;
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION api.add_charge_point (
-  pProtocol	      varchar,
-  pIdentity	      varchar,
-  pName		      varchar,
-  pModel	      varchar,
-  pVendor	      varchar,
-  pVersion	      varchar,
-  pSerialNumber	      varchar,
-  pBoxSerialNumber    varchar,
-  pMeterSerialNumber  varchar,
-  piccid	      varchar,
-  pimsi	              varchar,
-  pDescription	      text default null,
-  OUT id	      numeric,
-  OUT result	      boolean,
-  OUT error	      text
-) RETURNS 	      record
+  pProtocol             varchar,
+  pIdentity             varchar,
+  pName                 varchar,
+  pModel                varchar,
+  pVendor               varchar,
+  pVersion              varchar,
+  pSerialNumber         varchar,
+  pBoxSerialNumber      varchar,
+  pMeterSerialNumber    varchar,
+  piccid                varchar,
+  pimsi                 varchar,
+  pDescription          text default null,
+  OUT id                numeric,
+  OUT result            boolean,
+  OUT message           text
+) RETURNS               record
 AS $$
 DECLARE
   arProtocols         text[];
@@ -5954,10 +5241,10 @@ BEGIN
   id := CreateChargePoint(null, GetType(pProtocol || '.charge_point'), pIdentity, pName, pModel, pVendor, pVersion,
     pSerialNumber, pBoxSerialNumber, pMeterSerialNumber, piccid, pimsi, pDescription);
 
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   id := null;
   result := false;
 END;
@@ -5966,27 +5253,27 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- FUNCTION api.upd_charge_point -----------------------------------------------
+-- FUNCTION api.update_charge_point --------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION api.upd_charge_point (
-  pId	              numeric,
-  pProtocol	      varchar default null,
-  pIdentity	      varchar default null,
-  pName		      varchar default null,
-  pModel	      varchar default null,
-  pVendor	      varchar default null,
-  pVersion	      varchar default null,
-  pSerialNumber	      varchar default null,
-  pBoxSerialNumber    varchar default null,
-  pMeterSerialNumber  varchar default null,
-  piccid	      varchar default null,
-  pimsi	              varchar default null,
-  pDescription	      text default null,
-  OUT id	      numeric,
-  OUT result	      boolean,
-  OUT error	      text
-) RETURNS 	      record
+CREATE OR REPLACE FUNCTION api.update_charge_point (
+  pId                   numeric,
+  pProtocol             varchar default null,
+  pIdentity             varchar default null,
+  pName                 varchar default null,
+  pModel                varchar default null,
+  pVendor               varchar default null,
+  pVersion              varchar default null,
+  pSerialNumber         varchar default null,
+  pBoxSerialNumber      varchar default null,
+  pMeterSerialNumber    varchar default null,
+  piccid                varchar default null,
+  pimsi                 varchar default null,
+  pDescription          text default null,
+  OUT id                numeric,
+  OUT result            boolean,
+  OUT message           text
+) RETURNS               record
 AS $$
 DECLARE
   nId                 numeric;
@@ -6018,10 +5305,10 @@ BEGIN
   id := EditChargePoint(pId, null, nType, pIdentity, pName, pModel, pVendor, pVersion,
     pSerialNumber, pBoxSerialNumber, pMeterSerialNumber, piccid, pimsi, pDescription);
 
-  SELECT * INTO result, error FROM result_success();
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
-  GET STACKED DIAGNOSTICS error = MESSAGE_TEXT;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
   id := null;
   result := false;
 END;
@@ -6064,7 +5351,7 @@ $$ LANGUAGE SQL
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.lst_charge_point --------------------------------------------------------
+-- api.list_charge_point -------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Возвращает список зарядных станций.
@@ -6075,7 +5362,7 @@ $$ LANGUAGE SQL
  * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
  * @return {SETOF api.charge_point} - Зарядные станции
  */
-CREATE OR REPLACE FUNCTION api.lst_charge_point (
+CREATE OR REPLACE FUNCTION api.list_charge_point (
   pSearch	jsonb default null,
   pFilter	jsonb default null,
   pLimit	integer default null,
@@ -6089,3 +5376,48 @@ END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- OCPP ------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- OCPP LOG --------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.ocpp_log
+AS
+  SELECT * FROM ocppLog;
+
+GRANT SELECT ON api.ocpp_log TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.ocpp_log ----------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Журнал событий.
+ * @param {varchar} pIdentity - Идентификатор зарядной станции
+ * @param {varchar} pAction - Действие
+ * @param {timestamp} pDateFrom - Дата начала периода
+ * @param {timestamp} pDateTo - Дата окончания периода
+ * @return {SETOF api.ocpp_log} - Записи
+ */
+CREATE OR REPLACE FUNCTION api.ocpp_log (
+  pIdentity	varchar default null,
+  pAction	varchar default null,
+  pDateFrom	timestamp default null,
+  pDateTo	timestamp default null
+) RETURNS	SETOF api.ocpp_log
+AS $$
+  SELECT *
+    FROM api.ocpp_log
+   WHERE identity = coalesce(pIdentity, identity)
+     AND action = coalesce(pAction, action)
+     AND datetime >= coalesce(pDateFrom, MINDATE())
+     AND datetime < coalesce(pDateTo, MAXDATE())
+   ORDER BY datetime DESC
+   LIMIT 50
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+

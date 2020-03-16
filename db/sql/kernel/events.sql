@@ -11,7 +11,7 @@ CREATE OR REPLACE FUNCTION EventObjectCreate (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1010, 'Объект создан.');
+  PERFORM WriteToEventLog('N', 1010, 'Объект создан.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -24,7 +24,7 @@ CREATE OR REPLACE FUNCTION EventObjectOpen (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1011, 'Объект открыт.');
+  PERFORM WriteToEventLog('N', 1011, 'Объект открыт.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -37,7 +37,7 @@ CREATE OR REPLACE FUNCTION EventObjectEdit (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1012, 'Объект изменён.');
+  PERFORM WriteToEventLog('N', 1012, 'Объект изменён.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -50,7 +50,7 @@ CREATE OR REPLACE FUNCTION EventObjectSave (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1013, 'Объект сохранён.');
+  PERFORM WriteToEventLog('N', 1013, 'Объект сохранён.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -63,7 +63,7 @@ CREATE OR REPLACE FUNCTION EventObjectEnable (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1014, 'Объект включен.');
+  PERFORM WriteToEventLog('N', 1014, 'Объект включен.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -76,7 +76,7 @@ CREATE OR REPLACE FUNCTION EventObjectDisable (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1015, 'Объект выключен.');
+  PERFORM WriteToEventLog('N', 1015, 'Объект выключен.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -89,7 +89,7 @@ CREATE OR REPLACE FUNCTION EventObjectDelete (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1016, 'Объект удален.');
+  PERFORM WriteToEventLog('N', 1016, 'Объект удален.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -102,7 +102,7 @@ CREATE OR REPLACE FUNCTION EventObjectRestore (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1017, 'Объект восстановлен.');
+  PERFORM WriteToEventLog('N', 1017, 'Объект восстановлен.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -124,7 +124,7 @@ BEGIN
   DELETE FROM db.object_file WHERE object = pObject;
   DELETE FROM db.object_state WHERE object = pObject;
 
-  PERFORM WriteToEventLog(NULL, 'W', 2010, '[' || r.label || '] Объект уничтожен.');
+  PERFORM WriteToEventLog('W', 2010, '[' || r.label || '] Объект уничтожен.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -141,7 +141,7 @@ CREATE OR REPLACE FUNCTION EventDocumentCreate (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1010, 'Документ создан.');
+  PERFORM WriteToEventLog('N', 1010, 'Документ создан.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -154,7 +154,7 @@ CREATE OR REPLACE FUNCTION EventDocumentOpen (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1011, 'Документ открыт.');
+  PERFORM WriteToEventLog('N', 1011, 'Документ открыт.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -167,7 +167,7 @@ CREATE OR REPLACE FUNCTION EventDocumentEdit (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1012, 'Документ изменён.');
+  PERFORM WriteToEventLog('N', 1012, 'Документ изменён.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -180,7 +180,7 @@ CREATE OR REPLACE FUNCTION EventDocumentSave (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1013, 'Документ сохранён.');
+  PERFORM WriteToEventLog('N', 1013, 'Документ сохранён.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -193,7 +193,7 @@ CREATE OR REPLACE FUNCTION EventDocumentEnable (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1014, 'Документ включен.');
+  PERFORM WriteToEventLog('N', 1014, 'Документ включен.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -206,7 +206,7 @@ CREATE OR REPLACE FUNCTION EventDocumentDisable (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1015, 'Документ выключен.');
+  PERFORM WriteToEventLog('N', 1015, 'Документ выключен.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -219,7 +219,7 @@ CREATE OR REPLACE FUNCTION EventDocumentDelete (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1016, 'Документ удален.');
+  PERFORM WriteToEventLog('N', 1016, 'Документ удален.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -232,7 +232,7 @@ CREATE OR REPLACE FUNCTION EventDocumentRestore (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1017, 'Документ восстановлен.');
+  PERFORM WriteToEventLog('N', 1017, 'Документ восстановлен.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -248,7 +248,7 @@ DECLARE
   r         record;
 BEGIN
   SELECT label INTO r FROM db.object WHERE id = pObject;
-  PERFORM WriteToEventLog(NULL, 'W', 2010, '[' || r.label || '] Документ уничтожен.');
+  PERFORM WriteToEventLog('W', 2010, '[' || r.label || '] Документ уничтожен.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -265,7 +265,7 @@ CREATE OR REPLACE FUNCTION EventReferenceCreate (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1010, 'Справочник создан.');
+  PERFORM WriteToEventLog('N', 1010, 'Справочник создан.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -278,7 +278,7 @@ CREATE OR REPLACE FUNCTION EventReferenceOpen (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1011, 'Справочник открыт.');
+  PERFORM WriteToEventLog('N', 1011, 'Справочник открыт.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -291,7 +291,7 @@ CREATE OR REPLACE FUNCTION EventReferenceEdit (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1012, 'Справочник изменён.');
+  PERFORM WriteToEventLog('N', 1012, 'Справочник изменён.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -304,7 +304,7 @@ CREATE OR REPLACE FUNCTION EventReferenceSave (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1013, 'Справочник сохранён.');
+  PERFORM WriteToEventLog('N', 1013, 'Справочник сохранён.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -317,7 +317,7 @@ CREATE OR REPLACE FUNCTION EventReferenceEnable (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1014, 'Справочник включен.');
+  PERFORM WriteToEventLog('N', 1014, 'Справочник включен.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -330,7 +330,7 @@ CREATE OR REPLACE FUNCTION EventReferenceDisable (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1015, 'Справочник выключен.');
+  PERFORM WriteToEventLog('N', 1015, 'Справочник выключен.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -343,7 +343,7 @@ CREATE OR REPLACE FUNCTION EventReferenceDelete (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1016, 'Справочник удален.');
+  PERFORM WriteToEventLog('N', 1016, 'Справочник удален.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -356,7 +356,7 @@ CREATE OR REPLACE FUNCTION EventReferenceRestore (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'N', 1017, 'Справочник восстановлен.');
+  PERFORM WriteToEventLog('N', 1017, 'Справочник восстановлен.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -375,7 +375,7 @@ BEGIN
 
   DELETE FROM db.reference WHERE id = pObject;
 
-  PERFORM WriteToEventLog(pObject, 'W', 2010, '[' || r.label || '] Справочник уничтожен.');
+  PERFORM WriteToEventLog('W', 2010, '[' || r.label || '] Справочник уничтожен.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -392,7 +392,7 @@ CREATE OR REPLACE FUNCTION EventClientCreate (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1010, 'Клиент создан.');
+  PERFORM WriteToEventLog('M', 1010, 'Клиент создан.');
   PERFORM ExecuteObjectAction(pObject, GetAction('enable'));
 END;
 $$ LANGUAGE plpgsql;
@@ -406,7 +406,7 @@ CREATE OR REPLACE FUNCTION EventClientOpen (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1011, 'Клиент открыт на просмотр.');
+  PERFORM WriteToEventLog('M', 1011, 'Клиент открыт на просмотр.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -419,7 +419,7 @@ CREATE OR REPLACE FUNCTION EventClientEdit (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1012, 'Клиент изменён.');
+  PERFORM WriteToEventLog('M', 1012, 'Клиент изменён.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -432,7 +432,7 @@ CREATE OR REPLACE FUNCTION EventClientSave (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1013, 'Клиент сохранён.');
+  PERFORM WriteToEventLog('M', 1013, 'Клиент сохранён.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -445,7 +445,7 @@ CREATE OR REPLACE FUNCTION EventClientEnable (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1014, 'Клиент открыт.');
+  PERFORM WriteToEventLog('M', 1014, 'Клиент открыт.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -458,7 +458,7 @@ CREATE OR REPLACE FUNCTION EventClientDisable (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1015, 'Клиент закрыт.');
+  PERFORM WriteToEventLog('M', 1015, 'Клиент закрыт.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -471,7 +471,7 @@ CREATE OR REPLACE FUNCTION EventClientDelete (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1016, 'Клиент удалён.');
+  PERFORM WriteToEventLog('M', 1016, 'Клиент удалён.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -484,7 +484,7 @@ CREATE OR REPLACE FUNCTION EventClientRestore (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1017, 'Клиент восстановлен.');
+  PERFORM WriteToEventLog('M', 1017, 'Клиент восстановлен.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -500,7 +500,7 @@ DECLARE
   r		record;
 BEGIN
   SELECT label INTO r FROM db.object WHERE id = pObject;
-  PERFORM WriteToEventLog(NULL, 'W', 2010, '[' || r.label || '] Клиент уничтожен.');
+  PERFORM WriteToEventLog('W', 2010, '[' || r.label || '] Клиент уничтожен.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -517,8 +517,8 @@ CREATE OR REPLACE FUNCTION EventContractCreate (
 ) RETURNS	void
 AS $$
 BEGIN
+  PERFORM WriteToEventLog('M', 1010, 'Договор создан.');
   PERFORM ExecuteObjectAction(pObject, GetAction('enable'));
-  PERFORM WriteToEventLog(pObject, 'M', 1010, 'Договор создан.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -531,7 +531,7 @@ CREATE OR REPLACE FUNCTION EventContractOpen (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1011, 'Договор открыт на просмотр.');
+  PERFORM WriteToEventLog('M', 1011, 'Договор открыт на просмотр.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -544,7 +544,7 @@ CREATE OR REPLACE FUNCTION EventContractEdit (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1012, 'Договор изменён.');
+  PERFORM WriteToEventLog('M', 1012, 'Договор изменён.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -557,7 +557,7 @@ CREATE OR REPLACE FUNCTION EventContractSave (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1013, 'Договор сохранён.');
+  PERFORM WriteToEventLog('M', 1013, 'Договор сохранён.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -570,7 +570,7 @@ CREATE OR REPLACE FUNCTION EventContractEnable (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1014, 'Договор открыт.');
+  PERFORM WriteToEventLog('M', 1014, 'Договор открыт.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -583,7 +583,7 @@ CREATE OR REPLACE FUNCTION EventContractDisable (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1015, 'Договор закрыт.');
+  PERFORM WriteToEventLog('M', 1015, 'Договор закрыт.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -596,7 +596,7 @@ CREATE OR REPLACE FUNCTION EventContractDelete (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1016, 'Договор удален.');
+  PERFORM WriteToEventLog('M', 1016, 'Договор удален.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -609,7 +609,7 @@ CREATE OR REPLACE FUNCTION EventContractRestore (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1017, 'Договор восстановлен.');
+  PERFORM WriteToEventLog('M', 1017, 'Договор восстановлен.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -625,7 +625,132 @@ DECLARE
   r		record;
 BEGIN
   SELECT label INTO r FROM db.object WHERE id = pObject;
-  PERFORM WriteToEventLog(NULL, 'W', 2010, '[' || r.label || '] Договор уничтожен.');
+  PERFORM WriteToEventLog('W', 2010, '[' || r.label || '] Договор уничтожен.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- CARD ------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- EventCardCreate -------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventCardCreate (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1010, 'Карта создана.');
+  PERFORM ExecuteObjectAction(pObject, GetAction('enable'));
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventCardOpen ---------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventCardOpen (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1011, 'Карта открыта на просмотр.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventCardEdit ---------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventCardEdit (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1012, 'Карта изменёна.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventCardSave ---------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventCardSave (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1013, 'Карта сохранёна.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventCardEnable -------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventCardEnable (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1014, 'Карта открыта.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventCardDisable ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventCardDisable (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1015, 'Карта закрыта.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventCardDelete -------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventCardDelete (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1016, 'Карта удалена.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventCardRestore ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventCardRestore (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1017, 'Карта восстановлена.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventCardDrop ---------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventCardDrop (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+DECLARE
+  r		record;
+BEGIN
+  SELECT label INTO r FROM db.object WHERE id = pObject;
+  PERFORM WriteToEventLog('W', 2010, '[' || r.label || '] Карта уничтожена.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -642,8 +767,8 @@ CREATE OR REPLACE FUNCTION EventAddressCreate (
 ) RETURNS	void
 AS $$
 BEGIN
+  PERFORM WriteToEventLog('M', 1010, 'Адрес создан.');
   PERFORM ExecuteObjectAction(pObject, GetAction('enable'));
-  PERFORM WriteToEventLog(pObject, 'M', 1010, 'Адрес создан.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -656,7 +781,7 @@ CREATE OR REPLACE FUNCTION EventAddressOpen (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1011, 'Адрес открыт на просмотр.');
+  PERFORM WriteToEventLog('M', 1011, 'Адрес открыт на просмотр.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -669,7 +794,7 @@ CREATE OR REPLACE FUNCTION EventAddressEdit (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1012, 'Адрес изменён.');
+  PERFORM WriteToEventLog('M', 1012, 'Адрес изменён.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -682,7 +807,7 @@ CREATE OR REPLACE FUNCTION EventAddressSave (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1013, 'Адрес сохранён.');
+  PERFORM WriteToEventLog('M', 1013, 'Адрес сохранён.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -695,7 +820,7 @@ CREATE OR REPLACE FUNCTION EventAddressEnable (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1014, 'Адрес открыт.');
+  PERFORM WriteToEventLog('M', 1014, 'Адрес открыт.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -708,7 +833,7 @@ CREATE OR REPLACE FUNCTION EventAddressDisable (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1015, 'Адрес закрыт.');
+  PERFORM WriteToEventLog('M', 1015, 'Адрес закрыт.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -721,7 +846,7 @@ CREATE OR REPLACE FUNCTION EventAddressDelete (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1016, 'Адрес удален.');
+  PERFORM WriteToEventLog('M', 1016, 'Адрес удален.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -734,7 +859,7 @@ CREATE OR REPLACE FUNCTION EventAddressRestore (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1017, 'Адрес восстановлен.');
+  PERFORM WriteToEventLog('M', 1017, 'Адрес восстановлен.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -750,7 +875,7 @@ DECLARE
   r		record;
 BEGIN
   SELECT label INTO r FROM db.object WHERE id = pObject;
-  PERFORM WriteToEventLog(NULL, 'W', 2010, '[' || r.label || '] Адрес уничтожен.');
+  PERFORM WriteToEventLog('W', 2010, '[' || r.label || '] Адрес уничтожен.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -767,7 +892,8 @@ CREATE OR REPLACE FUNCTION EventChargePointCreate (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1010, 'Зарядная станция создана.');
+  PERFORM WriteToEventLog('M', 1010, 'Зарядная станция создана.');
+  PERFORM ExecuteObjectAction(pObject, GetAction('enable'));
 END;
 $$ LANGUAGE plpgsql;
 
@@ -780,7 +906,7 @@ CREATE OR REPLACE FUNCTION EventChargePointOpen (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1011, 'Зарядная станция открыта на просмотр.');
+  PERFORM WriteToEventLog('M', 1011, 'Зарядная станция открыта на просмотр.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -793,7 +919,7 @@ CREATE OR REPLACE FUNCTION EventChargePointEdit (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1012, 'Зарядная станция изменёна.');
+  PERFORM WriteToEventLog('M', 1012, 'Зарядная станция изменёна.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -806,7 +932,7 @@ CREATE OR REPLACE FUNCTION EventChargePointSave (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1013, 'Зарядная станция сохранёна.');
+  PERFORM WriteToEventLog('M', 1013, 'Зарядная станция сохранёна.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -819,7 +945,7 @@ CREATE OR REPLACE FUNCTION EventChargePointEnable (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1014, 'Зарядная станция включена.');
+  PERFORM WriteToEventLog('M', 1014, 'Зарядная станция включена.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -832,7 +958,7 @@ CREATE OR REPLACE FUNCTION EventChargePointDisable (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1015, 'Зарядная станция отключена.');
+  PERFORM WriteToEventLog('M', 1015, 'Зарядная станция отключена.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -845,7 +971,7 @@ CREATE OR REPLACE FUNCTION EventChargePointDelete (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1016, 'Зарядная станция удалена.');
+  PERFORM WriteToEventLog('M', 1016, 'Зарядная станция удалена.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -858,7 +984,7 @@ CREATE OR REPLACE FUNCTION EventChargePointRestore (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog(pObject, 'M', 1017, 'Зарядная станция восстановлена.');
+  PERFORM WriteToEventLog('M', 1017, 'Зарядная станция восстановлена.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -874,6 +1000,6 @@ DECLARE
   r		record;
 BEGIN
   SELECT label INTO r FROM db.object WHERE id = pObject;
-  PERFORM WriteToEventLog(NULL, 'W', 2010, '[' || r.label || '] Зарядная станция уничтожена.');
+  PERFORM WriteToEventLog('W', 2010, '[' || r.label || '] Зарядная станция уничтожена.');
 END;
 $$ LANGUAGE plpgsql;

@@ -49,11 +49,11 @@ display_help()
     display_message "Manage the instalation database"
     display_message "Script options:"
     display_message "  --help"
-    display_message "  /install"
-    display_message "  /make"
-    display_message "  /update"
-    display_message "  /patch"
-    display_message "  /api"
+    display_message "  --install"
+    display_message "  --make"
+    display_message "  --update"
+    display_message "  --patch"
+    display_message "  --api"
 }
 
 # Initialize environment.
@@ -70,11 +70,11 @@ for OPTION in "$@"; do
         (--help)	DISPLAY_HELP="yes";;
 
         # Script options.
-        (/install)	SCRIPT="install";;
-        (/make)		SCRIPT="make";;
-        (/update)	SCRIPT="update";;
-        (/patch)	SCRIPT="patch";;
-        (/api)		SCRIPT="api";;
+        (--install)	SCRIPT="install";;
+        (--make)	SCRIPT="make";;
+        (--update)	SCRIPT="update";;
+        (--patch)	SCRIPT="patch";;
+        (--api)		SCRIPT="api";;
     esac
 done
 

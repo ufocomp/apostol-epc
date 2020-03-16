@@ -275,7 +275,7 @@ CREATE OR REPLACE VIEW ObjectCard (Id, Object, Parent,
   State, StateCode, StateLabel, LastUpdate,
   Owner, OwnerCode, OwnerName, Created,
   Oper, OperCode, OperName, OperDate,
-  Department, DepartmentCode, DepartmentName
+  Area, AreaCode, AreaName
 )
 AS
   SELECT c.id, d.object, d.parent,
@@ -288,7 +288,7 @@ AS
          d.state, d.statecode, d.statelabel, d.lastupdate,
          d.owner, d.ownercode, d.ownername, d.created,
          d.oper, d.opercode, d.opername, d.operdate,
-         d.department, d.departmentcode, d.departmentname
+         d.area, d.areacode, d.areaname
     FROM Card c INNER JOIN ObjectDocument d ON d.id = c.document;
 
 GRANT SELECT ON ObjectCard TO administrator;

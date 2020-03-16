@@ -53,7 +53,6 @@ namespace Apostol {
             m_Version = -1;
             m_Jobs = new CJobManager();
             m_Headers.Add("Authorization");
-            InitMethods();
         }
         //--------------------------------------------------------------------------------------------------------------
 
@@ -116,18 +115,21 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        void CWebService::ExceptionToJson(int ErrorCode, const std::exception &AException, CString& Json) {
+        CString CWebService::QuoteJsonString(const CString &String) {
+            CString Result;
             TCHAR ch;
-            LPCTSTR lpMessage = AException.what();
-            CString Message;
-
-            while ((ch = *lpMessage++) != 0) {
+            for (size_t Index = 0; Index < String.Size(); Index++) {
+                ch = String.at(Index);
                 if ((ch == '"') || (ch == '\\'))
-                    Message.Append('\\');
-                Message.Append(ch);
+                    Result.Append('\\');
+                Result.Append(ch);
             }
+            return Result;
+        }
+        //--------------------------------------------------------------------------------------------------------------
 
-            Json.Format(R"({"error": {"code": %u, "message": "%s"}})", ErrorCode, Message.c_str());
+        void CWebService::ExceptionToJson(int ErrorCode, const std::exception &AException, CString& Json) {
+            Json.Format(R"({"error": {"code": %u, "message": "%s"}})", ErrorCode, QuoteJsonString(AException.what()).c_str());
         }
         //--------------------------------------------------------------------------------------------------------------
 

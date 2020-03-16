@@ -7,9 +7,9 @@
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.language (
-    id		numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
-    code	varchar(30) NOT NULL,
-    name	varchar(50) NOT NULL,
+    id		    numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
+    code	    varchar(30) NOT NULL,
+    name	    varchar(50) NOT NULL,
     description	text
 );
 
@@ -40,19 +40,20 @@ GRANT SELECT ON language TO administrator;
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.user (
-    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
-    type		char NOT NULL,
-    username		varchar(50) NOT NULL,
-    fullname		text,
-    email		text,
-    description		text,
-    status		bit(4) DEFAULT B'0001' NOT NULL,
-    created		timestamp DEFAULT NOW() NOT NULL,
-    lock_date		timestamp DEFAULT NULL,
-    expiry_date		timestamp DEFAULT NULL,
-    pwhash		text DEFAULT NULL,
-    passwordchange	boolean DEFAULT true NOT NULL,
-    passwordnotchange	boolean DEFAULT false NOT NULL,
+    id			        numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_USER'),
+    type		        char NOT NULL,
+    username            varchar(50) NOT NULL,
+    fullname            text,
+    phone               text,
+    email               text,
+    description         text,
+    status              bit(4) DEFAULT B'0001' NOT NULL,
+    created             timestamp DEFAULT NOW() NOT NULL,
+    lock_date           timestamp DEFAULT NULL,
+    expiry_date         timestamp DEFAULT NULL,
+    pwhash              text DEFAULT NULL,
+    passwordchange      boolean DEFAULT true NOT NULL,
+    passwordnotchange   boolean DEFAULT false NOT NULL,
     CONSTRAINT ch_user_type CHECK (type IN ('G', 'U'))
 );
 
@@ -62,6 +63,7 @@ COMMENT ON COLUMN db.user.id IS 'Идентификатор';
 COMMENT ON COLUMN db.user.type IS 'Тип пользователя: "U" - пользователь; "G" - группа';
 COMMENT ON COLUMN db.user.username IS 'Наименование пользователя (login)';
 COMMENT ON COLUMN db.user.fullname IS 'Полное наименование пользователя';
+COMMENT ON COLUMN db.user.phone IS 'Телефон';
 COMMENT ON COLUMN db.user.email IS 'Электронный адрес';
 COMMENT ON COLUMN db.user.description IS 'Описание пользователя';
 COMMENT ON COLUMN db.user.status IS 'Статус пользователя';
@@ -73,12 +75,13 @@ COMMENT ON COLUMN db.user.passwordchange IS 'Сменить пароль при 
 COMMENT ON COLUMN db.user.passwordnotchange IS 'Установлен запрет на смену пароля самим пользователем (да/нет)';
 
 CREATE UNIQUE INDEX ON db.user (type, username);
+CREATE UNIQUE INDEX ON db.user (phone);
 CREATE UNIQUE INDEX ON db.user (email);
 
 CREATE INDEX ON db.user (type);
 CREATE INDEX ON db.user (username);
 CREATE INDEX ON db.user (username varchar_pattern_ops);
-CREATE INDEX ON db.user (email);
+CREATE INDEX ON db.user (phone varchar_pattern_ops);
 CREATE INDEX ON db.user (email varchar_pattern_ops);
 
 CREATE OR REPLACE FUNCTION db.ft_user_before_delete()
@@ -102,18 +105,18 @@ CREATE TRIGGER t_user_before_delete
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.user_ex (
-    id			numeric(12) PRIMARY KEY,
-    userid		numeric(12) NOT NULL,
-    input_count		numeric DEFAULT 0 NOT NULL,
-    input_last		timestamp DEFAULT NULL,
-    input_error		numeric DEFAULT 0 NOT NULL,
-    input_error_last	timestamp DEFAULT NULL,
-    input_error_all	numeric DEFAULT 0 NOT NULL,
-    lc_ip		inet,
-    default_department	numeric(12),
-    default_workplace	numeric(12),
+    id                  numeric(12) PRIMARY KEY,
+    userid              numeric(12) NOT NULL,
+    input_count         numeric DEFAULT 0 NOT NULL,
+    input_last          timestamp DEFAULT NULL,
+    input_error         numeric DEFAULT 0 NOT NULL,
+    input_error_last    timestamp DEFAULT NULL,
+    input_error_all     numeric DEFAULT 0 NOT NULL,
+    lc_ip               inet,
+    default_area        numeric(12),
+    default_interface   numeric(12),
     state               bit(3) DEFAULT B'000' NOT NULL,
-    session_limit	integer DEFAULT 0 NOT NULL,
+    session_limit       integer DEFAULT 0 NOT NULL,
     CONSTRAINT fk_user_ex_userid FOREIGN KEY (userid) REFERENCES db.user(id)
 );
 
@@ -127,8 +130,8 @@ COMMENT ON COLUMN db.user_ex.input_error IS 'Текущие неудавшиес
 COMMENT ON COLUMN db.user_ex.input_error_last IS 'Последний неудавшийся вход в систему';
 COMMENT ON COLUMN db.user_ex.input_error_all IS 'Общее количество неудачных входов';
 COMMENT ON COLUMN db.user_ex.lc_ip IS 'IP адрес последнего подключения';
-COMMENT ON COLUMN db.user_ex.default_department IS 'Идентификатор подразделения по умолчанию';
-COMMENT ON COLUMN db.user_ex.default_workplace IS 'Идентификатор рабочего места по умолчанию';
+COMMENT ON COLUMN db.user_ex.default_area IS 'Идентификатор подразделения по умолчанию';
+COMMENT ON COLUMN db.user_ex.default_interface IS 'Идентификатор рабочего места по умолчанию';
 COMMENT ON COLUMN db.user_ex.state IS 'Состояние: 000 - Отключен; 001 - Подключен; 010 - локальный IP; 100 - доверительный IP';
 COMMENT ON COLUMN db.user_ex.session_limit IS 'Максимально допустимое количество одновременно открытых сессий.';
 
@@ -156,132 +159,6 @@ CREATE TRIGGER t_user_ex_before_insert
   BEFORE INSERT ON db.user_ex
   FOR EACH ROW
   EXECUTE PROCEDURE db.ft_user_ex_before_insert();
-
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION db.ft_user_ex_state()
-RETURNS trigger AS $$
-DECLARE
-  i		int;
-
-  arrIp		text[];
-
-  lHost		inet;
-
-  nRange	int;
-
-  vCode		varchar;
-
-  nOnLine	int;
-  nLocal	int;
-  nTrust	int;
-
-  bSuccess	boolean;
-
-  nUserId	numeric;
-
-  vData		Variant;
-
-  r		record;
-BEGIN
-  nUserId := current_userid();
-
-  IF nUserId IS NULL THEN
-    RETURN NEW;
-  END IF;
-
-  nOnLine := 0;
-  nLocal := 0;
-  nTrust := 0;
-
-  NEW.STATE := B'000';
-
-  FOR r IN SELECT department, host FROM db.session WHERE userid = nUserId GROUP BY department, host
-  LOOP
-    r.host := coalesce(NEW.LC_IP, r.host);
-
-    IF r.host IS NOT NULL THEN
-
-      SELECT code INTO vCode FROM department WHERE id = r.department;
-
-      IF found THEN
-
-        vData := RegGetValue(RegOpenKey('CURRENT_CONFIG', 'CONFIG\Department' || E'\u005C' || vCode), 'LocalIP');
-
-        IF vData.vString IS NOT NULL THEN
-          arrIp := string_to_array_trim(vData.vString, ',');
-        ELSE
-          arrIp := string_to_array_trim('127.0.0.1, ::1', ',');
-        END IF;
-
-        bSuccess := false;
-        FOR i IN 1..array_length(arrIp, 1)
-        LOOP
-          SELECT host INTO lHost FROM str_to_inet(arrIp[i]);
-
-          bSuccess := r.host <<= lHost;
-
-          EXIT WHEN coalesce(bSuccess, false);
-        END LOOP;
-
-        IF bSuccess THEN
-          nLocal := nLocal + 1;
-        END IF;
-
-        vData := RegGetValue(RegOpenKey('CURRENT_CONFIG', 'CONFIG\Department' || E'\u005C' || vCode), 'EntrustedIP');
-
-        IF vData.vString IS NOT NULL THEN
-          arrIp := string_to_array_trim(vData.vString, ',');
-
-          bSuccess := false;
-          FOR i IN 1..array_length(arrIp, 1)
-          LOOP
-            SELECT host, range INTO lHost, nRange FROM str_to_inet(arrIp[i]);
-
-            IF nRange IS NOT NULL THEN
-              bSuccess := (r.host >= lHost) AND (r.host <= lHost + (nRange - 1));
-            ELSE
-              bSuccess := r.host <<= lHost;
-            END IF;
-
-            EXIT WHEN coalesce(bSuccess, false);
-          END LOOP;
-
-          IF bSuccess THEN
-            nTrust := nTrust + 1;
-          END IF;
-
-        END IF;
-      END IF;
-    END IF;
-
-    nOnLine := nOnLine + 1;
-  END LOOP;
-
-  IF nTrust > 0 THEN
-    NEW.STATE := set_bit(NEW.STATE, 0, 1);
-  END IF;
-
-  IF nLocal > 0 THEN
-    NEW.STATE := set_bit(NEW.STATE, 1, 1);
-  END IF;
-
-  IF (nOnLine - (nTrust + nLocal)) > 0 THEN
-    NEW.STATE := set_bit(NEW.STATE, 2, 1);
-  END IF;
-
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
-
-CREATE TRIGGER t_user_ex_state
-  BEFORE UPDATE ON db.user_ex
-  FOR EACH ROW
-  EXECUTE PROCEDURE db.ft_user_ex_state();
 
 --------------------------------------------------------------------------------
 -- TABLE db.iptable ------------------------------------------------------------
@@ -330,7 +207,7 @@ CREATE OR REPLACE FUNCTION GetIPTableStr (
 ) RETURNS	text
 AS $$
 DECLARE
-  r		record;
+  r		    record;
   ip		integer[4];
   vHost		text;
   aResult	text[];
@@ -514,13 +391,13 @@ $$ LANGUAGE plpgsql
 -- users -----------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW users (Id, UserName, FullName, Email, Description,
+CREATE OR REPLACE VIEW users (Id, UserName, FullName, Phone, Email, Description,
   PasswordChange, PasswordNotChange, Status, CDate, LDate, EDate, System,
   InputCount, InputLast, InputError, InputErrorLast, InputErrorAll, lcip,
   LoginStatus, SessionLimit
 )
 AS
-  SELECT u.id, u.username, u.fullname, u.email, u.description,
+  SELECT u.id, u.username, u.fullname, u.phone, u.email, u.description,
          u.passwordchange, u.passwordnotchange,
          CASE
          WHEN u.status & B'1100' = B'1100' THEN 'expired & locked'
@@ -614,51 +491,48 @@ AS
 GRANT SELECT ON MemberGroup TO administrator;
 
 --------------------------------------------------------------------------------
--- db.department_type ----------------------------------------------------------
+-- db.area_type ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE TABLE db.department_type (
+CREATE TABLE db.area_type (
     id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
     code		varchar(30) NOT NULL,
     name		varchar(50)
 );
 
-COMMENT ON TABLE db.department_type IS 'Тип подразделения.';
+COMMENT ON TABLE db.area_type IS 'Тип зоны.';
 
-COMMENT ON COLUMN db.department_type.id IS 'Идентификатор';
-COMMENT ON COLUMN db.department_type.code IS 'Код типа подразделения';
-COMMENT ON COLUMN db.department_type.name IS 'Наименование кода типа подразделения';
+COMMENT ON COLUMN db.area_type.id IS 'Идентификатор';
+COMMENT ON COLUMN db.area_type.code IS 'Код';
+COMMENT ON COLUMN db.area_type.name IS 'Наименование';
 
-CREATE UNIQUE INDEX ON db.department_type (code);
+CREATE UNIQUE INDEX ON db.area_type (code);
 
-INSERT INTO db.department_type (code, name) VALUES ('root', 'Корень');
-INSERT INTO db.department_type (code, name) VALUES ('main', 'Головная организация');
-INSERT INTO db.department_type (code, name) VALUES ('branch', 'Филиал');
-INSERT INTO db.department_type (code, name) VALUES ('depart', 'Отделение');
-INSERT INTO db.department_type (code, name) VALUES ('aof', 'Дополнительный офис');
+INSERT INTO db.area_type (code, name) VALUES ('all', 'Все');
+INSERT INTO db.area_type (code, name) VALUES ('default', 'По умолчанию');
 
 --------------------------------------------------------------------------------
--- DepartmentType --------------------------------------------------------------
+-- AreaType --------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW DepartmentType
+CREATE OR REPLACE VIEW AreaType
 AS
-  SELECT * FROM db.department_type;
+  SELECT * FROM db.area_type;
 
-GRANT SELECT ON DepartmentType TO administrator;
+GRANT SELECT ON AreaType TO administrator;
 
 --------------------------------------------------------------------------------
--- GetDepartmentType -----------------------------------------------------------
+-- GetAreaType -----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION GetDepartmentType (
+CREATE OR REPLACE FUNCTION GetAreaType (
   pCode		varchar
 ) RETURNS 	numeric
 AS $$
 DECLARE
   nId		numeric;
 BEGIN
-  SELECT Id INTO nId FROM db.department_type WHERE Code = pCode;
+  SELECT Id INTO nId FROM db.area_type WHERE Code = pCode;
   RETURN nId;
 END;
 $$ LANGUAGE plpgsql
@@ -666,46 +540,46 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- db.department ---------------------------------------------------------------
+-- db.area ---------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE TABLE db.department (
-    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
-    parent		numeric(12) DEFAULT NULL,
-    type		numeric(12) NOT NULL,
-    code		varchar(30) NOT NULL,
-    name		varchar(50) NOT NULL,
-    description		text,
-    validfromdate	timestamp DEFAULT NOW() NOT NULL,
-    validtodate		timestamp,
-    CONSTRAINT fk_department_parent FOREIGN KEY (parent) REFERENCES db.department(id),
-    CONSTRAINT fk_department_type FOREIGN KEY (type) REFERENCES db.department_type(id)
+CREATE TABLE db.area (
+    id              numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
+    parent          numeric(12) DEFAULT NULL,
+    type            numeric(12) NOT NULL,
+    code            varchar(30) NOT NULL,
+    name            varchar(50) NOT NULL,
+    description     text,
+    validfromdate   timestamp DEFAULT NOW() NOT NULL,
+    validtodate     timestamp,
+    CONSTRAINT fk_area_parent FOREIGN KEY (parent) REFERENCES db.area(id),
+    CONSTRAINT fk_area_type FOREIGN KEY (type) REFERENCES db.area_type(id)
 );
 
-COMMENT ON TABLE db.department IS 'Подразделения.';
+COMMENT ON TABLE db.area IS 'Зона.';
 
-COMMENT ON COLUMN db.department.id IS 'Идентификатор';
-COMMENT ON COLUMN db.department.parent IS 'Ссылка на родительский узел подразделения';
-COMMENT ON COLUMN db.department.type IS 'Тип подразделения';
-COMMENT ON COLUMN db.department.code IS 'Код подразделения';
-COMMENT ON COLUMN db.department.name IS 'Наименование подразделения';
-COMMENT ON COLUMN db.department.description IS 'Описание подразделения';
-COMMENT ON COLUMN db.department.validfromdate IS 'Дата открытия';
-COMMENT ON COLUMN db.department.validtodate IS 'Дата закрытия';
+COMMENT ON COLUMN db.area.id IS 'Идентификатор';
+COMMENT ON COLUMN db.area.parent IS 'Ссылка на родительский узел';
+COMMENT ON COLUMN db.area.type IS 'Тип';
+COMMENT ON COLUMN db.area.code IS 'Код';
+COMMENT ON COLUMN db.area.name IS 'Наименование';
+COMMENT ON COLUMN db.area.description IS 'Описание';
+COMMENT ON COLUMN db.area.validfromdate IS 'Дата начала действаия';
+COMMENT ON COLUMN db.area.validtodate IS 'Дата окончания действия';
 
-CREATE INDEX ON db.department (parent);
-CREATE INDEX ON db.department (type);
+CREATE INDEX ON db.area (parent);
+CREATE INDEX ON db.area (type);
 
-CREATE UNIQUE INDEX ON db.department (code);
+CREATE UNIQUE INDEX ON db.area (code);
 
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION db.ft_department_before_insert()
+CREATE OR REPLACE FUNCTION db.ft_area_before_insert()
 RETURNS trigger AS $$
 DECLARE
 BEGIN
   IF NEW.ID = NEW.PARENT THEN
-    NEW.PARENT := GetDepartment('root');
+    NEW.PARENT := GetArea('all');
   END IF;
 
   RAISE DEBUG 'Создано подразделение Id: %', NEW.ID;
@@ -718,89 +592,89 @@ $$ LANGUAGE plpgsql
 
 --------------------------------------------------------------------------------
 
-CREATE TRIGGER t_department_before_insert
-  BEFORE INSERT ON db.department
+CREATE TRIGGER t_area_before_insert
+  BEFORE INSERT ON db.area
   FOR EACH ROW
-  EXECUTE PROCEDURE db.ft_department_before_insert();
+  EXECUTE PROCEDURE db.ft_area_before_insert();
 
 --------------------------------------------------------------------------------
--- Department ------------------------------------------------------------------
+-- Area ------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW Department (Id, Parent, Type, TypeCode, TypeName, 
+CREATE OR REPLACE VIEW Area (Id, Parent, Type, TypeCode, TypeName,
   Code, Name, Description, ValidFromDate, ValidToDate
 )
 as
-  SELECT d.id, d.parent, d.type, t.code, t.name, d.code, d.name, 
+  SELECT d.id, d.parent, d.type, t.code, t.name, d.code, d.name,
          d.description, d.validfromdate, d.validtodate
-    FROM db.department d INNER JOIN db.department_type t ON t.id = d.type;
+    FROM db.area d INNER JOIN db.area_type t ON t.id = d.type;
 
-GRANT SELECT ON Department TO administrator;
+GRANT SELECT ON Area TO administrator;
 
 --------------------------------------------------------------------------------
--- db.member_department --------------------------------------------------------
+-- db.member_area --------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE TABLE db.member_department (
+CREATE TABLE db.member_area (
     id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
-    department		numeric(12) NOT NULL,
+    area		numeric(12) NOT NULL,
     member		numeric(12) NOT NULL,
-    CONSTRAINT fk_md_department FOREIGN KEY (department) REFERENCES db.department(id),
+    CONSTRAINT fk_md_area FOREIGN KEY (area) REFERENCES db.area(id),
     CONSTRAINT fk_md_member FOREIGN KEY (member) REFERENCES db.user(id)
 );
 
-COMMENT ON TABLE db.member_department IS 'Членство в подразделениях.';
+COMMENT ON TABLE db.member_area IS 'Участники зоны.';
 
-COMMENT ON COLUMN db.member_department.id IS 'Идентификатор';
-COMMENT ON COLUMN db.member_department.department IS 'Подразделение';
-COMMENT ON COLUMN db.member_department.member IS 'Участник';
+COMMENT ON COLUMN db.member_area.id IS 'Идентификатор';
+COMMENT ON COLUMN db.member_area.area IS 'Подразделение';
+COMMENT ON COLUMN db.member_area.member IS 'Участник';
 
-CREATE INDEX ON db.member_department (department);
-CREATE INDEX ON db.member_department (member);
+CREATE INDEX ON db.member_area (area);
+CREATE INDEX ON db.member_area (member);
 
-CREATE UNIQUE INDEX ON db.member_department (department, member);
+CREATE UNIQUE INDEX ON db.member_area (area, member);
 
 --------------------------------------------------------------------------------
--- MemberDepartment ------------------------------------------------------------
+-- MemberArea ------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW MemberDepartment (Id, Department, Code, Name, Description,
-  MemberId, MemberType, MemberName, MemberFullName, MemberDesc 
+CREATE OR REPLACE VIEW MemberArea (Id, Area, Code, Name, Description,
+  MemberId, MemberType, MemberName, MemberFullName, MemberDesc
 )
 AS
-  SELECT md.id, md.department, d.code, d.name, d.description,
+  SELECT md.id, md.area, d.code, d.name, d.description,
          md.member, u.type, u.username, u.fullname, u.description
-    FROM db.member_department md INNER JOIN db.department d ON d.id = md.department
+    FROM db.member_area md INNER JOIN db.area d ON d.id = md.area
                               INNER JOIN db.user u ON u.id = md.member;
 
-GRANT SELECT ON MemberDepartment TO administrator;
+GRANT SELECT ON MemberArea TO administrator;
 
 --------------------------------------------------------------------------------
--- db.workplace ----------------------------------------------------------------
+-- db.interface ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE TABLE db.workplace (
-    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
-    sid			varchar(18) NOT NULL,
-    name		varchar(50) NOT NULL,
+CREATE TABLE db.interface (
+    id              numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
+    sid             varchar(18) NOT NULL,
+    name            varchar(50) NOT NULL,
     description		text
 );
 
-COMMENT ON TABLE db.workplace IS 'Рабочие места.';
+COMMENT ON TABLE db.interface IS 'Интерфейсы.';
 
-COMMENT ON COLUMN db.workplace.id IS 'Идентификатор';
-COMMENT ON COLUMN db.workplace.sid IS 'Строковый идентификатор';
-COMMENT ON COLUMN db.workplace.name IS 'Наименование рабочего места';
-COMMENT ON COLUMN db.workplace.description IS 'Описание рабочего места';
+COMMENT ON COLUMN db.interface.id IS 'Идентификатор';
+COMMENT ON COLUMN db.interface.sid IS 'Строковый идентификатор';
+COMMENT ON COLUMN db.interface.name IS 'Наименование';
+COMMENT ON COLUMN db.interface.description IS 'Описание';
 
-CREATE UNIQUE INDEX ON db.workplace (sid);
-CREATE INDEX ON db.workplace (name);
+CREATE UNIQUE INDEX ON db.interface (sid);
+CREATE INDEX ON db.interface (name);
 
-CREATE OR REPLACE FUNCTION db.ft_workplace()
+CREATE OR REPLACE FUNCTION db.ft_interface()
 RETURNS trigger AS $$
 BEGIN
   IF NEW.SID IS NULL THEN
-    SELECT 'W:1:1:' || TRIM(TO_CHAR(NEW.ID, '999999999999')) INTO NEW.SID;
+    SELECT 'I:1:1:' || TRIM(TO_CHAR(NEW.ID, '999999999999')) INTO NEW.SID;
   END IF;
 
   RETURN NEW;
@@ -809,58 +683,58 @@ $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
-CREATE TRIGGER t_workplace
-  BEFORE INSERT ON db.workplace
+CREATE TRIGGER t_interface
+  BEFORE INSERT ON db.interface
   FOR EACH ROW
-  EXECUTE PROCEDURE db.ft_workplace();
+  EXECUTE PROCEDURE db.ft_interface();
 
 --------------------------------------------------------------------------------
--- Workplace -------------------------------------------------------------------
+-- Interface -------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW Workplace
+CREATE OR REPLACE VIEW Interface
 as
-  SELECT * FROM db.workplace;
+  SELECT * FROM db.interface;
 
-GRANT SELECT ON Workplace TO administrator;
+GRANT SELECT ON Interface TO administrator;
 
 --------------------------------------------------------------------------------
--- db.member_workplace ---------------------------------------------------------
+-- db.member_interface ---------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE TABLE db.member_workplace (
-    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
-    workplace		numeric(12) NOT NULL,
-    member		numeric(12) NOT NULL,
-    CONSTRAINT FK_MW_WORKPLACE FOREIGN KEY (workplace) REFERENCES db.workplace(id),
-    CONSTRAINT FK_MW_MEMBER FOREIGN KEY (MEMBER) REFERENCES db.user(id)
+CREATE TABLE db.member_interface (
+    id          numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
+    interface   numeric(12) NOT NULL,
+    member      numeric(12) NOT NULL,
+    CONSTRAINT fk_mi_interface FOREIGN KEY (interface) REFERENCES db.interface(id),
+    CONSTRAINT fk_mi_member FOREIGN KEY (member) REFERENCES db.user(id)
 );
 
-COMMENT ON TABLE db.member_workplace IS 'Членство в рабочих местах.';
+COMMENT ON TABLE db.member_interface IS 'Участники интерфеса.';
 
-COMMENT ON COLUMN db.member_workplace.id IS 'Идентификатор';
-COMMENT ON COLUMN db.member_workplace.workplace IS 'Робочее место';
-COMMENT ON COLUMN db.member_workplace.member IS 'Участник';
+COMMENT ON COLUMN db.member_interface.id IS 'Идентификатор';
+COMMENT ON COLUMN db.member_interface.interface IS 'Интерфейс';
+COMMENT ON COLUMN db.member_interface.member IS 'Участник';
 
-CREATE INDEX ON db.member_workplace (workplace);
-CREATE INDEX ON db.member_workplace (member);
+CREATE INDEX ON db.member_interface (interface);
+CREATE INDEX ON db.member_interface (member);
 
-CREATE UNIQUE INDEX ON db.member_workplace (workplace, member);
+CREATE UNIQUE INDEX ON db.member_interface (interface, member);
 
 --------------------------------------------------------------------------------
--- MemberWorkPlace -------------------------------------------------------------
+-- MemberInterface -------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW MemberWorkPlace (Id, WorkPlace, SID, WorkPlaceName, WorkPlaceDesc,
+CREATE OR REPLACE VIEW MemberInterface (Id, Interface, SID, InterfaceName, InterfaceDesc,
   MemberId, MemberType, MemberName, MemberFullName, MemberDesc
 )
 AS
-  SELECT mwp.id, mwp.workplace, wp.sid, wp.name, wp.description,
+  SELECT mwp.id, mwp.interface, wp.sid, wp.name, wp.description,
          mwp.member, u.type, u.username, u.fullname, u.description
-    FROM db.member_workplace mwp INNER JOIN db.workplace wp ON wp.id = mwp.workplace
+    FROM db.member_interface mwp INNER JOIN db.interface wp ON wp.id = mwp.interface
                                  INNER JOIN db.user u ON u.id = mwp.member;
 
-GRANT SELECT ON MemberWorkPlace TO administrator;
+GRANT SELECT ON MemberInterface TO administrator;
 
 --------------------------------------------------------------------------------
 -- FUNCTION StrPwKey -----------------------------------------------------------
@@ -893,9 +767,9 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION SessionKey (
-  pPwKey	text,
-  pPassKey	text
-) RETURNS	text
+  pPwKey        text,
+  pPassKey      text
+) RETURNS       text
 AS $$
 DECLARE
   vSessionKey	text default null;
@@ -915,22 +789,22 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.session (
-    key			varchar(40) PRIMARY KEY NOT NULL,
-    suid                numeric(12) NOT NULL,
-    userid		numeric(12) NOT NULL,
-    pwkey		text NOT NULL,
-    lang		numeric(12) NOT NULL,
-    department		numeric(12) NOT NULL,
-    workplace		numeric(12) NOT NULL,
-    oper_date		timestamp DEFAULT NULL,
-    created		timestamp DEFAULT NOW() NOT NULL,
-    last_update		timestamp DEFAULT NOW() NOT NULL,
-    host		inet,
+    key         varchar(40) PRIMARY KEY NOT NULL,
+    suid        numeric(12) NOT NULL,
+    userid      numeric(12) NOT NULL,
+    pwkey       text NOT NULL,
+    lang        numeric(12) NOT NULL,
+    area        numeric(12) NOT NULL,
+    interface   numeric(12) NOT NULL,
+    oper_date   timestamp DEFAULT NULL,
+    created     timestamp DEFAULT NOW() NOT NULL,
+    last_update timestamp DEFAULT NOW() NOT NULL,
+    host        inet,
     CONSTRAINT fk_session_suid FOREIGN KEY (suid) REFERENCES db.user(id),
     CONSTRAINT fk_session_userid FOREIGN KEY (userid) REFERENCES db.user(id),
     CONSTRAINT fk_session_lang FOREIGN KEY (lang) REFERENCES db.language(id),
-    CONSTRAINT fk_session_department FOREIGN KEY (department) REFERENCES db.department(id),
-    CONSTRAINT fk_session_workplace FOREIGN KEY (workplace) REFERENCES db.workplace(id)
+    CONSTRAINT fk_session_area FOREIGN KEY (area) REFERENCES db.area(id),
+    CONSTRAINT fk_session_interface FOREIGN KEY (interface) REFERENCES db.interface(id)
 );
 
 COMMENT ON TABLE db.session IS 'Сессии пользователей.';
@@ -940,8 +814,8 @@ COMMENT ON COLUMN db.session.suid IS 'Пользователь сессии';
 COMMENT ON COLUMN db.session.userid IS 'Пользователь';
 COMMENT ON COLUMN db.session.pwkey IS 'Ключ';
 COMMENT ON COLUMN db.session.lang IS 'Язык';
-COMMENT ON COLUMN db.session.department IS 'Подразделение';
-COMMENT ON COLUMN db.session.workplace IS 'Рабочие место';
+COMMENT ON COLUMN db.session.area IS 'Зона';
+COMMENT ON COLUMN db.session.interface IS 'Рабочие место';
 COMMENT ON COLUMN db.session.oper_date IS 'Дата операционного дня';
 COMMENT ON COLUMN db.session.created IS 'Дата и время создания сессии';
 COMMENT ON COLUMN db.session.last_update IS 'Дата и время последнего обновления сессии';
@@ -985,25 +859,25 @@ BEGIN
       RETURN NULL;
     END IF;
 
-    IF OLD.DEPARTMENT <> NEW.DEPARTMENT THEN
-      SELECT ID INTO nID FROM MEMBER_DEPARTMENT WHERE DEPARTMENT = NEW.DEPARTMENT AND MEMBER = NEW.USERID;
+    IF OLD.AREA <> NEW.AREA THEN
+      SELECT ID INTO nID FROM db.member_area WHERE AREA = NEW.AREA AND MEMBER = NEW.USERID;
       IF NOT FOUND THEN
-        NEW.DEPARTMENT := OLD.DEPARTMENT;
+        NEW.AREA := OLD.AREA;
       END IF;
     END IF;
 
-    IF OLD.WORKPLACE <> NEW.WORKPLACE THEN
+    IF OLD.INTERFACE <> NEW.INTERFACE THEN
       SELECT ID INTO nID
-        FROM MEMBER_WORKPLACE
-       WHERE WORKPLACE = NEW.WORKPLACE
+        FROM db.member_interface
+       WHERE INTERFACE = NEW.INTERFACE
          AND MEMBER IN (
            SELECT NEW.USERID
            UNION ALL
-           SELECT USERID FROM MEMBER_GROUP WHERE MEMBER = NEW.USERID
+           SELECT USERID FROM db.member_group WHERE MEMBER = NEW.USERID
          );
 
       IF NOT FOUND THEN
-        NEW.WORKPLACE := OLD.WORKPLACE;
+        NEW.INTERFACE := OLD.INTERFACE;
       END IF;
     END IF;
 
@@ -1025,43 +899,43 @@ BEGIN
       SELECT ID INTO NEW.LANG FROM db.language WHERE CODE = 'ru';
     END IF;
 
-    IF NEW.DEPARTMENT IS NULL THEN
+    IF NEW.AREA IS NULL THEN
 
-      NEW.DEPARTMENT := GetDefaultDepartment(NEW.USERID);
+      NEW.AREA := GetDefaultArea(NEW.USERID);
 
     ELSE
 
       SELECT id INTO nID
-        FROM member_department
-       WHERE department = NEW.DEPARTMENT
+        FROM db.member_area
+       WHERE area = NEW.AREA
          AND member IN (
            SELECT NEW.USERID
             UNION ALL
-           SELECT userid FROM member_group WHERE member = NEW.USERID
+           SELECT userid FROM db.member_group WHERE member = NEW.USERID
          );
 
       IF NOT FOUND THEN
-        NEW.DEPARTMENT := NULL;
+        NEW.AREA := NULL;
       END IF;
     END IF;
 
-    IF NEW.WORKPLACE IS NULL THEN
+    IF NEW.INTERFACE IS NULL THEN
 
-      NEW.WORKPLACE := GetDefaultWorkPlace(NEW.USERID);
+      NEW.INTERFACE := GetDefaultInterface(NEW.USERID);
 
     ELSE
 
       SELECT id INTO nID
-        FROM member_workplace
-       WHERE workplace = NEW.WORKPLACE
+        FROM db.member_interface
+       WHERE interface = NEW.INTERFACE
          AND member IN (
            SELECT NEW.USERID
             UNION ALL
-           SELECT userid FROM member_group WHERE member = NEW.USERID
+           SELECT userid FROM db.member_group WHERE member = NEW.USERID
          );
 
       IF NOT FOUND THEN
-        SELECT id INTO NEW.WORKPLACE FROM workplace WHERE sid = 'W:1:0:0';
+        SELECT id INTO NEW.INTERFACE FROM db.interface WHERE sid = 'I:1:0:0';
       END IF;
     END IF;
 
@@ -1422,102 +1296,102 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- FUNCTION SetSessionDepartment -----------------------------------------------
+-- FUNCTION SetSessionArea -----------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION SetSessionDepartment (
-  pDepartment 	numeric,
+CREATE OR REPLACE FUNCTION SetSessionArea (
+  pArea 	numeric,
   pSession	text default current_session()
 ) RETURNS 	void
 AS $$
 BEGIN
-  UPDATE db.session SET department = pDepartment WHERE key = pSession;
+  UPDATE db.session SET area = pArea WHERE key = pSession;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- FUNCTION GetSessionDepartment -----------------------------------------------
+-- FUNCTION GetSessionArea -----------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION GetSessionDepartment (
+CREATE OR REPLACE FUNCTION GetSessionArea (
   pSession	text default current_session()
 )
 RETURNS 	numeric
 AS $$
 DECLARE
-  nDepartment	numeric;
+  nArea	numeric;
 BEGIN
-  SELECT department INTO nDepartment FROM db.session WHERE key = pSession;
-  RETURN nDepartment;
+  SELECT area INTO nArea FROM db.session WHERE key = pSession;
+  RETURN nArea;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- FUNCTION current_department -------------------------------------------------
+-- FUNCTION current_area -------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION current_department (
+CREATE OR REPLACE FUNCTION current_area (
   pSession	text default current_session()
 )
 RETURNS 	numeric
 AS $$
 BEGIN
-  RETURN GetSessionDepartment(pSession);
+  RETURN GetSessionArea(pSession);
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- FUNCTION SetSessionWorkplace ------------------------------------------------
+-- FUNCTION SetSessionInterface ------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION SetSessionWorkplace (
-  pWorkplace 	numeric,
-  pSession	text default current_session()
-) RETURNS 	void
+CREATE OR REPLACE FUNCTION SetSessionInterface (
+  pInterface 	numeric,
+  pSession	    text default current_session()
+) RETURNS 	    void
 AS $$
 BEGIN
-  UPDATE db.session SET workplace = pWorkplace WHERE key = pSession;
+  UPDATE db.session SET interface = pInterface WHERE key = pSession;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- FUNCTION GetSessionWorkplace ------------------------------------------------
+-- FUNCTION GetSessionInterface ------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION GetSessionWorkplace (
-  pSession	text default current_session()
+CREATE OR REPLACE FUNCTION GetSessionInterface (
+  pSession	    text default current_session()
 )
-RETURNS 	numeric
+RETURNS 	    numeric
 AS $$
 DECLARE
-  nWorkplace	numeric;
+  nInterface    numeric;
 BEGIN
-  SELECT workplace INTO nWorkplace FROM db.session WHERE key = pSession;
-  RETURN nWorkplace;
+  SELECT interface INTO nInterface FROM db.session WHERE key = pSession;
+  RETURN nInterface;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- FUNCTION current_workplace --------------------------------------------------
+-- FUNCTION current_interface --------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION current_workplace (
+CREATE OR REPLACE FUNCTION current_interface (
   pSession	text default current_session()
 )
 RETURNS 	numeric
 AS $$
 BEGIN
-  RETURN GetSessionWorkplace(pSession);
+  RETURN GetSessionInterface(pSession);
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
@@ -1534,8 +1408,8 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION SetOperDate (
   pOperDate 	timestamp,
-  pSession	text default current_session()
-) RETURNS 	void
+  pSession	    text default current_session()
+) RETURNS 	    void
 AS $$
 BEGIN
   UPDATE db.session SET oper_date = pOperDate WHERE key = pSession;
@@ -1555,8 +1429,8 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION SetOperDate (
   pOperDate 	timestamptz,
-  pSession	text default current_session()
-) RETURNS 	void
+  pSession	    text default current_session()
+) RETURNS 	    void
 AS $$
 BEGIN
   UPDATE db.session SET oper_date = pOperDate WHERE key = pSession;
@@ -1734,7 +1608,12 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 -- IsUserRole ------------------------------------------------------------------
 --------------------------------------------------------------------------------
-
+/**
+ * Проверяет роль пользователя.
+ * @param {numeric} pRole - Идентификатор роли (группы)
+ * @param {numeric} pUser - Идентификатор пользователя (учётной записи)
+ * @return {boolean}
+ */
 CREATE OR REPLACE FUNCTION IsUserRole (
   pRole		numeric,
   pUser		numeric default current_userid()
@@ -1754,7 +1633,12 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 -- IsUserRole ------------------------------------------------------------------
 --------------------------------------------------------------------------------
-
+/**
+ * Проверяет роль пользователя.
+ * @param {text} pRole - Код роли (группы)
+ * @param {text} pUser - Код пользователя (учётной записи)
+ * @return {boolean}
+ */
 CREATE OR REPLACE FUNCTION IsUserRole (
   pRole		text,
   pUser		text default current_username()
@@ -1781,26 +1665,28 @@ $$ LANGUAGE plpgsql
  * @param {varchar} pUserName - Пользователь
  * @param {text} pPassword - Пароль
  * @param {text} pFullName - Полное имя
- * @param {varchar} pEmail - Электронный адрес
+ * @param {text} pPhone - Телефон
+ * @param {text} pEmail - Электронный адрес
  * @param {text} pDescription - Описание
  * @param {boolean} pPasswordChange - Сменить пароль при следующем входе в систему
  * @param {boolean} pPasswordNotChange - Установить запрет на смену пароля самим пользователем
- * @param {numeric} pDepartment - Подразделение
+ * @param {numeric} pArea - Зона
  * @return {(id|exception)} - Id учётной записи или ошибку
  */
 CREATE OR REPLACE FUNCTION CreateUser (
-  pUserName		varchar,
-  pPassword		text,
-  pFullName		text,
-  pEmail		varchar,
-  pDescription		text default null,
-  pPasswordChange	boolean default true,
-  pPasswordNotChange	boolean default false,
-  pDepartment   	numeric default current_department()
-) RETURNS		numeric
+  pUserName             varchar,
+  pPassword             text,
+  pFullName             text,
+  pPhone                text,
+  pEmail                text,
+  pDescription          text default null,
+  pPasswordChange       boolean default true,
+  pPasswordNotChange    boolean default false,
+  pArea                 numeric default current_area()
+) RETURNS               numeric
 AS $$
 DECLARE
-  nUserId		numeric;
+  nUserId		        numeric;
 BEGIN
   IF session_user <> 'kernel' THEN
     IF NOT IsUserRole('administrator') THEN
@@ -1814,20 +1700,20 @@ BEGIN
     PERFORM RoleExists(pUserName);
   END IF;
 
-  INSERT INTO db.user (type, username, fullname, email, description, passwordchange, passwordnotchange)
-  VALUES ('U', pUserName, pFullName, pEmail, pDescription, pPasswordChange, pPasswordNotChange)
+  INSERT INTO db.user (type, username, fullname, phone, email, description, passwordchange, passwordnotchange)
+  VALUES ('U', pUserName, pFullName, pPhone, pEmail, pDescription, pPasswordChange, pPasswordNotChange)
   RETURNING id INTO nUserId;
 
-  INSERT INTO db.user_ex (userid) VALUES (nUserId);
+  INSERT INTO db.user_ex (id, userid) VALUES (nUserId, nUserId);
 
   IF pPassword IS NOT NULL AND pPassword <> '' THEN
     PERFORM SetPassword(nUserId, pPassword);
   END IF;
 
-  PERFORM AddMemberToWorkPlace(nUserId, GetWorkPlace('W:1:0:0'));
+  PERFORM AddMemberToInterface(nUserId, GetInterface('I:1:0:0'));
 
-  IF pDepartment IS NOT NULL THEN
-    PERFORM AddMemberToDepartment(nUserId, pDepartment);
+  IF pArea IS NOT NULL THEN
+    PERFORM AddMemberToArea(nUserId, pArea);
   END IF;
 
   RETURN nUserId;
@@ -1847,13 +1733,13 @@ $$ LANGUAGE plpgsql
  * @return {(id|exception)} - Id группы или ошибку
  */
 CREATE OR REPLACE FUNCTION CreateGroup (
-  pGroupName	varchar,
-  pFullName	text,
+  pGroupName    varchar,
+  pFullName     text,
   pDescription	text
-) RETURNS	numeric
+) RETURNS	    numeric
 AS $$
 DECLARE
-  nGroupId	numeric;
+  nGroupId	    numeric;
 BEGIN
   IF session_user <> 'kernel' THEN
     IF NOT IsUserRole('administrator') THEN
@@ -1885,25 +1771,27 @@ $$ LANGUAGE plpgsql
  * @param {varchar} pUserName - Пользователь
  * @param {text} pPassword - Пароль
  * @param {text} pFullName - Полное имя
- * @param {varchar} pEmail - Электронный адрес
+ * @param {text} pPhone - Телефон
+ * @param {text} pEmail - Электронный адрес
  * @param {text} pDescription - Описание
  * @param {boolean} pPasswordChange - Сменить пароль при следующем входе в систему
  * @param {boolean} pPasswordNotChange - Установить запрет на смену пароля самим пользователем
  * @return {(void|exception)}
  */
 CREATE OR REPLACE FUNCTION UpdateUser (
-  pId			numeric,
-  pUserName		varchar,
-  pPassword		text default null,
-  pFullName		text default null,
-  pEmail		varchar default null,
-  pDescription		text default null,
-  pPasswordChange	boolean default null,
-  pPasswordNotChange	boolean default null
-) RETURNS		void
+  pId                   numeric,
+  pUserName             varchar,
+  pPassword             text default null,
+  pFullName             text default null,
+  pPhone                text default null,
+  pEmail                text default null,
+  pDescription          text default null,
+  pPasswordChange       boolean default null,
+  pPasswordNotChange    boolean default null
+) RETURNS		        void
 AS $$
 DECLARE
-  r			users%rowtype;
+  r			            users%rowtype;
 BEGIN
   IF session_user <> 'kernel' THEN
     IF pId <> current_userid() THEN
@@ -1922,6 +1810,7 @@ BEGIN
   END IF;
 
   IF found THEN
+    pPhone := coalesce(pPhone, r.phone);
     pEmail := coalesce(pEmail, r.email);
     pDescription := coalesce(pDescription, r.description);
     pPasswordChange := coalesce(pPasswordChange, r.passwordchange);
@@ -1930,6 +1819,7 @@ BEGIN
     UPDATE db.user
        SET username = coalesce(pUserName, username),
            fullname = coalesce(pFullName, fullname),
+           phone = CheckNull(pPhone),
            email = CheckNull(pEmail),
            description = CheckNull(pDescription),
            passwordchange = pPasswordChange,
@@ -1959,14 +1849,14 @@ $$ LANGUAGE plpgsql
  * @return {(void|exception)}
  */
 CREATE OR REPLACE FUNCTION UpdateGroup (
-  pId		numeric,
-  pGroupName	varchar,
-  pFullName	text,
-  pDescription	text
-) RETURNS	void
+  pId           numeric,
+  pGroupName    varchar,
+  pFullName     text,
+  pDescription  text
+) RETURNS       void
 AS $$
 DECLARE
-  vGroupName	varchar;
+  vGroupName    varchar;
 BEGIN
   IF session_user <> 'kernel' THEN
     IF NOT IsUserRole('administrator') THEN
@@ -2024,8 +1914,8 @@ BEGIN
   END IF;
 
   IF FOUND THEN
-    DELETE FROM db.member_department WHERE member = pId;
-    DELETE FROM db.member_workplace WHERE member = pId;
+    DELETE FROM db.member_area WHERE member = pId;
+    DELETE FROM db.member_interface WHERE member = pId;
     DELETE FROM db.member_group WHERE member = pId;
     DELETE FROM db.user_ex WHERE userid = pId;
     DELETE FROM db.user WHERE id = pId;
@@ -2073,11 +1963,11 @@ $$ LANGUAGE plpgsql
  * @return {(void|exception)}
  */
 CREATE OR REPLACE FUNCTION DeleteGroup (
-  pId		numeric
-) RETURNS	void
+  pId		    numeric
+) RETURNS	    void
 AS $$
 DECLARE
-  vGroupName	varchar;
+  vGroupName    varchar;
 BEGIN
   IF session_user <> 'kernel' THEN
     IF NOT IsUserRole('administrator') THEN
@@ -2091,8 +1981,8 @@ BEGIN
     PERFORM SystemRoleError();
   END IF;
 
-  DELETE FROM db.member_department WHERE member = pId;
-  DELETE FROM db.member_workplace WHERE member = pId;
+  DELETE FROM db.member_area WHERE member = pId;
+  DELETE FROM db.member_interface WHERE member = pId;
   DELETE FROM db.member_group WHERE userid = pId;
   DELETE FROM db.user_ex WHERE userid = pId;
   DELETE FROM db.user WHERE id = pId;
@@ -2110,11 +2000,9 @@ $$ LANGUAGE plpgsql
  * @return {(void|exception)}
  */
 CREATE OR REPLACE FUNCTION DeleteGroup (
-  pGroupName	varchar
-) RETURNS	void
+  pGroupName    varchar
+) RETURNS       void
 AS $$
-DECLARE
-  nId		numeric;
 BEGIN
   PERFORM DeleteGroup(GetGroup(pGroupName));
 END;
@@ -2159,10 +2047,10 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION GetGroup (
   pGroupName	varchar
-) RETURNS	numeric
+) RETURNS	    numeric
 AS $$
 DECLARE
-  nId		numeric;
+  nId		    numeric;
 BEGIN
   SELECT id INTO nId FROM db.user WHERE type = 'G' AND username = pGroupName;
 
@@ -2186,14 +2074,14 @@ $$ LANGUAGE plpgsql
  * @return {void}
  */
 CREATE OR REPLACE FUNCTION SetPassword (
-  pId			numeric,
-  pPassword		text
-) RETURNS		void
+  pId			    numeric,
+  pPassword		    text
+) RETURNS		    void
 AS $$
 DECLARE
-  nUserId		numeric;
+  nUserId		    numeric;
   bPasswordChange	boolean;
-  r			record;
+  r			        record;
 BEGIN
   nUserId := current_userid();
 
@@ -2458,19 +2346,19 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- CreateDepartment ------------------------------------------------------------
+-- CreateArea ------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION CreateDepartment (
-  pParent	numeric,
-  pType		numeric,
-  pCode		varchar,
-  pName		varchar,
+CREATE OR REPLACE FUNCTION CreateArea (
+  pParent	    numeric,
+  pType		    numeric,
+  pCode		    varchar,
+  pName		    varchar,
   pDescription	text default null
-) RETURNS 	numeric
+) RETURNS 	    numeric
 AS $$
 DECLARE
-  nId		numeric;
+  nId		    numeric;
 BEGIN
   IF session_user <> 'kernel' THEN
     IF NOT IsUserRole('administrator') THEN
@@ -2478,8 +2366,8 @@ BEGIN
     END IF;
   END IF;
 
-  INSERT INTO db.department (parent, type, code, name, description)
-  VALUES (coalesce(pParent, GetDepartment('root')), pType, pCode, pName, pDescription) returning Id INTO nId;
+  INSERT INTO db.area (parent, type, code, name, description)
+  VALUES (coalesce(pParent, GetArea('all')), pType, pCode, pName, pDescription) returning Id INTO nId;
   RETURN nId;
 END;
 $$ LANGUAGE plpgsql
@@ -2487,15 +2375,15 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- EditDepartment --------------------------------------------------------------
+-- EditArea --------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION EditDepartment (
-  pId			numeric,
-  pParent		numeric default null,
-  pType			numeric default null,
-  pCode			varchar default null,
-  pName			varchar default null,
+CREATE OR REPLACE FUNCTION EditArea (
+  pId			    numeric,
+  pParent		    numeric default null,
+  pType			    numeric default null,
+  pCode			    varchar default null,
+  pName			    varchar default null,
   pDescription		text default null,
   pValidFromDate	timestamptz default null,
   pValidToDate		timestamptz default null
@@ -2508,13 +2396,13 @@ BEGIN
     END IF;
   END IF;
 
-  IF pId = GetDepartment('root') THEN
-    UPDATE db.department
+  IF pId = GetArea('all') THEN
+    UPDATE db.area
        SET name = coalesce(pName, name),
            description = coalesce(pDescription, description)
      WHERE id = pId;
   ELSE
-    UPDATE db.department
+    UPDATE db.area
        SET parent = coalesce(pParent, parent),
            type = coalesce(pType, type),
            code = coalesce(pCode, code),
@@ -2530,12 +2418,12 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- DeleteDepartment ------------------------------------------------------------
+-- DeleteArea ------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION DeleteDepartment (
+CREATE OR REPLACE FUNCTION DeleteArea (
   pId			numeric
-) RETURNS void
+) RETURNS       void
 AS $$
 BEGIN
   IF session_user <> 'kernel' THEN
@@ -2544,24 +2432,24 @@ BEGIN
     END IF;
   END IF;
 
-  DELETE FROM db.department WHERE Id = pId;
+  DELETE FROM db.area WHERE Id = pId;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- GetDepartment ---------------------------------------------------------------
+-- GetArea ---------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION GetDepartment (
+CREATE OR REPLACE FUNCTION GetArea (
   pCode		text
 ) RETURNS	numeric
 AS $$
 DECLARE
   nId		numeric;
 BEGIN
-  SELECT id INTO nId FROM db.department WHERE code = pCode;
+  SELECT id INTO nId FROM db.area WHERE code = pCode;
   RETURN nId;
 END;
 $$ LANGUAGE plpgsql
@@ -2569,17 +2457,17 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- GetDepartmentCode -----------------------------------------------------------
+-- GetAreaCode -----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION GetDepartmentCode (
+CREATE OR REPLACE FUNCTION GetAreaCode (
   pId		numeric
 ) RETURNS	varchar
 AS $$
 DECLARE
   vCode		varchar;
 BEGIN
-  SELECT code INTO vCode FROM db.department WHERE id = pId;
+  SELECT code INTO vCode FROM db.area WHERE id = pId;
   RETURN vCode;
 END;
 $$ LANGUAGE plpgsql
@@ -2587,17 +2475,17 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- GetDepartmentName -----------------------------------------------------------
+-- GetAreaName -----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION GetDepartmentName (
+CREATE OR REPLACE FUNCTION GetAreaName (
   pId		numeric
 ) RETURNS	varchar
 AS $$
 DECLARE
   vName		varchar;
 BEGIN
-  SELECT name INTO vName FROM db.department WHERE id = pId;
+  SELECT name INTO vName FROM db.area WHERE id = pId;
   RETURN vName;
 END;
 $$ LANGUAGE plpgsql
@@ -2605,13 +2493,13 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- AddMemberToDepartment -------------------------------------------------------
+-- AddMemberToArea -------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION AddMemberToDepartment (
-  pMember		numeric,
-  pDepartment		numeric
-) RETURNS void
+CREATE OR REPLACE FUNCTION AddMemberToArea (
+  pMember	numeric,
+  pArea		numeric
+) RETURNS   void
 AS $$
 BEGIN
   IF session_user <> 'kernel' THEN
@@ -2620,7 +2508,7 @@ BEGIN
     END IF;
   END IF;
 
-  INSERT INTO db.member_department (department, member) VALUES (pDepartment, pMember);
+  INSERT INTO db.member_area (area, member) VALUES (pArea, pMember);
 exception
   when OTHERS THEN
     null;
@@ -2630,18 +2518,18 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- DeleteDepartmentForMember ---------------------------------------------------
+-- DeleteAreaForMember ---------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Удаляет подразделение для пользователя.
  * @param {id} pMember - Идентификатор пользователя
- * @param {id} pDepartment - Идентификатор подразделения, при null удаляет все подразделения для указанного пользователя
+ * @param {id} pArea - Идентификатор подразделения, при null удаляет все подразделения для указанного пользователя
  * @return {void}
  */
-CREATE OR REPLACE FUNCTION DeleteDepartmentForMember (
-  pMember		numeric,
-  pDepartment		numeric default null
-) RETURNS void
+CREATE OR REPLACE FUNCTION DeleteAreaForMember (
+  pMember	numeric,
+  pArea		numeric default null
+) RETURNS   void
 AS $$
 BEGIN
   IF session_user <> 'kernel' THEN
@@ -2650,25 +2538,25 @@ BEGIN
     END IF;
   END IF;
 
-  DELETE FROM db.member_department WHERE department = coalesce(pDepartment, department) AND member = pMember;
+  DELETE FROM db.member_area WHERE area = coalesce(pArea, area) AND member = pMember;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- DeleteMemberFromDepartment --------------------------------------------------
+-- DeleteMemberFromArea --------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Удаляет пользователя из подразделения.
- * @param {id} pDepartment - Идентификатор подразделения
+ * @param {id} pArea - Идентификатор подразделения
  * @param {id} pMember - Идентификатор пользователя, при null удаляет всех пользователей из указанного подразделения
  * @return {void}
  */
-CREATE OR REPLACE FUNCTION DeleteMemberFromDepartment (
-  pDepartment		numeric,
-  pMember		numeric default null
-) RETURNS void
+CREATE OR REPLACE FUNCTION DeleteMemberFromArea (
+  pArea		numeric,
+  pMember	numeric default null
+) RETURNS   void
 AS $$
 BEGIN
   IF session_user <> 'kernel' THEN
@@ -2677,18 +2565,18 @@ BEGIN
     END IF;
   END IF;
 
-  DELETE FROM db.member_department WHERE department = pDepartment AND member = coalesce(pMember, member);
+  DELETE FROM db.member_area WHERE area = pArea AND member = coalesce(pMember, member);
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- SetDepartment ---------------------------------------------------------------
+-- SetArea ---------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION SetDepartment (
-  pDepartment	numeric,
+CREATE OR REPLACE FUNCTION SetArea (
+  pArea	    numeric,
   pMember	numeric default current_userid(),
   pSession	text default current_session()
 ) RETURNS	void
@@ -2698,9 +2586,9 @@ DECLARE
   vUserName     varchar;
   vDepName      text;
 BEGIN
-  vDepName := GetDepartmentName(pDepartment);
+  vDepName := GetAreaName(pArea);
   IF vDepName IS NULL THEN
-    PERFORM DepartmentError();
+    PERFORM AreaError();
   END IF;
 
   vUserName := GetUserName(pMember);
@@ -2708,23 +2596,23 @@ BEGIN
     PERFORM UserNotFound(pMember);
   END IF;
 
-  SELECT id INTO nId FROM db.member_department WHERE department = pDepartment AND member = pMember;
+  SELECT id INTO nId FROM db.member_area WHERE area = pArea AND member = pMember;
   IF NOT FOUND THEN
-    PERFORM UserNotMemberDepartment(vUserName, vDepName);
+    PERFORM UserNotMemberArea(vUserName, vDepName);
   END IF;
 
-  UPDATE db.session SET department = pDepartment WHERE key = pSession;
+  UPDATE db.session SET area = pArea WHERE key = pSession;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- SetDefaultDepartment --------------------------------------------------------
+-- SetDefaultArea --------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION SetDefaultDepartment (
-  pDepartment	numeric default current_department(),
+CREATE OR REPLACE FUNCTION SetDefaultArea (
+  pArea	numeric default current_area(),
   pMember	numeric default current_userid()
 ) RETURNS	void
 AS $$
@@ -2732,8 +2620,8 @@ DECLARE
   nId		numeric;
 BEGIN
   SELECT id INTO nId
-    FROM db.member_department
-   WHERE department = pDepartment
+    FROM db.member_area
+   WHERE area = pArea
      AND member IN (
        SELECT pMember
         UNION ALL
@@ -2741,7 +2629,7 @@ BEGIN
      );
 
   IF found THEN
-    UPDATE db.user_ex SET default_department = pDepartment WHERE userid = pMember;
+    UPDATE db.user_ex SET default_area = pArea WHERE userid = pMember;
   END IF;
 END;
 $$ LANGUAGE plpgsql
@@ -2749,22 +2637,22 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- GetDefaultDepartment --------------------------------------------------------
+-- GetDefaultArea --------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION GetDefaultDepartment (
+CREATE OR REPLACE FUNCTION GetDefaultArea (
   pMember	numeric default current_userid()
 ) RETURNS	numeric
 AS $$
 DECLARE
   nDefault	numeric;
-  nDepartment	numeric;
+  nArea	numeric;
 BEGIN
-  SELECT default_department INTO nDefault FROM db.user_ex WHERE userid = pMember;
+  SELECT default_area INTO nDefault FROM db.user_ex WHERE userid = pMember;
 
-  SELECT department INTO nDepartment
-    FROM db.member_department
-   WHERE department = nDefault
+  SELECT area INTO nArea
+    FROM db.member_area
+   WHERE area = nDefault
      AND member IN (
        SELECT pMember
         UNION ALL
@@ -2772,22 +2660,22 @@ BEGIN
      );
 
   IF not found THEN
-    SELECT MIN(department) INTO nDepartment
-      FROM db.member_department
+    SELECT MIN(area) INTO nArea
+      FROM db.member_area
      WHERE member = pMember;
   END IF;
 
-  RETURN nDepartment;
+  RETURN nArea;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- CreateWorkPlace -------------------------------------------------------------
+-- CreateInterface -------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION CreateWorkPlace (
+CREATE OR REPLACE FUNCTION CreateInterface (
   pName		varchar,
   pDescription	text
 ) RETURNS 	numeric
@@ -2801,7 +2689,7 @@ BEGIN
     END IF;
   END IF;
 
-  INSERT INTO db.workplace (name, description)
+  INSERT INTO db.interface (name, description)
   VALUES (pName, pDescription) returning Id INTO nId;
 
   RETURN nId;
@@ -2811,10 +2699,10 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- UpdateWorkPlace -------------------------------------------------------------
+-- UpdateInterface -------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION UpdateWorkPlace (
+CREATE OR REPLACE FUNCTION UpdateInterface (
   pId		numeric,
   pName		varchar,
   pDescription	text
@@ -2827,17 +2715,17 @@ BEGIN
     END IF;
   END IF;
 
-  UPDATE db.workplace SET Name = pName, Description = pDescription WHERE Id = pId;
+  UPDATE db.interface SET Name = pName, Description = pDescription WHERE Id = pId;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- DeleteWorkPlace -------------------------------------------------------------
+-- DeleteInterface -------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION DeleteWorkPlace (
+CREATE OR REPLACE FUNCTION DeleteInterface (
   pId		numeric
 ) RETURNS 	void
 AS $$
@@ -2848,19 +2736,19 @@ BEGIN
     END IF;
   END IF;
 
-  DELETE FROM db.workplace WHERE Id = pId;
+  DELETE FROM db.interface WHERE Id = pId;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- AddMemberToWorkPlace --------------------------------------------------------
+-- AddMemberToInterface --------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION AddMemberToWorkPlace (
+CREATE OR REPLACE FUNCTION AddMemberToInterface (
   pMember	numeric,
-  pWorkPlace	numeric
+  pInterface	numeric
 ) RETURNS 	void
 AS $$
 BEGIN
@@ -2870,19 +2758,19 @@ BEGIN
     END IF;
   END IF;
 
-  INSERT INTO db.member_workplace (workplace, member) VALUES (pWorkPlace, pMember);
+  INSERT INTO db.member_interface (interface, member) VALUES (pInterface, pMember);
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- DeleteWorkPlaceForMember ----------------------------------------------------
+-- DeleteInterfaceForMember ----------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION DeleteWorkPlaceForMember (
+CREATE OR REPLACE FUNCTION DeleteInterfaceForMember (
   pMember	numeric,
-  pWorkPlace	numeric default null
+  pInterface	numeric default null
 ) RETURNS void
 AS $$
 BEGIN
@@ -2892,18 +2780,18 @@ BEGIN
     END IF;
   END IF;
 
-  DELETE FROM db.member_workplace WHERE workplace = coalesce(pWorkPlace, workplace) AND member = pMember;
+  DELETE FROM db.member_interface WHERE interface = coalesce(pInterface, interface) AND member = pMember;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- DeleteMemberFromWorkPlace ---------------------------------------------------
+-- DeleteMemberFromInterface ---------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION DeleteMemberFromWorkPlace (
-  pWorkPlace	numeric,
+CREATE OR REPLACE FUNCTION DeleteMemberFromInterface (
+  pInterface	numeric,
   pMember	numeric default null
 ) RETURNS void
 AS $$
@@ -2914,17 +2802,17 @@ BEGIN
     END IF;
   END IF;
 
-  DELETE FROM db.member_workplace WHERE workplace = pWorkPlace AND member = coalesce(pMember, member);
+  DELETE FROM db.member_interface WHERE interface = pInterface AND member = coalesce(pMember, member);
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- GetWorkPlaceSID -------------------------------------------------------------
+-- GetInterfaceSID -------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION GetWorkPlaceSID (
+CREATE OR REPLACE FUNCTION GetInterfaceSID (
   pId		numeric
 ) RETURNS 	text
 AS $$
@@ -2937,7 +2825,7 @@ BEGIN
     END IF;
   END IF;
 
-  SELECT sid INTO vSID FROM db.workplace WHERE id = pId;
+  SELECT sid INTO vSID FROM db.interface WHERE id = pId;
 
   RETURN vSID;
 END;
@@ -2946,17 +2834,17 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- GetWorkPlace ----------------------------------------------------------------
+-- GetInterface ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION GetWorkPlace (
+CREATE OR REPLACE FUNCTION GetInterface (
   pSID		text
 ) RETURNS 	numeric
 AS $$
 DECLARE
   nId		numeric;
 BEGIN
-  SELECT id INTO nId FROM db.workplace WHERE SID = pSID;
+  SELECT id INTO nId FROM db.interface WHERE SID = pSID;
 
   RETURN nId;
 END;
@@ -2965,17 +2853,17 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- GetWorkPlaceName ------------------------------------------------------------
+-- GetInterfaceName ------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION GetWorkPlaceName (
+CREATE OR REPLACE FUNCTION GetInterfaceName (
   pId		numeric
 ) RETURNS 	varchar
 AS $$
 DECLARE
   vName		varchar;
 BEGIN
-  SELECT name INTO vName FROM db.workplace WHERE id = pId;
+  SELECT name INTO vName FROM db.interface WHERE id = pId;
 
   RETURN vName;
 END;
@@ -2984,23 +2872,23 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- SetWorkPlace ----------------------------------------------------------------
+-- SetInterface ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION SetWorkPlace (
-  pWorkPlace	numeric,
-  pMember	numeric default current_userid(),
-  pSession	text default current_session()
-) RETURNS	void
+CREATE OR REPLACE FUNCTION SetInterface (
+  pInterface	numeric,
+  pMember	    numeric default current_userid(),
+  pSession	    text default current_session()
+) RETURNS	    void
 AS $$
 DECLARE
-  nId		numeric;
+  nId		    numeric;
   vUserName     varchar;
-  vWorkPlace    text;
+  vInterface    text;
 BEGIN
-  vWorkPlace := GetWorkPlaceName(pWorkPlace);
-  IF vWorkPlace IS NULL THEN
-    PERFORM WorkPlaceError();
+  vInterface := GetInterfaceName(pInterface);
+  IF vInterface IS NULL THEN
+    PERFORM InterfaceError();
   END IF;
 
   vUserName := GetUserName(pMember);
@@ -3009,38 +2897,38 @@ BEGIN
   END IF;
 
   SELECT id INTO nId
-    FROM db.member_workplace
-   WHERE workplace = pWorkPlace
+    FROM db.member_interface
+   WHERE interface = pInterface
      AND member IN (
        SELECT pMember
        UNION ALL
        SELECT userid FROM db.member_group WHERE member = pMember
      );
   IF NOT FOUND THEN
-    PERFORM UserNotMemberWorkPlace(vUserName, vWorkPlace);
+    PERFORM UserNotMemberInterface(vUserName, vInterface);
   END IF;
 
-  UPDATE db.session SET workplace = pWorkPlace WHERE key = pSession;
+  UPDATE db.session SET interface = pInterface WHERE key = pSession;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- SetDefaultWorkPlace ---------------------------------------------------------
+-- SetDefaultInterface ---------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION SetDefaultWorkPlace (
-  pWorkPlace	numeric default current_workplace(),
-  pMember	numeric default current_userid()
-) RETURNS	void
+CREATE OR REPLACE FUNCTION SetDefaultInterface (
+  pInterface	numeric default current_interface(),
+  pMember	    numeric default current_userid()
+) RETURNS	    void
 AS $$
 DECLARE
-  nId		numeric;
+  nId		    numeric;
 BEGIN
   SELECT id INTO nId
-    FROM db.member_workplace
-   WHERE workplace = pWorkPlace
+    FROM db.member_interface
+   WHERE interface = pInterface
      AND member IN (
        SELECT pMember
         UNION ALL
@@ -3048,7 +2936,7 @@ BEGIN
      );
 
   IF found THEN
-    UPDATE db.user_ex SET default_workplace = pWorkPlace WHERE userid = pMember;
+    UPDATE db.user_ex SET default_interface = pInterface WHERE userid = pMember;
   END IF;
 END;
 $$ LANGUAGE plpgsql
@@ -3056,22 +2944,22 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- GetDefaultWorkPlace ---------------------------------------------------------
+-- GetDefaultInterface ---------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION GetDefaultWorkPlace (
-  pMember	numeric default current_userid()
-) RETURNS	numeric
+CREATE OR REPLACE FUNCTION GetDefaultInterface (
+  pMember	    numeric default current_userid()
+) RETURNS	    numeric
 AS $$
 DECLARE
-  nDefault	numeric;
-  nWorkPlace	numeric;
+  nDefault	    numeric;
+  nInterface	numeric;
 BEGIN
-  SELECT default_workplace INTO nDefault FROM db.user_ex WHERE userid = pMember;
+  SELECT default_interface INTO nDefault FROM db.user_ex WHERE userid = pMember;
 
-  SELECT workplace INTO nWorkPlace
-    FROM db.member_workplace
-   WHERE workplace = nDefault
+  SELECT interface INTO nInterface
+    FROM db.member_interface
+   WHERE interface = nDefault
      AND member IN (
        SELECT pMember
         UNION ALL
@@ -3079,10 +2967,10 @@ BEGIN
      );
 
   IF not found THEN
-    SELECT id INTO nWorkPlace FROM workplace WHERE sid = 'W:1:0:0';
+    SELECT id INTO nInterface FROM interface WHERE sid = 'I:1:0:0';
   END IF;
 
-  RETURN nWorkPlace;
+  RETURN nInterface;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
@@ -3188,25 +3076,25 @@ $$ LANGUAGE plpgsql
  * @return {boolean} - Если вернет false вызвать GetErrorMessage для просмотра сообщения об ошибки
  */
 CREATE OR REPLACE FUNCTION SessionLogin (
-  pSession	text,
-  pHost		inet default null
+  pSession	    text,
+  pHost		    inet default null
 )
-RETURNS 	boolean
+RETURNS 	    boolean
 AS $$
 DECLARE
-  profile	db.user%rowtype;
+  profile	    db.user%rowtype;
 
-  nUserId	numeric default null;
-  nDepartment	numeric default null;
-  nWorkPlace	numeric default null;
+  nUserId	    numeric default null;
+  nArea	        numeric default null;
+  nInterface    numeric default null;
 
-  iHost		inet default null;
-  lHost		inet default null;
+  iHost		    inet default null;
+  lHost		    inet default null;
 
-  message	text;
+  message	    text;
 BEGIN
-  SELECT userid, host, department, workplace
-    INTO nUserId, iHost, nDepartment, nWorkPlace
+  SELECT userid, host, area, interface
+    INTO nUserId, iHost, nArea, nInterface
     FROM db.session
    WHERE key = pSession;
 
@@ -3303,8 +3191,8 @@ AS $$
 DECLARE
   profile	db.user%rowtype;
 
-  nDepartment	numeric default null;
-  nWorkPlace	numeric default null;
+  nArea	numeric default null;
+  nInterface	numeric default null;
 
   vSessionKey	text default null;
 BEGIN
@@ -3338,8 +3226,8 @@ BEGIN
     PERFORM PasswordExpiryError();
   END IF;
 
-  nDepartment := GetDefaultDepartment(profile.id);
-  nWorkPlace := GetDefaultWorkPlace(profile.id);
+  nArea := GetDefaultArea(profile.id);
+  nInterface := GetDefaultInterface(profile.id);
 
   IF NOT CheckIpTable(profile.id, pHost) THEN
     PERFORM LoginIpTableError(pHost);
@@ -3349,8 +3237,8 @@ BEGIN
 
     PERFORM CheckSessionLimit(profile.id);
 
-    INSERT INTO db.session (userid, department, workplace, host)
-    VALUES (profile.id, nDepartment, nWorkPlace, pHost)
+    INSERT INTO db.session (userid, area, interface, host)
+    VALUES (profile.id, nArea, nInterface, pHost)
     RETURNING key INTO vSessionKey;
 
     IF vSessionKey IS NULL THEN
@@ -3378,8 +3266,8 @@ BEGIN
 
   END IF;
 
-  INSERT INTO db.log (object, type, code, username, session, text)
-  VALUES (NULL, 'M', 1001, pUserName, vSessionKey, 'Вход в систему.');
+  INSERT INTO db.log (type, code, username, session, text)
+  VALUES ('M', 1001, pUserName, vSessionKey, 'Вход в систему.');
 
   RETURN vSessionKey;
 END;
@@ -3442,8 +3330,8 @@ BEGIN
       END IF;
     END IF;
 
-    INSERT INTO db.log (object, type, code, username, text)
-    VALUES (NULL, 'E', 3001, pUserName, message);
+    INSERT INTO db.log (type, code, username, text)
+    VALUES ('E', 3001, pUserName, message);
   END;
 
   RETURN null;
@@ -3462,15 +3350,15 @@ $$ LANGUAGE plpgsql
  * @return {boolean} - Если вернет false вызвать GetErrorMessage для просмотра сообщения об ошибки
  */
 CREATE OR REPLACE FUNCTION Logout (
-  pSession	text default current_session(),
+  pSession	    text default current_session(),
   pLogoutAll	boolean default false
-) RETURNS 	boolean
+) RETURNS 	    boolean
 AS $$
 DECLARE
-  bValid	boolean;
-  nUserId	numeric;
-  nCount	integer;
-  message	text;
+  bValid	    boolean;
+  nUserId	    numeric;
+  nCount	    integer;
+  message	    text;
 BEGIN
   SELECT userid INTO nUserId FROM db.session WHERE key = pSession;
 
@@ -3495,8 +3383,8 @@ BEGIN
 
     UPDATE db.user_ex SET state = B'000' WHERE userid = nUserId;
 
-    INSERT INTO db.log (object, type, code, username, session, text)
-    VALUES (NULL, 'M', 1002, GetUserName(nUserId), pSession, message || '.');
+    INSERT INTO db.log (type, code, username, session, text)
+    VALUES ('M', 1002, GetUserName(nUserId), pSession, message || '.');
   END IF;
 
   PERFORM SetSessionKey(null);
@@ -3512,8 +3400,8 @@ WHEN others THEN
 
   PERFORM SetErrorMessage(message);
 
-  INSERT INTO db.log (object, type, code, username, session, text)
-  VALUES (NULL, 'E', 3002, GetUserName(nUserId), pSession, 'Выход из системы.');
+  INSERT INTO db.log (type, code, username, session, text)
+  VALUES ('E', 3002, GetUserName(nUserId), pSession, 'Выход из системы.');
 
   RETURN false;
 END;
@@ -3525,24 +3413,26 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-INSERT INTO db.workplace (sid, name, description) VALUES ('W:1:0:0', 'Все', 'Все пользователи системы');
-INSERT INTO db.workplace (sid, name, description) VALUES ('W:1:0:1', 'Администраторы', 'Рабочее место для администраторов системы');
-INSERT INTO db.workplace (sid, name, description) VALUES ('W:1:0:2', 'Менеджеры', 'Рабочее место для менеджеров системы');
-INSERT INTO db.workplace (sid, name, description) VALUES ('W:1:0:3', 'Инженеры', 'Рабочее место для инженеров системы');
-INSERT INTO db.workplace (sid, name, description) VALUES ('W:1:0:4', 'Операторы', 'Рабочее место для операторов системы');
-INSERT INTO db.workplace (sid, name, description) VALUES ('W:1:0:5', 'Пользователи', 'Рабочее место для пользователей системы');
+INSERT INTO db.interface (sid, name, description) VALUES ('I:1:0:0', 'Все', 'Интерфейс для всех');
+INSERT INTO db.interface (sid, name, description) VALUES ('I:1:0:1', 'Администраторы', 'Интерфейс для администраторов');
+INSERT INTO db.interface (sid, name, description) VALUES ('I:1:0:2', 'Операторы', 'Интерфейс для операторов системы');
+INSERT INTO db.interface (sid, name, description) VALUES ('I:1:0:3', 'Пользователи', 'Интерфейс для пользователей');
 
-SELECT CreateDepartment(null, GetDepartmentType('root'), 'root', 'Все подразделения');
+SELECT CreateArea(null, GetAreaType('all'), 'all', 'Все');
+SELECT CreateArea(GetArea('all'), GetAreaType('default'), 'default', 'По умолчанию');
 
-SELECT AddMemberToWorkPlace(CreateGroup('administrator', 'Администраторы', 'Группа для администраторов системы'), GetWorkPlace('W:1:0:1'));
-SELECT AddMemberToWorkPlace(CreateGroup('manager', 'Менеджеры', 'Группа для менеджеров системы'), GetWorkPlace('W:1:0:2'));
-SELECT AddMemberToWorkPlace(CreateGroup('engineer', 'Инженеры', 'Группа для инженеров системы'), GetWorkPlace('W:1:0:3'));
-SELECT AddMemberToWorkPlace(CreateGroup('operator', 'Операторы', 'Группа для операторов системы'), GetWorkPlace('W:1:0:4'));
-SELECT AddMemberToWorkPlace(CreateGroup('user', 'Пользователи', 'Группа для внешних пользователей системы'), GetWorkPlace('W:1:0:5'));
+SELECT AddMemberToInterface(CreateGroup('administrator', 'Администраторы', 'Группа для администраторов системы'), GetInterface('I:1:0:1'));
+SELECT AddMemberToInterface(CreateGroup('operator', 'Операторы', 'Группа для операторов системы'), GetInterface('I:1:0:2'));
+SELECT AddMemberToInterface(CreateGroup('user', 'Пользователи', 'Группа для пользователей системы'), GetInterface('I:1:0:3'));
 
-SELECT AddMemberToGroup(CreateUser('admin', 'admin', 'Администратор', null, 'Администратор системы', true, false, GetDepartment('root')), GetGroup('administrator'));
+SELECT AddMemberToGroup(CreateUser('admin', 'admin', 'Администратор', null,null, 'Администратор системы', true, false, GetArea('all')), GetGroup('administrator'));
 
-SELECT CreateUser('daemon', 'daemon', 'Демон', null, 'Пользователь для API');
-SELECT CreateUser('apibot', 'apibot', 'Системная служба API', null, 'API клиент');
-SELECT CreateUser('mailbot', 'mailbot', 'Почтовый клиент', null, 'Почтовый клиент');
-SELECT CreateUser('ocpp', 'ocpp', 'Системная служба OCPP', null, 'OCPP клиент');
+SELECT CreateUser('daemon', 'daemon', 'Демон', null, null, 'Пользователь для API');
+SELECT CreateUser('apibot', 'apibot', 'Системная служба API', null, null, 'API клиент');
+SELECT CreateUser('mailbot', 'mailbot', 'Почтовый клиент', null, null, 'Почтовый клиент');
+SELECT CreateUser('ocpp', 'ocpp', 'Системная служба OCPP', null, null, 'OCPP клиент');
+
+SELECT AddMemberToArea(GetUser('admin'), GetArea('default'));
+SELECT AddMemberToArea(GetUser('mailbot'), GetArea('default'));
+SELECT AddMemberToArea(GetUser('apibot'), GetArea('default'));
+SELECT AddMemberToArea(GetUser('ocpp'), GetArea('default'));

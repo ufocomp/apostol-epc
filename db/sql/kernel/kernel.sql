@@ -6,7 +6,7 @@ CREATE OR REPLACE FUNCTION CreateClassTree()
 RETURNS void 
 AS $$
 DECLARE
-  nId		numeric[];
+  nId		    numeric[];
   nEssence		numeric;
 BEGIN
   IF session_user <> 'kernel' THEN
@@ -568,6 +568,71 @@ BEGIN
 
           IF rec_action.code = 'drop' THEN
             PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Договор будет уничтожен', 'EventContractDrop();');
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+          END IF;
+
+        END LOOP;
+
+      ELSE
+        -- Для всех остальных события класса родителя
+        FOR rec_action IN SELECT * FROM Action
+        LOOP
+          PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+        END LOOP;
+
+      END IF;
+
+      PERFORM AddDefaultMethods(rec_class.id);
+
+    ELSIF rec_class.essencecode = 'card' THEN
+
+      IF rec_class.code = 'card' THEN
+
+        FOR rec_action IN SELECT * FROM Action
+        LOOP
+
+          IF rec_action.code = 'create' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Карта создана', 'EventCardCreate();');
+          END IF;
+
+          IF rec_action.code = 'open' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Карта открыта', 'EventCardOpen();');
+          END IF;
+
+          IF rec_action.code = 'edit' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Карта изменёна', 'EventCardEdit();');
+          END IF;
+
+          IF rec_action.code = 'save' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Карта сохранёна', 'EventCardSave();');
+          END IF;
+
+          IF rec_action.code = 'enable' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Карта активна', 'EventCardEnable();');
+          END IF;
+
+          IF rec_action.code = 'disable' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Карта заблокирована', 'EventCardDisable();');
+          END IF;
+
+          IF rec_action.code = 'delete' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Карта будет удалёна', 'EventCardDelete();');
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+          END IF;
+
+          IF rec_action.code = 'restore' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Карта восстановлена', 'EventCardDelete();');
+          END IF;
+
+          IF rec_action.code = 'drop' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Карта будет уничтожена', 'EventCardDrop();');
             PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
           END IF;
 

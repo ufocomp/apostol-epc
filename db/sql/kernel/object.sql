@@ -465,6 +465,10 @@ BEGIN
     RETURN true;
   END IF;
 
+  IF IsUserRole(GetGroup('administrator'), pUserId) THEN
+    RETURN true;
+  END IF;
+
   RETURN coalesce(GetObjectMask(pObject, pUserId) & pMask = pMask, false);
 END;
 $$ LANGUAGE plpgsql
@@ -762,7 +766,8 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION ExecuteMethod (
   pObject	numeric,
-  pMethod	numeric
+  pMethod	numeric,
+  pForm		jsonb default null
 ) RETURNS	void
 AS $$
 DECLARE
@@ -770,6 +775,7 @@ DECLARE
   nSaveClass	numeric;
   nSaveMethod	numeric;
   nSaveAction	numeric;
+  pSaveForm	jsonb;
 
   nClass	numeric;
   nAction	numeric;
@@ -778,13 +784,18 @@ BEGIN
   nSaveClass  := context_class();
   nSaveMethod := context_method();
   nSaveAction := context_action();
+  pSaveForm   := context_form();
 
   nClass := GetObjectClass(pObject);
 
   SELECT action INTO nAction FROM db.method WHERE id = pMethod;
 
   PERFORM InitContext(pObject, nClass, pMethod, nAction);
+  PERFORM InitForm(pForm);
+
   PERFORM ExecuteAction(nClass, nAction);
+
+  PERFORM InitForm(pSaveForm);
   PERFORM InitContext(nSaveObject, nSaveClass, nSaveMethod, nSaveAction);
 END;
 $$ LANGUAGE plpgsql
@@ -799,7 +810,8 @@ CREATE OR REPLACE FUNCTION ExecuteMethodForAllChild (
   pObject	numeric default context_object(),
   pClass	numeric default context_class(),
   pMethod	numeric default context_method(),
-  pAction	numeric default context_action()
+  pAction	numeric default context_action(),
+  pForm		jsonb default context_form()
 ) RETURNS	void
 AS $$
 DECLARE
@@ -812,7 +824,7 @@ BEGIN
   LOOP
     nMethod := GetMethod(rec.class, rec.state, pAction);
     IF nMethod IS NOT NULL THEN
-      PERFORM ExecuteMethod(rec.id, nMethod);
+      PERFORM ExecuteMethod(rec.id, nMethod, pForm);
     END IF;
   END LOOP;
 
@@ -828,15 +840,16 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION ExecuteObjectAction (
   pObject	numeric,
-  pAction	numeric
-) RETURNS void
+  pAction	numeric,
+  pForm		jsonb default null
+) RETURNS 	void
 AS $$
 DECLARE
   nMethod	numeric;
 BEGIN
   nMethod := GetObjectMethod(pObject, pAction);
   IF nMethod IS NOT NULL THEN
-    PERFORM ExecuteMethod(pObject, nMethod);
+    PERFORM ExecuteMethod(pObject, nMethod, pForm);
   END IF;
 END;
 $$ LANGUAGE plpgsql

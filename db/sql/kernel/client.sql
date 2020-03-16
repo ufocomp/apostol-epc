@@ -46,12 +46,16 @@ CREATE OR REPLACE FUNCTION ft_client_insert()
 RETURNS trigger AS $$
 DECLARE
 BEGIN
-  IF NEW.id IS NULL OR NEW.id = 0 THEN
-    SELECT NEW.DOCUMENT INTO NEW.id;
+  IF NEW.ID IS NULL OR NEW.ID = 0 THEN
+    SELECT NEW.DOCUMENT INTO NEW.ID;
   END IF;
 
   IF NEW.CODE IS NULL OR NEW.CODE = '' THEN
-    NEW.CODE := 'C:' || LPAD(TRIM(TO_CHAR(NEW.id, '999999999999')), 10, '0');
+    NEW.CODE := 'C:' || LPAD(TRIM(TO_CHAR(NEW.ID, '999999999999')), 10, '0');
+  END IF;
+
+  IF NEW.USERID IS NOT NULL THEN
+    UPDATE db.object SET owner = NEW.USERID WHERE id = NEW.DOCUMENT;
   END IF;
 
   RAISE DEBUG 'Создан клиент Id: %', NEW.id;
@@ -82,6 +86,7 @@ BEGIN
     IF nParent IS NOT NULL THEN
       PERFORM CheckObjectAccess(nParent, B'010', NEW.USERID);
     END IF;
+    UPDATE db.object SET owner = NEW.USERID WHERE id = NEW.DOCUMENT;
   END IF;
 
   RAISE DEBUG 'Обнавлён клиент Id: %', NEW.id;
@@ -680,7 +685,7 @@ CREATE OR REPLACE VIEW ObjectClient (Id, Object, Parent,
   State, StateCode, StateLabel, LastUpdate,
   Owner, OwnerCode, OwnerName, Created,
   Oper, OperCode, OperName, OperDate,
-  Department, DepartmentCode, DepartmentName
+  Area, AreaCode, AreaName
 )
 AS
   SELECT c.id, d.object, d.parent,
@@ -696,7 +701,7 @@ AS
          d.state, d.statecode, d.statelabel, d.lastupdate,
          d.owner, d.ownercode, d.ownername, d.created,
          d.oper, d.opercode, d.opername, d.operdate,
-         d.department, d.departmentcode, d.departmentname
+         d.area, d.areacode, d.areaname
     FROM Client c INNER JOIN ObjectDocument d ON d.id = c.document;
 
 GRANT SELECT ON ObjectClient TO administrator;

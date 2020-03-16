@@ -81,7 +81,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
-CREATE OR REPLACE FUNCTION ChangeDepartmentError() RETURNS void
+CREATE OR REPLACE FUNCTION ChangeAreaError() RETURNS void
 AS $$
 BEGIN
   RAISE EXCEPTION 'Недопустимо изменение подразделения документа.';
@@ -125,21 +125,21 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
-CREATE OR REPLACE FUNCTION RootDepartmentError() RETURNS void
+CREATE OR REPLACE FUNCTION RootAreaError() RETURNS void
 AS $$
 BEGIN
   RAISE EXCEPTION 'Запрещены операции с документами в корневом подразделении.';
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
-CREATE OR REPLACE FUNCTION DepartmentError() RETURNS void
+CREATE OR REPLACE FUNCTION AreaError() RETURNS void
 AS $$
 BEGIN
   RAISE EXCEPTION 'Не найдено подразделение с указанным идентификатором.';
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
-CREATE OR REPLACE FUNCTION IncorrectDepartmentCode (
+CREATE OR REPLACE FUNCTION IncorrectAreaCode (
   pCode		varchar
 ) RETURNS	void
 AS $$
@@ -148,30 +148,30 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
-CREATE OR REPLACE FUNCTION UserNotMemberDepartment (
+CREATE OR REPLACE FUNCTION UserNotMemberArea (
   pUser		varchar,
-  pDepartment	varchar
+  pArea	    varchar
 ) RETURNS	void
 AS $$
 BEGIN
-  RAISE EXCEPTION 'Пользователь "%" не является членом подразделения "%".', pUser, pDepartment;
+  RAISE EXCEPTION 'Пользователь "%" не является членом подразделения "%".', pUser, pArea;
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
-CREATE OR REPLACE FUNCTION WorkPlaceError() RETURNS void
+CREATE OR REPLACE FUNCTION InterfaceError() RETURNS void
 AS $$
 BEGIN
   RAISE EXCEPTION 'Не найдено рабочее место с указанным идентификатором.';
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
-CREATE OR REPLACE FUNCTION UserNotMemberWorkPlace (
-  pUser		varchar,
-  pWorkPlace	varchar
-) RETURNS	void
+CREATE OR REPLACE FUNCTION UserNotMemberInterface (
+  pUser		    varchar,
+  pInterface	varchar
+) RETURNS	    void
 AS $$
 BEGIN
-  RAISE EXCEPTION 'Пользователь "%" не является членом рабочего места "%".', pUser, pWorkPlace;
+  RAISE EXCEPTION 'Пользователь "%" не является членом рабочего места "%".', pUser, pInterface;
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 

@@ -97,6 +97,7 @@ namespace Apostol {
             static void DebugReply(CReply *AReply);
             static void DebugConnection(CHTTPServerConnection *AConnection);
 
+            static CString QuoteJsonString(const CString &String);
             static void ExceptionToJson(int ErrorCode, const std::exception &AException, CString& Json);
 
             static void PQResultToJson(CPQResult *Result, CString& Json);

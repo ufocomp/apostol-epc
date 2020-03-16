@@ -5,21 +5,21 @@
 CREATE TABLE db.document (
     id			numeric(12) PRIMARY KEY,
     object		numeric(12) NOT NULL,
-    department		numeric(12) NOT NULL,
+    area		numeric(12) NOT NULL,
     description		text,
     CONSTRAINT fk_document_object FOREIGN KEY (object) REFERENCES db.object(id),
-    CONSTRAINT fk_document_department FOREIGN KEY (department) REFERENCES db.department(id)
+    CONSTRAINT fk_document_area FOREIGN KEY (area) REFERENCES db.area(id)
 );
 
 COMMENT ON TABLE db.document IS 'Документ.';
 
 COMMENT ON COLUMN db.document.id IS 'Идентификатор';
 COMMENT ON COLUMN db.document.object IS 'Объект';
-COMMENT ON COLUMN db.document.department IS 'Подразделение';
+COMMENT ON COLUMN db.document.area IS 'Подразделение';
 COMMENT ON COLUMN db.document.description IS 'Описание';
 
 CREATE INDEX ON db.document (object);
-CREATE INDEX ON db.document (department);
+CREATE INDEX ON db.document (area);
 
 --------------------------------------------------------------------------------
 
@@ -31,10 +31,10 @@ BEGIN
     SELECT NEW.OBJECT INTO NEW.ID;
   END IF;
 
-  NEW.DEPARTMENT := current_department();
+  NEW.AREA := current_area();
 
-  IF NEW.DEPARTMENT = GetDepartment('root') THEN
-    PERFORM RootDepartmentError();
+  IF NEW.AREA = GetArea('all') THEN
+    PERFORM RootAreaError();
   END IF;
 
   RAISE DEBUG 'Создан документ Id: %', NEW.ID;
@@ -57,8 +57,8 @@ CREATE TRIGGER t_document_insert
 CREATE OR REPLACE FUNCTION db.ft_document_update()
 RETURNS trigger AS $$
 BEGIN
-  IF OLD.DEPARTMENT <> NEW.DEPARTMENT THEN
-    SELECT ChangeDepartmentError();
+  IF OLD.AREA <> NEW.AREA THEN
+    SELECT ChangeAreaError();
   END IF;
 
   RAISE DEBUG 'Изменён документ Id: %', NEW.ID;
@@ -106,19 +106,19 @@ $$ LANGUAGE plpgsql
 -- Document --------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW Document (Id, Object, Department, Description,
-  DepartmentCode, DepartmentName
+CREATE OR REPLACE VIEW Document (Id, Object, Area, Description,
+  AreaCode, AreaName
 ) AS
-  WITH RECURSIVE dep_tree(id) AS (
-    SELECT id FROM department WHERE id = current_department()
+  WITH RECURSIVE area_tree(id) AS (
+    SELECT id FROM db.area WHERE id = current_area()
      UNION ALL
-    SELECT dp.id
-      FROM db.department dp, dep_tree dtr
-     WHERE dp.parent = dtr.id
+    SELECT a.id
+      FROM db.area a, area_tree t
+     WHERE a.parent = t.id
   )
-  SELECT d.id, d.object, d.department, d.description, p.code, p.name
-    FROM db.document d INNER JOIN dep_tree dtr    ON d.department = dtr.id
-                       INNER JOIN db.department p ON p.id = d.department;
+  SELECT d.id, d.object, d.area, d.description, a.code, a.name
+    FROM db.document d INNER JOIN area_tree t ON d.area = t.id
+                       INNER JOIN db.area a ON a.id = d.area;
 
 GRANT SELECT ON Document TO administrator;
 
@@ -135,12 +135,14 @@ CREATE OR REPLACE VIEW ObjectDocument (Id, Object, Parent,
   State, StateCode, StateLabel, LastUpdate,
   Owner, OwnerCode, OwnerName, Created,
   Oper, OperCode, OperName, OperDate,
-  Department, DepartmentCode, DepartmentName
+  Area, AreaCode, AreaName
 )
 AS
+/*
   WITH cu AS (
     SELECT current_userid() AS owner
   )
+*/
   SELECT d.id, d.object, o.parent,
          o.essence, o.essencecode, o.essencename,
          o.class, o.classcode, o.classlabel,
@@ -150,8 +152,8 @@ AS
          o.state, o.statecode, o.statelabel, o.lastupdate,
          o.owner, o.ownercode, o.ownername, o.created,
          o.oper, o.opercode, o.opername, o.operdate,
-         d.department, d.departmentcode, d.departmentname
-    FROM Document d INNER JOIN Object o        ON o.id = d.object
-                    INNER JOIN cu              ON o.owner = cu.owner;
+         d.area, d.areacode, d.areaname
+    FROM Document d INNER JOIN Object o ON o.id = d.object;
+--                    INNER JOIN cu              ON o.owner = cu.owner;
 
 GRANT SELECT ON ObjectDocument TO administrator;
