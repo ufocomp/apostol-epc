@@ -4,12 +4,11 @@
 
 CREATE TABLE db.client (
     Id			numeric(12) PRIMARY KEY,
-    Document		numeric(12) NOT NULL,
+    Document	numeric(12) NOT NULL,
     Code		varchar(30) NOT NULL,
     UserId		numeric(12),
     Phone		jsonb,
     Email		jsonb,
-    Address		jsonb,
     Info		jsonb,
     CONSTRAINT fk_client_document FOREIGN KEY (document) REFERENCES db.document(id),
     CONSTRAINT fk_client_user FOREIGN KEY (userid) REFERENCES db.user(id)
@@ -25,7 +24,6 @@ COMMENT ON COLUMN db.client.code IS 'Код клиента';
 COMMENT ON COLUMN db.client.userid IS 'Учетная запись клиента';
 COMMENT ON COLUMN db.client.phone IS 'Справочник телефонов';
 COMMENT ON COLUMN db.client.email IS 'Электронные адреса';
-COMMENT ON COLUMN db.client.address IS 'Почтовые адреса';
 COMMENT ON COLUMN db.client.info IS 'Дополнительная информация';
 
 --------------------------------------------------------------------------------
@@ -37,7 +35,6 @@ CREATE UNIQUE INDEX ON db.client (code);
 
 CREATE INDEX ON db.client USING GIN (phone jsonb_path_ops);
 CREATE INDEX ON db.client USING GIN (email jsonb_path_ops);
-CREATE INDEX ON db.client USING GIN (address jsonb_path_ops);
 CREATE INDEX ON db.client USING GIN (info jsonb_path_ops);
 
 --------------------------------------------------------------------------------
@@ -109,14 +106,14 @@ CREATE TRIGGER t_client_update
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.client_name (
-    Id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
-    Client		numeric(12) NOT NULL,
-    Lang		numeric(12) NOT NULL,
-    Name		text NOT NULL,
-    Short		text,
-    First		text,
-    Last		text,
-    Middle		text,
+    Id			    numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
+    Client		    numeric(12) NOT NULL,
+    Lang		    numeric(12) NOT NULL,
+    Name		    text NOT NULL,
+    Short		    text,
+    First		    text,
+    Last		    text,
+    Middle		    text,
     ValidFromDate	timestamp DEFAULT NOW() NOT NULL,
     ValidToDate		timestamp DEFAULT TO_DATE('4433-12-31', 'YYYY-MM-DD') NOT NULL,
     CONSTRAINT fk_client_name_client FOREIGN KEY (client) REFERENCES db.client(id),
@@ -230,22 +227,22 @@ CREATE TRIGGER t_client_name_insert_update
  * @return {(void|exception)}
  */
 CREATE OR REPLACE FUNCTION NewClientName (
-  pClient	numeric,
-  pName		text,
-  pShort	text default null,
-  pFirst	text default null,
-  pLast		text default null,
-  pMiddle	text default null,
-  pLangCode	varchar default language_code(),
-  pDateFrom	timestamp default oper_date()
-) RETURNS 	void
+  pClient	    numeric,
+  pName		    text,
+  pShort	    text default null,
+  pFirst	    text default null,
+  pLast		    text default null,
+  pMiddle	    text default null,
+  pLangCode	    varchar default language_code(),
+  pDateFrom	    timestamp default oper_date()
+) RETURNS 	    void
 AS $$
 DECLARE
-  nId		numeric;
-  nLang		numeric;
+  nId		    numeric;
+  nLang		    numeric;
 
-  dtDateFrom 	timestamp;
-  dtDateTo 	timestamp;
+  dtDateFrom    timestamp;
+  dtDateTo 	    timestamp;
 BEGIN
   nId := null;
 
@@ -302,23 +299,23 @@ $$ LANGUAGE plpgsql
  * @return {(void|exception)}
  */
 CREATE OR REPLACE FUNCTION EditClientName (
-  pClient	numeric,
-  pName		text,
-  pShort	text default null,
-  pFirst	text default null,
-  pLast		text default null,
-  pMiddle	text default null,
-  pLangCode	varchar default language_code(),
-  pDateFrom	timestamp default oper_date()
-) RETURNS 	void
+  pClient	    numeric,
+  pName		    text,
+  pShort	    text default null,
+  pFirst	    text default null,
+  pLast		    text default null,
+  pMiddle	    text default null,
+  pLangCode	    varchar default language_code(),
+  pDateFrom	    timestamp default oper_date()
+) RETURNS 	    void
 AS $$
 DECLARE
-  nMethod	numeric;
+  nMethod	    numeric;
 
-  vHash		text;
-  cHash		text;
+  vHash		    text;
+  cHash		    text;
 
-  r		record;
+  r		        record;
 BEGIN
   SELECT * INTO r FROM GetClientNames(pClient, pLangCode, pDateFrom);
 
@@ -357,18 +354,14 @@ $$ LANGUAGE plpgsql
  * @out param {text} short - Краткое наименование компании
  */
 CREATE OR REPLACE FUNCTION GetClientNames (
-  pClient	numeric,
-  pLangCode	varchar default language_code(),
-  pDate		timestamp default oper_date(),
-  OUT name	text,
-  OUT short	text,
-  OUT first	text,
-  OUT last	text,
-  OUT middle	text
-) RETURNS	record
+  pClient	    numeric,
+  pLangCode	    varchar default language_code(),
+  pDate		    timestamp default oper_date()
+) RETURNS	    db.client_name
 AS $$
 DECLARE
-  nLang		numeric;
+  result        db.client_name%rowtype;
+  nLang		    numeric;
 BEGIN
   SELECT id INTO nLang FROM db.language WHERE code = coalesce(pLangCode, 'ru');
 
@@ -376,13 +369,14 @@ BEGIN
     PERFORM IncorrectLanguageCode(pLangCode);
   END IF;
 
-  SELECT n.name, n.short, n.first, n.last, n.middle
-    INTO name, short, first, last, middle
+  SELECT * INTO result
     FROM db.client_name n
    WHERE n.client = pClient
      AND n.lang = nLang
      AND n.ValidFromDate <= pDate
      AND n.ValidToDate > pDate;
+
+  RETURN result;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
@@ -443,6 +437,133 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
+-- db.client_address -----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE TABLE db.client_address (
+    Id			    numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
+    Client		    numeric(12) NOT NULL,
+    Type		    numeric(12) NOT NULL,
+    Address		    numeric(12) NOT NULL,
+    ValidFromDate	timestamp DEFAULT NOW() NOT NULL,
+    ValidToDate		timestamp DEFAULT TO_DATE('4433-12-31', 'YYYY-MM-DD') NOT NULL,
+    CONSTRAINT fk_client_address_client FOREIGN KEY (client) REFERENCES db.client(id),
+    CONSTRAINT fk_client_address_type FOREIGN KEY (type) REFERENCES db.type(id),
+    CONSTRAINT fk_client_address_address FOREIGN KEY (address) REFERENCES db.address(id)
+);
+
+--------------------------------------------------------------------------------
+
+COMMENT ON TABLE db.client_address IS 'Адреса клиента.';
+
+COMMENT ON COLUMN db.client_address.client IS 'Идентификатор клиента';
+COMMENT ON COLUMN db.client_address.type IS 'Идентификатор типа адреса';
+COMMENT ON COLUMN db.client_address.address IS 'Идентификатор адреса';
+COMMENT ON COLUMN db.client_address.validfromdate IS 'Дата начала периода действия';
+COMMENT ON COLUMN db.client_address.validtodate IS 'Дата окончания периода действия';
+
+--------------------------------------------------------------------------------
+
+CREATE UNIQUE INDEX ON db.client_address (client, type, validfromdate, validtodate);
+
+CREATE INDEX ON db.client_address (client);
+CREATE INDEX ON db.client_address (type);
+CREATE INDEX ON db.client_address (address);
+
+--------------------------------------------------------------------------------
+-- FUNCTION AddClientAddress ---------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Добавляет/обновляет адрес клиента.
+ * @param {numeric} pClient - Идентификатор клиента
+ * @param {numeric} pAddress - Идентификатор адреса
+ * @param {timestamp} pDateFrom - Дата изменения
+ * @return {void}
+ */
+CREATE OR REPLACE FUNCTION AddClientAddress (
+  pClient	    numeric,
+  pAddress	    numeric,
+  pDateFrom	    timestamp default oper_date()
+) RETURNS 	    numeric
+AS $$
+DECLARE
+  nId		    numeric;
+  nType		    numeric;
+
+  dtDateFrom    timestamp;
+  dtDateTo 	    timestamp;
+BEGIN
+  nId := null;
+
+  SELECT type INTO nType FROM db.object WHERE id = pAddress;
+
+  -- получим дату значения в текущем диапозоне дат
+  SELECT max(ValidFromDate), max(ValidToDate) INTO dtDateFrom, dtDateTo
+    FROM db.client_address
+   WHERE Client = pClient
+     AND Type = nType
+     AND ValidFromDate <= pDateFrom
+     AND ValidToDate > pDateFrom;
+
+  IF dtDateFrom = pDateFrom THEN
+    -- обновим значение в текущем диапозоне дат
+    UPDATE db.client_address SET address = pAddress
+     WHERE Client = pClient
+       AND Type = nType
+       AND ValidFromDate <= pDateFrom
+       AND ValidToDate > pDateFrom;
+  ELSE
+    -- обновим дату значения в текущем диапозоне дат
+    UPDATE db.client_address SET ValidToDate = pDateFrom
+     WHERE Client = pClient
+       AND Type = nType
+       AND ValidFromDate <= pDateFrom
+       AND ValidToDate > pDateFrom;
+
+    INSERT INTO db.client_address (client, type, address, validfromdate, validtodate)
+    VALUES (pClient, nType, pAddress, pDateFrom, coalesce(dtDateTo, MAXDATE()))
+    RETURNING id INTO nId;
+  END IF;
+
+  RETURN nId;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- FUNCTION GetClientAddress ---------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает адрес клиента.
+ * @param {numeric} pClient - Идентификатор клиента
+ * @param {numeric} pType - Идентификатор типа адреса
+ * @param {timestamp} pDate - Дата
+ * @return {text}
+ */
+CREATE OR REPLACE FUNCTION GetClientAddress (
+  pClient	numeric,
+  pType	    numeric,
+  pDate		timestamp default oper_date()
+) RETURNS	text
+AS $$
+DECLARE
+  nAddress		numeric;
+BEGIN
+  SELECT Address INTO nAddress
+    FROM db.client_address
+   WHERE Client = pClient
+     AND Type = pType
+     AND ValidFromDate <= pDate
+     AND ValidToDate > pDate;
+
+  RETURN GetAddressString(nAddress);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
 -- CreateClient ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
@@ -459,24 +580,23 @@ $$ LANGUAGE plpgsql
  * @return {numeric} - Id клиента
  */
 CREATE OR REPLACE FUNCTION CreateClient (
-  pParent	numeric,
-  pType		numeric,
-  pCode		varchar,
-  pUserId	numeric default null,
-  pPhone	jsonb default null,
-  pEmail	jsonb default null,
-  pAddress	jsonb default null,
+  pParent	    numeric,
+  pType		    numeric,
+  pCode		    varchar,
+  pUserId	    numeric default null,
+  pPhone	    jsonb default null,
+  pEmail	    jsonb default null,
   pInfo         jsonb default null,
   pDescription	text default null
-) RETURNS 	numeric
+) RETURNS 	    numeric
 AS $$
 DECLARE
-  nId		numeric;
-  nClient	numeric;
-  nDocument	numeric;
+  nId		    numeric;
+  nClient	    numeric;
+  nDocument	    numeric;
 
-  nClass	numeric;
-  nMethod	numeric;
+  nClass	    numeric;
+  nMethod	    numeric;
 BEGIN
   SELECT class INTO nClass FROM type WHERE id = pType;
 
@@ -492,8 +612,8 @@ BEGIN
 
   nDocument := CreateDocument(pParent, pType, null, pDescription);
 
-  INSERT INTO db.client (id, document, code, userid, phone, email, address, info)
-  VALUES (nDocument, nDocument, pCode, pUserId, pPhone, pEmail, pAddress, pInfo)
+  INSERT INTO db.client (id, document, code, userid, phone, email, info)
+  VALUES (nDocument, nDocument, pCode, pUserId, pPhone, pEmail, pInfo)
   RETURNING id INTO nClient;
 
   nMethod := GetMethod(nClass, null, GetAction('create'));
@@ -517,34 +637,32 @@ $$ LANGUAGE plpgsql
  * @param {numeric} pUserId - Пользователь (users): Учётная запись клиента
  * @param {jsonb} pPhone - Справочник телефонов
  * @param {jsonb} pEmail - Электронные адреса
- * @param {jsonb} pAddress - Почтовые адреса
  * @param {jsonb} pInfo - Дополнительная информация
  * @param {text} pDescription - Описание
  * @return {void}
  */
 CREATE OR REPLACE FUNCTION EditClient (
-  pId		numeric,
-  pParent	numeric default null,
-  pType		numeric default null,
-  pCode		varchar default null,
-  pUserId	numeric default null,
-  pPhone	jsonb default null,
-  pEmail	jsonb default null,
-  pAddress	jsonb default null,
+  pId		    numeric,
+  pParent	    numeric default null,
+  pType		    numeric default null,
+  pCode		    varchar default null,
+  pUserId	    numeric default null,
+  pPhone	    jsonb default null,
+  pEmail	    jsonb default null,
   pInfo         jsonb default null,
   pDescription	text default null
-) RETURNS 	void
+) RETURNS 	    void
 AS $$
 DECLARE
-  nId		numeric;
-  nClass	numeric;
-  nMethod	numeric;
+  nId		    numeric;
+  nClass	    numeric;
+  nMethod	    numeric;
 
   -- current
-  cParent	numeric;
-  cType		numeric;
-  cCode		varchar;
-  cUserId	numeric;
+  cParent	    numeric;
+  cType		    numeric;
+  cCode		    varchar;
+  cUserId	    numeric;
   cDescription	text;
 BEGIN
   SELECT parent, type INTO cParent, cType FROM db.object WHERE id = pId;
@@ -579,10 +697,9 @@ BEGIN
   UPDATE db.client
      SET Code = pCode,
          UserId = CheckNull(pUserId),
-         Phone = coalesce(pPhone, Phone),
-         Email = coalesce(pEmail, Email),
-         Address = coalesce(pAddress, Address),
-         Info = coalesce(pInfo, Info)
+         Phone = CheckNull(coalesce(pPhone, Phone, '<null>')),
+         Email = CheckNull(coalesce(pEmail, Email, '<null>')),
+         Info = CheckNull(coalesce(pInfo, Info, '<null>'))
    WHERE Id = pId;
 
   nClass := GetObjectClass(pId);
@@ -644,27 +761,44 @@ AS
 GRANT SELECT ON ClientName TO administrator;
 
 --------------------------------------------------------------------------------
+-- ClientAddress ---------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW ClientAddress (Id, Client, Type, TypeCode, TypeName, TypeDescription,
+    Address, Code, Index, Country, Region, District, City, Settlement, Street, House,
+    Building, Structure, Apartment, SortNum,
+    ValidFromDate, ValidToDate
+)
+AS
+  SELECT ca.id, ca.client, ca.type, t.code, t.name, t.description, ca.address,
+         a.code, a.index, a.country, a.region, a.district, a.city, a.settlement, a.street, a.house,
+         a.building, a.structure, a.apartment, a.sortnum,
+         ca.validfromdate, ca.validtodate
+    FROM db.client_address ca INNER JOIN db.type t ON t.id = ca.type
+                              INNER JOIN db.address a ON a.id = ca.address;
+
+GRANT SELECT ON ClientAddress TO administrator;
+
+--------------------------------------------------------------------------------
 -- Client ----------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE VIEW Client (Id, Document, Code, UserId,
   FullName, ShortName, LastName, FirstName, MiddleName,
-  Phone, Email, Address, Info,
+  Phone, Email, Info,
   Lang, LangCode, LangName, LangDesc
 )
 AS
-  WITH cl AS (
-    SELECT id FROM db.language WHERE code = 'ru'
+  WITH lc AS (
+    SELECT id FROM db.language WHERE code = language_code()
   )
   SELECT c.id, c.document, c.code, c.userid,
          n.name, n.short, n.last, n.first, n.middle,
-         c.phone, c.email, c.address, c.info,
+         c.phone, c.email, c.info,
          n.lang, l.code, l.name, l.description
-    FROM db.client c INNER JOIN db.client_name n ON n.client = c.id
-                     INNER JOIN db.language l    ON l.id = n.lang
-                     INNER JOIN cl               ON l.id = cl.id
-  WHERE n.validfromdate <= now()
-     AND n.validtodate > now();
+    FROM db.client c INNER JOIN db.client_name n ON n.client = c.id AND n.validfromdate <= now() AND n.validtodate > now()
+                     INNER JOIN lc               ON n.lang = lc.id
+                     INNER JOIN db.language l    ON l.id = n.lang;
 
 GRANT SELECT ON Client TO administrator;
 
@@ -678,7 +812,7 @@ CREATE OR REPLACE VIEW ObjectClient (Id, Object, Parent,
   Type, TypeCode, TypeName, TypeDescription,
   Code, UserId,
   FullName, ShortName, LastName, FirstName, MiddleName,
-  Phone, Email, Address, Info,
+  Phone, Email, Info,
   Lang, LangCode, LangName, LangDesc,
   Label, Description,
   StateType, StateTypeCode, StateTypeName,
@@ -694,7 +828,7 @@ AS
          d.type, d.typecode, d.typename, d.typedescription,
          c.code, c.userid,
          c.fullname, c.shortname, c.lastname, c.firstname, c.middlename,
-         c.phone, c.email, c.address, c.info,
+         c.phone, c.email, c.info,
          c.lang, c.langcode, c.langname, c.langdesc,
          d.label, d.description,
          d.statetype, d.statetypecode, d.statetypename,

@@ -53,6 +53,7 @@ display_help()
     display_message "  --make"
     display_message "  --update"
     display_message "  --patch"
+    display_message "  --kladr"
     display_message "  --api"
 }
 
@@ -74,6 +75,7 @@ for OPTION in "$@"; do
         (--make)	SCRIPT="make";;
         (--update)	SCRIPT="update";;
         (--patch)	SCRIPT="patch";;
+        (--kladr)	SCRIPT="kladr";;
         (--api)		SCRIPT="api";;
     esac
 done

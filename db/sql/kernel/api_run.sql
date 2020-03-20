@@ -626,7 +626,7 @@ BEGIN
 
       FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, code varchar)
       LOOP
-        FOR e IN SELECT * FROM api.area_member(coalesce(r.id, GetDepartment(r.code)))
+        FOR e IN SELECT * FROM api.area_member(coalesce(r.id, GetArea(r.code)))
         LOOP
           RETURN NEXT row_to_json(e);
         END LOOP;
@@ -643,7 +643,7 @@ BEGIN
 
       FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, sid varchar)
       LOOP
-        FOR e IN SELECT * FROM api.interface_member(coalesce(r.id, GetWorkPlace(r.sid)))
+        FOR e IN SELECT * FROM api.interface_member(coalesce(r.id, GetInterface(r.sid)))
         LOOP
           RETURN NEXT row_to_json(e);
         END LOOP;
@@ -1782,14 +1782,14 @@ BEGIN
 
         FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, code varchar, name varchar, week numeric, dayoff jsonb, holiday jsonb, workstart interval, workcount interval, reststart interval, restcount interval, description text)
         LOOP
-          RETURN NEXT row_to_json(api.upd_calendar(r.id, r.code, r.name, r.week, r.dayoff, r.holiday, r.workstart, r.workcount, r.reststart, r.restcount, r.description));
+          RETURN NEXT row_to_json(api.update_calendar(r.id, r.code, r.name, r.week, r.dayoff, r.holiday, r.workstart, r.workcount, r.reststart, r.restcount, r.description));
         END LOOP;
 
       ELSE
 
         FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, code varchar, name varchar, week numeric, dayoff jsonb, holiday jsonb, workstart interval, workcount interval, reststart interval, restcount interval, description text)
         LOOP
-          RETURN NEXT row_to_json(api.upd_calendar(r.id, r.code, r.name, r.week, r.dayoff, r.holiday, r.workstart, r.workcount, r.reststart, r.restcount, r.description));
+          RETURN NEXT row_to_json(api.update_calendar(r.id, r.code, r.name, r.week, r.dayoff, r.holiday, r.workstart, r.workcount, r.reststart, r.restcount, r.description));
         END LOOP;
 
       END IF;
@@ -2011,6 +2011,288 @@ BEGIN
 
       END IF;
 
+    WHEN '/address/tree/get' THEN
+
+      IF pJson IS NULL THEN
+        PERFORM JsonIsEmpty();
+      END IF;
+
+      arKeys := array_cat(arKeys, ARRAY['id', 'fields']);
+      PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+
+      IF jsonb_typeof(pJson) = 'array' THEN
+
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, fields jsonb)
+        LOOP
+          FOR e IN EXECUTE format('SELECT %s FROM api.get_address_tree($1)', JsonbToFields(r.fields, GetColumns('address_tree', 'api'))) USING r.id
+          LOOP
+            RETURN NEXT row_to_json(e);
+          END LOOP;
+        END LOOP;
+
+      ELSE
+
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, fields jsonb)
+        LOOP
+          FOR e IN EXECUTE format('SELECT %s FROM api.get_address_tree($1)', JsonbToFields(r.fields, GetColumns('address_tree', 'api'))) USING r.id
+          LOOP
+            RETURN NEXT row_to_json(e);
+          END LOOP;
+        END LOOP;
+
+      END IF;
+
+    WHEN '/address/tree/list' THEN
+
+      IF pJson IS NOT NULL THEN
+        arKeys := array_cat(arKeys, ARRAY['fields', 'search', 'filter', 'reclimit', 'recoffset', 'orderby', 'usecache']);
+        PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+      ELSE
+        pJson := '{}';
+      END IF;
+
+      FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(fields jsonb, search jsonb, filter jsonb, reclimit integer, recoffset integer, orderby jsonb, usecache boolean)
+      LOOP
+        FOR e IN EXECUTE format('SELECT %s FROM api.list_address_tree($1, $2, $3, $4, $5)', JsonbToFields(r.fields, GetColumns('address_tree', 'api'))) USING r.search, r.filter, r.reclimit, r.recoffset, r.orderby
+        LOOP
+          RETURN NEXT row_to_json(e);
+        END LOOP;
+      END LOOP;
+
+    WHEN '/address/tree/history' THEN
+
+      IF pJson IS NOT NULL THEN
+        arKeys := array_cat(arKeys, ARRAY['id', 'code']);
+        PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+      ELSE
+        pJson := '{}';
+      END IF;
+
+      FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, code varchar)
+      LOOP
+        FOR e IN SELECT api.get_address_tree_history(coalesce(r.id, GetAddressTreeId(r.code))) AS history
+        LOOP
+          RETURN NEXT row_to_json(e)->>'history';
+        END LOOP;
+      END LOOP;
+
+    WHEN '/address/tree/string' THEN
+
+      IF pJson IS NULL THEN
+        PERFORM JsonIsEmpty();
+      END IF;
+
+      arKeys := array_cat(arKeys, ARRAY['code', 'short', 'level']);
+      PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+
+      IF jsonb_typeof(pJson) = 'array' THEN
+
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(code varchar, short integer, level integer)
+        LOOP
+          RETURN NEXT row_to_json(api.get_address_tree_string(r.code, coalesce(r.short, 0), coalesce(r.level, 0)));
+        END LOOP;
+
+      ELSE
+
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(code varchar, short integer, level integer)
+        LOOP
+          RETURN NEXT row_to_json(api.get_address_tree_string(r.code, coalesce(r.short, 0), coalesce(r.level, 0)));
+        END LOOP;
+
+      END IF;
+
+    WHEN '/address/type' THEN
+
+      FOR e IN SELECT * FROM api.type(GetEssence('address'))
+      LOOP
+        RETURN NEXT row_to_json(e);
+      END LOOP;
+
+    WHEN '/address/method' THEN
+
+      IF pJson IS NULL THEN
+        PERFORM JsonIsEmpty();
+      END IF;
+
+      arKeys := array_cat(arKeys, ARRAY['id']);
+      PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+
+      IF jsonb_typeof(pJson) = 'array' THEN
+
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric)
+        LOOP
+          FOR e IN SELECT r.id, api.get_method(GetObjectClass(r.id), GetObjectState(r.id)) as method FROM api.get_address(r.id) ORDER BY id
+          LOOP
+            RETURN NEXT row_to_json(e);
+          END LOOP;
+        END LOOP;
+
+      ELSE
+
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric)
+        LOOP
+          FOR e IN SELECT r.id, api.get_method(GetObjectClass(r.id), GetObjectState(r.id)) as method FROM api.get_address(r.id) ORDER BY id
+          LOOP
+            RETURN NEXT row_to_json(e);
+          END LOOP;
+        END LOOP;
+
+      END IF;
+
+    WHEN '/address/count' THEN
+
+      IF pJson IS NOT NULL THEN
+        arKeys := array_cat(arKeys, ARRAY['search', 'filter', 'reclimit', 'recoffset', 'orderby']);
+        PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+      ELSE
+        pJson := '{}';
+      END IF;
+
+      IF jsonb_typeof(pJson) = 'array' THEN
+
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(search jsonb, filter jsonb, reclimit integer, recoffset integer, orderby jsonb)
+        LOOP
+          FOR e IN SELECT count(*) FROM api.list_address(r.search, r.filter, r.reclimit, r.recoffset, r.orderby)
+          LOOP
+            RETURN NEXT row_to_json(e);
+          END LOOP;
+        END LOOP;
+
+      ELSE
+
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(search jsonb, filter jsonb, reclimit integer, recoffset integer, orderby jsonb)
+        LOOP
+          FOR e IN SELECT count(*) FROM api.list_address(r.search, r.filter, r.reclimit, r.recoffset, r.orderby)
+          LOOP
+            RETURN NEXT row_to_json(e);
+          END LOOP;
+        END LOOP;
+
+      END IF;
+
+    WHEN '/address/add' THEN
+
+      IF pJson IS NULL THEN
+        PERFORM JsonIsEmpty();
+      END IF;
+
+      arKeys := array_cat(arKeys, ARRAY['parent', 'type', 'code', 'index', 'country', 'region', 'district', 'city', 'settlement', 'street', 'house', 'building', 'structure', 'apartment', 'address']);
+      PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+
+      IF jsonb_typeof(pJson) = 'array' THEN
+
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(parent numeric, type varchar, code varchar, index varchar, country varchar, region varchar, district varchar, city varchar, settlement varchar, street varchar, house varchar, building varchar, structure varchar, apartment varchar, address text)
+        LOOP
+          RETURN NEXT row_to_json(api.add_address(r.parent, r.type, r.code, r.index, r.country, r.region, r.district, r.city, r.settlement, r.street, r.house, r.building, r.structure, r.apartment, r.address));
+        END LOOP;
+
+      ELSE
+
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(parent numeric, type varchar, code varchar, index varchar, country varchar, region varchar, district varchar, city varchar, settlement varchar, street varchar, house varchar, building varchar, structure varchar, apartment varchar, address text)
+        LOOP
+          RETURN NEXT row_to_json(api.add_address(r.parent, r.type, r.code, r.index, r.country, r.region, r.district, r.city, r.settlement, r.street, r.house, r.building, r.structure, r.apartment, r.address));
+        END LOOP;
+
+      END IF;
+
+    WHEN '/address/update' THEN
+
+      IF pJson IS NULL THEN
+        PERFORM JsonIsEmpty();
+      END IF;
+
+      arKeys := array_cat(arKeys, ARRAY['id', 'parent', 'type', 'code', 'index', 'country', 'region', 'district', 'city', 'settlement', 'street', 'house', 'building', 'structure', 'apartment', 'address']);
+      PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+
+      IF jsonb_typeof(pJson) = 'array' THEN
+
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, parent numeric, type varchar, code varchar, index varchar, country varchar, region varchar, district varchar, city varchar, settlement varchar, street varchar, house varchar, building varchar, structure varchar, apartment varchar, address text)
+        LOOP
+          RETURN NEXT row_to_json(api.update_address(r.id, r.parent, r.type, r.code, r.index, r.country, r.region, r.district, r.city, r.settlement, r.street, r.house, r.building, r.structure, r.apartment, r.address));
+        END LOOP;
+
+      ELSE
+
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, parent numeric, type varchar, code varchar, index varchar, country varchar, region varchar, district varchar, city varchar, settlement varchar, street varchar, house varchar, building varchar, structure varchar, apartment varchar, address text)
+        LOOP
+          RETURN NEXT row_to_json(api.update_address(r.id, r.parent, r.type, r.code, r.index, r.country, r.region, r.district, r.city, r.settlement, r.street, r.house, r.building, r.structure, r.apartment, r.address));
+        END LOOP;
+
+      END IF;
+
+    WHEN '/address/get' THEN
+
+      IF pJson IS NULL THEN
+        PERFORM JsonIsEmpty();
+      END IF;
+
+      arKeys := array_cat(arKeys, ARRAY['id', 'fields']);
+      PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+
+      IF jsonb_typeof(pJson) = 'array' THEN
+
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, fields jsonb)
+        LOOP
+          FOR e IN EXECUTE format('SELECT %s FROM api.get_address($1)', JsonbToFields(r.fields, GetColumns('address', 'api'))) USING r.id
+          LOOP
+            RETURN NEXT row_to_json(e);
+          END LOOP;
+        END LOOP;
+
+      ELSE
+
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, fields jsonb)
+        LOOP
+          FOR e IN EXECUTE format('SELECT %s FROM api.get_address($1)', JsonbToFields(r.fields, GetColumns('address', 'api'))) USING r.id
+          LOOP
+            RETURN NEXT row_to_json(e);
+          END LOOP;
+        END LOOP;
+
+      END IF;
+
+    WHEN '/address/list' THEN
+
+      IF pJson IS NOT NULL THEN
+        arKeys := array_cat(arKeys, ARRAY['fields', 'search', 'filter', 'reclimit', 'recoffset', 'orderby', 'usecache']);
+        PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+      ELSE
+        pJson := '{}';
+      END IF;
+
+      FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(fields jsonb, search jsonb, filter jsonb, reclimit integer, recoffset integer, orderby jsonb, usecache boolean)
+      LOOP
+        FOR e IN EXECUTE format('SELECT %s FROM api.list_address($1, $2, $3, $4, $5)', JsonbToFields(r.fields, GetColumns('address', 'api'))) USING r.search, r.filter, r.reclimit, r.recoffset, r.orderby
+        LOOP
+          RETURN NEXT row_to_json(e);
+        END LOOP;
+      END LOOP;
+
+    WHEN '/address/string' THEN
+
+      IF pJson IS NULL THEN
+        PERFORM JsonIsEmpty();
+      END IF;
+
+      arKeys := array_cat(arKeys, ARRAY['id']);
+      PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+
+      IF jsonb_typeof(pJson) = 'array' THEN
+
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric)
+        LOOP
+          RETURN NEXT row_to_json(api.get_address_string(r.id));
+        END LOOP;
+
+      ELSE
+
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric)
+        LOOP
+          RETURN NEXT row_to_json(api.get_address_string(r.id));
+        END LOOP;
+
+      END IF;
+
     WHEN '/client/type' THEN
 
       FOR e IN SELECT * FROM api.type(GetEssence('client'))
@@ -2086,46 +2368,46 @@ BEGIN
         PERFORM JsonIsEmpty();
       END IF;
 
-      arKeys := array_cat(arKeys, ARRAY['type', 'code', 'userid', 'name', 'phone', 'email', 'address', 'info', 'description']);
+      arKeys := array_cat(arKeys, ARRAY['parent', 'type', 'code', 'userid', 'name', 'phone', 'email', 'address', 'info', 'description']);
       PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
 
       IF jsonb_typeof(pJson) = 'array' THEN
 
-        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(type varchar, code varchar, userid numeric, name jsonb, phone jsonb, email jsonb, address jsonb, info jsonb, description text)
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(parent numeric, type varchar, code varchar, userid numeric, name jsonb, phone jsonb, email jsonb, address jsonb, info jsonb, description text)
         LOOP
-          RETURN NEXT row_to_json(api.add_client(r.type, r.code, r.userid, r.name, r.phone, r.email, r.address, r.info, r.description));
+          RETURN NEXT row_to_json(api.add_client(t.parent, r.type, r.code, r.userid, r.name, r.phone, r.email, r.address, r.info, r.description));
         END LOOP;
 
       ELSE
 
-        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(type varchar, code varchar, userid numeric, name jsonb, phone jsonb, email jsonb, address jsonb, info jsonb, description text)
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(parent numeric, type varchar, code varchar, userid numeric, name jsonb, phone jsonb, email jsonb, address jsonb, info jsonb, description text)
         LOOP
-          RETURN NEXT row_to_json(api.add_client(r.type, r.code, r.userid, r.name, r.phone, r.email, r.address, r.info, r.description));
+          RETURN NEXT row_to_json(api.add_client(r.parent, r.type, r.code, r.userid, r.name, r.phone, r.email, r.address, r.info, r.description));
         END LOOP;
 
       END IF;
 
-    WHEN '/client/upd' THEN
+    WHEN '/client/update' THEN
 
       IF pJson IS NULL THEN
         PERFORM JsonIsEmpty();
       END IF;
 
-      arKeys := array_cat(arKeys, ARRAY['id', 'type', 'code', 'userid', 'name', 'phone', 'email', 'address', 'info', 'description']);
+      arKeys := array_cat(arKeys, ARRAY['id', 'parent', 'type', 'code', 'userid', 'name', 'phone', 'email', 'address', 'info', 'description']);
       PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
 
       IF jsonb_typeof(pJson) = 'array' THEN
 
-        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, type varchar, code varchar, userid numeric, name jsonb, phone jsonb, email jsonb, address text, info jsonb, description text)
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, parent numeric, type varchar, code varchar, userid numeric, name jsonb, phone jsonb, email jsonb, address text, info jsonb, description text)
         LOOP
-          RETURN NEXT row_to_json(api.upd_client(r.id, r.type, r.code, r.userid, r.name, r.phone, r.email, r.address, r.info, r.description));
+          RETURN NEXT row_to_json(api.update_client(r.id, r.parent, r.type, r.code, r.userid, r.name, r.phone, r.email, r.address, r.info, r.description));
         END LOOP;
 
       ELSE
 
-        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, type varchar, code varchar, userid numeric, name jsonb, phone jsonb, email jsonb, address text, info jsonb, description text)
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, parent numeric, type varchar, code varchar, userid numeric, name jsonb, phone jsonb, email jsonb, address text, info jsonb, description text)
         LOOP
-          RETURN NEXT row_to_json(api.upd_client(r.id, r.type, r.code, r.userid, r.name, r.phone, r.email, r.address, r.info, r.description));
+          RETURN NEXT row_to_json(api.update_client(r.id, r.parent, r.type, r.code, r.userid, r.name, r.phone, r.email, r.address, r.info, r.description));
         END LOOP;
 
       END IF;
@@ -2173,6 +2455,79 @@ BEGIN
       FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(fields jsonb, search jsonb, filter jsonb, reclimit integer, recoffset integer, orderby jsonb, usecache boolean)
       LOOP
         FOR e IN EXECUTE format('SELECT %s FROM api.list_client($1, $2, $3, $4, $5)', JsonbToFields(r.fields, GetColumns('client', 'api'))) USING r.search, r.filter, r.reclimit, r.recoffset, r.orderby
+        LOOP
+          RETURN NEXT row_to_json(e);
+        END LOOP;
+      END LOOP;
+
+    WHEN '/client/address/add' THEN
+
+      IF pJson IS NULL THEN
+        PERFORM JsonIsEmpty();
+      END IF;
+
+      arKeys := array_cat(arKeys, ARRAY['client', 'address', 'datefrom']);
+      PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+
+      IF jsonb_typeof(pJson) = 'array' THEN
+
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(client numeric, address numeric, datefrom timestamp)
+        LOOP
+          RETURN NEXT row_to_json(api.add_client_address(r.client, r.address, coalesce(r.datefrom, oper_date())));
+        END LOOP;
+
+      ELSE
+
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(client numeric, address numeric, datefrom timestamp)
+        LOOP
+          RETURN NEXT row_to_json(api.add_client_address(r.client, r.address, coalesce(r.datefrom, oper_date())));
+        END LOOP;
+
+      END IF;
+
+    WHEN '/client/address/get' THEN
+
+      IF pJson IS NULL THEN
+        PERFORM JsonIsEmpty();
+      END IF;
+
+      arKeys := array_cat(arKeys, ARRAY['id', 'fields']);
+      PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+
+      IF jsonb_typeof(pJson) = 'array' THEN
+
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, fields jsonb)
+        LOOP
+          FOR e IN EXECUTE format('SELECT %s FROM api.get_client_address($1)', JsonbToFields(r.fields, GetColumns('client_address', 'api'))) USING r.id
+          LOOP
+            RETURN NEXT row_to_json(e);
+          END LOOP;
+        END LOOP;
+
+      ELSE
+
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, fields jsonb)
+        LOOP
+          FOR e IN EXECUTE format('SELECT %s FROM api.get_client_address($1)', JsonbToFields(r.fields, GetColumns('client_address', 'api'))) USING r.id
+          LOOP
+            RETURN NEXT row_to_json(e);
+          END LOOP;
+        END LOOP;
+
+      END IF;
+
+    WHEN '/client/address/list' THEN
+
+      IF pJson IS NOT NULL THEN
+        arKeys := array_cat(arKeys, ARRAY['fields', 'search', 'filter', 'reclimit', 'recoffset', 'orderby', 'usecache']);
+        PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+      ELSE
+        pJson := '{}';
+      END IF;
+
+      FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(fields jsonb, search jsonb, filter jsonb, reclimit integer, recoffset integer, orderby jsonb, usecache boolean)
+      LOOP
+        FOR e IN EXECUTE format('SELECT %s FROM api.list_client_address($1, $2, $3, $4, $5)', JsonbToFields(r.fields, GetColumns('client_address', 'api'))) USING r.search, r.filter, r.reclimit, r.recoffset, r.orderby
         LOOP
           RETURN NEXT row_to_json(e);
         END LOOP;
@@ -2265,7 +2620,7 @@ BEGIN
 
       END IF;
 
-    WHEN '/card/upd' THEN
+    WHEN '/card/update' THEN
 
       IF pJson IS NULL THEN
         PERFORM JsonIsEmpty();
@@ -2278,14 +2633,14 @@ BEGIN
 
         FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, type varchar, code varchar, client numeric, description text)
         LOOP
-          RETURN NEXT row_to_json(api.upd_card(r.id, r.type, r.code, r.client, r.description));
+          RETURN NEXT row_to_json(api.update_card(r.id, r.type, r.code, r.client, r.description));
         END LOOP;
 
       ELSE
 
         FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, type varchar, code varchar, client numeric, description text)
         LOOP
-          RETURN NEXT row_to_json(api.upd_card(r.id, r.type, r.code, r.client, r.description));
+          RETURN NEXT row_to_json(api.update_card(r.id, r.type, r.code, r.client, r.description));
         END LOOP;
 
       END IF;
@@ -2425,7 +2780,7 @@ BEGIN
 
       END IF;
 
-    WHEN '/charge_point/upd' THEN
+    WHEN '/charge_point/update' THEN
 
       IF pJson IS NULL THEN
         PERFORM JsonIsEmpty();
@@ -2438,14 +2793,14 @@ BEGIN
 
         FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, protocol varchar, identity varchar, name varchar, model varchar, vendor varchar, version varchar, serialnumber varchar, boxserialnumber varchar, meterserialnumber varchar, iccid varchar, imsi varchar, description text)
         LOOP
-          RETURN NEXT row_to_json(api.upd_charge_point(r.id, r.protocol, r.identity, r.name, r.name, r.model, r.vendor, r.version, r.serialnumber, r.boxserialnumber, r.meterserialnumber, r.iccid, r.imsi, r.description));
+          RETURN NEXT row_to_json(api.update_charge_point(r.id, r.protocol, r.identity, r.name, r.name, r.model, r.vendor, r.version, r.serialnumber, r.boxserialnumber, r.meterserialnumber, r.iccid, r.imsi, r.description));
         END LOOP;
 
       ELSE
 
         FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, protocol varchar, identity varchar, name varchar, model varchar, vendor varchar, version varchar, serialnumber varchar, boxserialnumber varchar, meterserialnumber varchar, iccid varchar, imsi varchar, description text)
         LOOP
-          RETURN NEXT row_to_json(api.upd_charge_point(r.id, r.protocol, r.identity, r.name, r.name, r.model, r.vendor, r.version, r.serialnumber, r.boxserialnumber, r.meterserialnumber, r.iccid, r.imsi, r.description));
+          RETURN NEXT row_to_json(api.update_charge_point(r.id, r.protocol, r.identity, r.name, r.name, r.model, r.vendor, r.version, r.serialnumber, r.boxserialnumber, r.meterserialnumber, r.iccid, r.imsi, r.description));
         END LOOP;
 
       END IF;
@@ -2547,7 +2902,7 @@ BEGIN
   PERFORM SetErrorMessage(vMessage);
 
   IF current_session() IS NOT NULL THEN
-    nEventId := AddEventLog(null, 'E', 5000, vMessage);
+    nEventId := AddEventLog('E', 5000, vMessage);
     UPDATE api.log SET eventid = nEventId WHERE id = nApiId;
   END IF;
 

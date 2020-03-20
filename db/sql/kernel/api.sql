@@ -132,7 +132,7 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 /**
  * Возвращает информацию о виртуальном пользователе.
- * @out param {numeric} id - Идентификатор участника
+ * @out param {numeric} id - Идентификатор клиента
  * @out param {numeric} userid - Идентификатор виртуального пользователя (учётной записи)
  * @out param {varchar} username - Имя виртуального пользователя (login)
  * @out param {text} fullname - Ф.И.О. виртуального пользователя
@@ -512,7 +512,6 @@ GRANT SELECT ON api.event_log TO daemon;
 --------------------------------------------------------------------------------
 /**
  * Журнал событий.
- * @param {numeric} pObject - Идентификатор объекта
  * @param {char} pType - Тип события: {M|W|E}
  * @param {varchar} pUserName - Имя пользователя (логин)
  * @param {integer} pCode - Код
@@ -2070,45 +2069,45 @@ $$ LANGUAGE SQL
    INN - IS NOT NULL - Ключ (value) должен быть опушен
  */
 CREATE OR REPLACE FUNCTION CreateApiSql (
-  pScheme	text,
-  pTable	text,
-  pSearch	jsonb default null,
-  pFilter	jsonb default null,
-  pLimit	integer default null,
-  pOffSet	integer default null,
-  pOrderBy	jsonb default null
-) RETURNS	text
+  pScheme       text,
+  pTable        text,
+  pSearch       jsonb default null,
+  pFilter       jsonb default null,
+  pLimit        integer default null,
+  pOffSet       integer default null,
+  pOrderBy      jsonb default null
+) RETURNS       text
 AS $$
 DECLARE
-  r		record;
+  r             record;
 
-  nUserId	numeric;
+  nUserId       numeric;
 
-  vMethod	text;
-  vWith		text;
-  vSelect	text;
-  vWhere	text;
-  vJoin		text;
+  vMethod       text;
+  vWith         text;
+  vSelect       text;
+  vWhere        text;
+  vJoin         text;
 
-  vCondition	text;
-  vField	text;
-  vCompare	text;
-  vValue	text;
-  vLStr		text;
-  vRStr		text;
+  vCondition    text;
+  vField        text;
+  vCompare      text;
+  vValue        text;
+  vLStr         text;
+  vRStr         text;
 
   IsSecurity	boolean;
   IsExternal	boolean;
 
-  arTables	text[];
-  arValues	text[];
-  arColumns	text[];
+  arTables      text[];
+  arValues      text[];
+  arColumns     text[];
 BEGIN
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
-  arTables := array_cat(null, ARRAY['client', 'card', 'charge_point', 'status_notification']);
+  arTables := array_cat(null, ARRAY['address_tree', 'address', 'client', 'client_address', 'card', 'charge_point', 'status_notification']);
 
   IF array_position(arTables, pTable) IS NULL THEN
     PERFORM IncorrectValueInArray(pTable, 'sql/api/table', arTables);
@@ -4286,20 +4285,20 @@ GRANT SELECT ON api.calendar TO daemon;
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_calendar (
-  pCode		varchar,
-  pName		varchar,
-  pWeek		numeric,
-  pDayOff	jsonb,
-  pHoliday	jsonb,
-  pWorkStart	interval,
+  pCode         varchar,
+  pName         varchar,
+  pWeek         numeric,
+  pDayOff       jsonb,
+  pHoliday      jsonb,
+  pWorkStart    interval,
   pWorkCount    interval,
-  pRestStart	interval,
+  pRestStart    interval,
   pRestCount    interval,
-  pDescription	text default null,
-  OUT id	numeric,
-  OUT result	boolean,
-  OUT message	text
-) RETURNS 	record
+  pDescription  text default null,
+  OUT id        numeric,
+  OUT result    boolean,
+  OUT message   text
+) RETURNS       record
 AS $$
 DECLARE
   nCalendar	numeric;
@@ -4727,6 +4726,381 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
+-- ADDRESS ---------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- api.address_tree ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.address_tree
+AS
+  SELECT * FROM AddressTree;
+
+GRANT SELECT ON api.address_tree TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.get_address_tree --------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает адрес из справачника адресов КЛАДР
+ * @param {numeric} pId - Идентификатор
+ * @return {api.address_tree}
+ */
+CREATE OR REPLACE FUNCTION api.get_address_tree (
+  pId		numeric
+) RETURNS	api.address_tree
+AS $$
+  SELECT * FROM api.address_tree WHERE id = pId
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.list_address_tree -------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает справачник адресов КЛАДР.
+ * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
+ * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
+ * @param {integer} pLimit - Лимит по количеству строк
+ * @param {integer} pOffSet - Пропустить указанное число строк
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
+ * @return {SETOF api.address_tree} - Дерево адресов
+ */
+CREATE OR REPLACE FUNCTION api.list_address_tree (
+  pSearch	jsonb default null,
+  pFilter	jsonb default null,
+  pLimit	integer default null,
+  pOffSet	integer default null,
+  pOrderBy	jsonb default null
+) RETURNS	SETOF api.address_tree
+AS $$
+BEGIN
+  RETURN QUERY EXECUTE CreateApiSql('api', 'address_tree', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_address_tree_history ------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает историю из справочника адресов
+ * @param {numeric} pId - Идентификатор
+ * @return {SETOF api.address_tree}
+ */
+CREATE OR REPLACE FUNCTION api.get_address_tree_history (
+  pId		numeric
+) RETURNS	SETOF api.address_tree
+AS $$
+  WITH RECURSIVE addr_tree(id, parent, code, name, short, index, level) AS (
+    SELECT id, parent, code, name, short, index, level FROM db.address_tree WHERE id = pId
+     UNION ALL
+    SELECT a.id, a.parent, a.code, a.name, a.short, a.index, a.level
+      FROM db.address_tree a, addr_tree t
+     WHERE a.id = t.parent
+  )
+  SELECT * FROM addr_tree
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_address_tree_string -------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает адрес из справочника адресов по коду в виде строки
+ * @param {varchar} pCode - Код из справочника адресов: ФФ СС РРР ГГГ ППП УУУУ. Где: ФФ - код страны; СС - код субъекта РФ; РРР - код района; ГГГ - код города; ППП - код населенного пункта; УУУУ - код улицы.
+ * @param {integer} pShort - Сокращение: 0 - нет; 1 - слева; 2 - справа
+ * @param {integer} pLevel - Ограничение уровня вложенности
+ * @out param {text} address - Адрес в виде текста
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.get_address_tree_string (
+  pCode		    varchar,
+  pShort	    integer default 0,
+  pLevel	    integer default 0,
+  OUT address   text,
+  OUT result    boolean,
+  OUT message   text
+) RETURNS       record
+AS $$
+BEGIN
+ IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  address := GetAddressTreeString(pCode, pShort, pLevel);
+
+  SELECT * INTO result, message FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  address := null;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.address -----------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.address
+AS
+  SELECT * FROM ObjectAddress;
+
+GRANT SELECT ON api.address TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.add_address -------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Добавляет новый адрес.
+ * @param {numeric} pParent - Идентификатор родителя | null
+ * @param {varchar} pType - Код типа адреса
+ * @param {varchar} pCode - Код: ФФ СС РРР ГГГ ППП УУУУ. Где: ФФ - код страны; СС - код субъекта РФ; РРР - код района; ГГГ - код города; ППП - код населенного пункта; УУУУ - код улицы.
+ * @param {varchar} pIndex - Почтовый индекс
+ * @param {varchar} pCountry - Страна
+ * @param {varchar} pRegion - Регион
+ * @param {varchar} pDistrict - Район
+ * @param {varchar} pCity - Город
+ * @param {varchar} pSettlement - Населённый пункт
+ * @param {varchar} pStreet - Улица
+ * @param {varchar} pHouse - Дом
+ * @param {varchar} pBuilding - Корпус
+ * @param {varchar} pStructure - Строение
+ * @param {varchar} pApartment - Квартира
+ * @param {text} pAddress - Полный адрес
+ * @out param {numeric} id - Идентификатор адреса
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.add_address (
+  pParent       numeric,
+  pType         varchar,
+  pCode         varchar,
+  pIndex        varchar,
+  pCountry      varchar,
+  pRegion       varchar,
+  pDistrict     varchar,
+  pCity         varchar,
+  pSettlement   varchar,
+  pStreet       varchar,
+  pHouse        varchar,
+  pBuilding     varchar,
+  pStructure    varchar,
+  pApartment    varchar,
+  pAddress      text default null,
+  OUT id        numeric,
+  OUT result    boolean,
+  OUT message   text
+) RETURNS       record
+AS $$
+DECLARE
+  nAddress      numeric;
+  arTypes       text[];
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  pType := lower(pType);
+  arTypes := array_cat(arTypes, ARRAY['post', 'actual', 'legal']);
+  IF array_position(arTypes, pType::text) IS NULL THEN
+    PERFORM IncorrectCode(pType, arTypes);
+  END IF;
+
+  nAddress := CreateAddress(pParent, GetType(pType || '.address'), pCode, pIndex, pCountry, pRegion, pDistrict, pCity, pSettlement, pStreet, pHouse, pBuilding, pStructure, pApartment, pAddress);
+
+  id := nAddress;
+
+  SELECT * INTO result, message FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  id := null;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.update_address ----------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Обновляет данные адреса.
+ * @param {numeric} pId - Идентификатор адреса
+ * @param {numeric} pParent - Идентификатор родителя | null
+ * @param {varchar} pType - Код типа адреса
+ * @param {varchar} pCode - Код: ФФ СС РРР ГГГ ППП УУУУ. Где: ФФ - код страны; СС - код субъекта РФ; РРР - код района; ГГГ - код города; ППП - код населенного пункта; УУУУ - код улицы.
+ * @param {varchar} pIndex - Почтовый индекс
+ * @param {varchar} pCountry - Страна
+ * @param {varchar} pRegion - Регион
+ * @param {varchar} pDistrict - Район
+ * @param {varchar} pCity - Город
+ * @param {varchar} pSettlement - Населённый пункт
+ * @param {varchar} pStreet - Улица
+ * @param {varchar} pHouse - Дом
+ * @param {varchar} pBuilding - Корпус
+ * @param {varchar} pStructure - Строение
+ * @param {varchar} pApartment - Квартира
+ * @param {text} pAddress - Полный адрес
+ * @out param {numeric} id - Идентификатор адреса
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.update_address (
+  pId           numeric,
+  pParent       numeric default null,
+  pType         varchar default null,
+  pCode         varchar default null,
+  pIndex        varchar default null,
+  pCountry      varchar default null,
+  pRegion       varchar default null,
+  pDistrict     varchar default null,
+  pCity         varchar default null,
+  pSettlement   varchar default null,
+  pStreet       varchar default null,
+  pHouse        varchar default null,
+  pBuilding     varchar default null,
+  pStructure    varchar default null,
+  pApartment    varchar default null,
+  pAddress      text default null,
+  OUT id        numeric,
+  OUT result    boolean,
+  OUT message   text
+) RETURNS       record
+AS $$
+DECLARE
+  nAddress      numeric;
+  nType         numeric;
+  arTypes       text[];
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  SELECT a.id INTO nAddress FROM db.address a WHERE a.id = pId;
+  IF NOT FOUND THEN
+    PERFORM ObjectNotFound('адрес', 'id', pId);
+  END IF;
+
+  IF pType IS NOT NULL THEN
+    pType := lower(pType);
+    arTypes := array_cat(arTypes, ARRAY['post', 'actual', 'legal']);
+    IF array_position(arTypes, pType) IS NULL THEN
+      PERFORM IncorrectCode(pType, arTypes);
+    END IF;
+    nType := GetType(pType || '.address');
+  ELSE
+    SELECT o.type INTO nType FROM db.object o WHERE o.id = pId;
+  END IF;
+
+  PERFORM EditAddress(nAddress, pParent, nType, pCode, pIndex, pCountry, pRegion, pDistrict, pCity, pSettlement, pStreet, pHouse, pBuilding, pStructure, pApartment, pAddress);
+
+  id := nAddress;
+
+  SELECT * INTO result, message FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  id := null;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_address -------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает клиента
+ * @param {numeric} pId - Идентификатор адреса
+ * @return {api.address} - Адрес
+ */
+CREATE OR REPLACE FUNCTION api.get_address (
+  pId		numeric
+) RETURNS	api.address
+AS $$
+  SELECT * FROM api.address WHERE id = pId
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.list_address ------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает список клиентов.
+ * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
+ * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
+ * @param {integer} pLimit - Лимит по количеству строк
+ * @param {integer} pOffSet - Пропустить указанное число строк
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
+ * @return {SETOF api.address} - Адреса
+ */
+CREATE OR REPLACE FUNCTION api.list_address (
+  pSearch	jsonb default null,
+  pFilter	jsonb default null,
+  pLimit	integer default null,
+  pOffSet	integer default null,
+  pOrderBy	jsonb default null
+) RETURNS	SETOF api.address
+AS $$
+BEGIN
+  RETURN QUERY EXECUTE CreateApiSql('api', 'address', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_address_string ------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает адрес в виде строки
+ * @param {varchar} pId - Идентификатор адреса
+ * @out param {text} address - Адрес в виде строки
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.get_address_string (
+  pId		    numeric,
+  OUT address   text,
+  OUT result    boolean,
+  OUT message   text
+) RETURNS       record
+AS $$
+BEGIN
+ IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  address := GetAddressString(pId);
+
+  SELECT * INTO result, message FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  address := null;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
 -- CLIENT ----------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -4745,6 +5119,7 @@ GRANT SELECT ON api.client TO daemon;
 --------------------------------------------------------------------------------
 /**
  * Добавляет нового клиента.
+ * @param {numeric} pParent - Идентификатор родителя | null
  * @param {varchar} pType - Tип клиента
  * @param {varchar} pCode - ИНН - для юридического лица | Имя пользователя (login) | null
  * @param {numeric} pUserId - Идентификатор пользователя системы | null
@@ -4760,6 +5135,7 @@ GRANT SELECT ON api.client TO daemon;
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_client (
+  pParent       numeric,
   pType         varchar,
   pCode         varchar,
   pUserId       numeric,
@@ -4799,7 +5175,7 @@ BEGIN
     pUserId := CreateUser(pCode, pCode, cn.short, pPhone->>0, pEmail->>0, cn.name);
   END IF;
 
-  nClient := CreateClient(null, GetType(pType || '.client'), pCode, pUserId, pPhone, pEmail, pAddress, pInfo, pDescription);
+  nClient := CreateClient(pParent, GetType(pType || '.client'), pCode, pUserId, pPhone, pEmail, pInfo, pDescription);
 
   PERFORM NewClientName(nClient, cn.name, cn.short, cn.first, cn.last, cn.middle);
 
@@ -4817,11 +5193,12 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.update_client --------------------------------------------------------------
+-- api.update_client -----------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Обновляет данные клиента.
  * @param {numeric} pId - Идентификатор клиента (api.get_client)
+ * @param {numeric} pParent - Идентификатор родителя | null
  * @param {varchar} pType - Tип клиента
  * @param {varchar} pCode - ИНН - для юридического лица | Имя пользователя (login) | null
  * @param {numeric} pUserId - Идентификатор пользователя системы | null
@@ -4838,6 +5215,7 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION api.update_client (
   pId           numeric,
+  pParent       numeric,
   pType         varchar,
   pCode         varchar,
   pUserId       numeric,
@@ -4882,7 +5260,7 @@ BEGIN
   arKeys := array_cat(arKeys, ARRAY['name', 'short', 'first', 'last', 'middle']);
   PERFORM CheckJsonbKeys('update_client', arKeys, pName);
 
-  PERFORM EditClient(nClient, null, nType, pCode, pUserId, pPhone, pEmail, pAddress, pInfo, pDescription);
+  PERFORM EditClient(nClient, pParent, nType, pCode, pUserId, pPhone, pEmail, pInfo, pDescription);
 
   FOR r IN SELECT * FROM jsonb_to_record(pName) AS x(name varchar, short varchar, first varchar, last varchar, middle varchar)
   LOOP
@@ -4941,6 +5319,100 @@ CREATE OR REPLACE FUNCTION api.list_client (
 AS $$
 BEGIN
   RETURN QUERY EXECUTE CreateApiSql('api', 'client', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.client_address ----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.client_address
+AS
+  SELECT * FROM ClientAddress;
+
+GRANT SELECT ON api.client_address TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.add_client_address ------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Добавляет адрес клиента
+ * @param {numeric} pClient - Идентификатор клиента
+ * @param {numeric} pAddress - Идентификатор адреса
+ * @param {timestamp} pDateFrom - Дата операции
+ * @out param {numeric} id - Идентификатор
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.add_client_address (
+  pClient	    numeric,
+  pAddress	    numeric,
+  pDateFrom	    timestamp default oper_date(),
+  OUT id        numeric,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS       record
+AS $$
+BEGIN
+ IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  id := AddClientAddress(pClient, pAddress, pDateFrom);
+
+  SELECT * INTO result, message FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  id := null;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_client_address ------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает адрес клиента
+ * @param {numeric} pId - Идентификатор адреса клиента
+ * @return {api.client} - Клиент
+ */
+CREATE OR REPLACE FUNCTION api.get_client_address (
+  pId		numeric
+) RETURNS	api.client_address
+AS $$
+  SELECT * FROM api.client_address WHERE id = pId
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.list_client_address -----------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает список адресов клиентов.
+ * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
+ * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
+ * @param {integer} pLimit - Лимит по количеству строк
+ * @param {integer} pOffSet - Пропустить указанное число строк
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
+ * @return {SETOF api.client} - Клиенты
+ */
+CREATE OR REPLACE FUNCTION api.list_client_address (
+  pSearch	jsonb default null,
+  pFilter	jsonb default null,
+  pLimit	integer default null,
+  pOffSet	integer default null,
+  pOrderBy	jsonb default null
+) RETURNS	SETOF api.client_address
+AS $$
+BEGIN
+  RETURN QUERY EXECUTE CreateApiSql('api', 'client_address', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER

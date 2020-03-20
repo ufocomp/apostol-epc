@@ -156,6 +156,7 @@ BEGIN
 
     IF rec_class.code = 'address' THEN
       PERFORM AddType(rec_class.id, 'post.address', 'Почтовый', 'Почтовый адрес');
+      PERFORM AddType(rec_class.id, 'actual.address', 'Фактический', 'Фактический адрес');
       PERFORM AddType(rec_class.id, 'legal.address', 'Юридический', 'Юридический адрес');
     END IF;
 

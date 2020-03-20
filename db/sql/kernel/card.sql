@@ -3,10 +3,10 @@
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.card (
-    Id			numeric(12) PRIMARY KEY,
-    Document		numeric(12) NOT NULL,
-    Code		varchar(30) NOT NULL,
-    Client		numeric(12),
+    id			numeric(12) PRIMARY KEY,
+    document	numeric(12) NOT NULL,
+    code		varchar(30) NOT NULL,
+    client		numeric(12),
     CONSTRAINT fk_card_document FOREIGN KEY (document) REFERENCES db.document(id),
     CONSTRAINT fk_card_client FOREIGN KEY (client) REFERENCES db.client(id)
 );
@@ -16,7 +16,7 @@ CREATE TABLE db.card (
 COMMENT ON TABLE db.card IS 'Пластиковая карта для зарядной станции.';
 
 COMMENT ON COLUMN db.card.id IS 'Идентификатор';
-COMMENT ON COLUMN db.card.document IS 'Документ';
+COMMENT ON COLUMN db.card.document IS 'Ссылка на документ';
 COMMENT ON COLUMN db.card.code IS 'Код';
 COMMENT ON COLUMN db.card.client IS 'Клиент';
 
