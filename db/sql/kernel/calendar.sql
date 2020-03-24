@@ -3,15 +3,15 @@
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.calendar (
-    id			numeric(12) PRIMARY KEY,
+    id			    numeric(12) PRIMARY KEY,
     reference		numeric(12) NOT NULL,
-    week		numeric(1) NOT NULL DEFAULT 5,
-    dayoff		integer[] DEFAULT ARRAY[6,7],
-    holiday		integer[][] DEFAULT ARRAY[[1,1], [1,7], [2,23], [3,8], [5,1], [5,9], [6,12], [11,4]],
+    week		    numeric(1) NOT NULL DEFAULT 5,
+    dayoff		    integer[] DEFAULT ARRAY[6,7],
+    holiday		    integer[][] DEFAULT ARRAY[[1,1], [1,7], [2,23], [3,8], [5,1], [5,9], [6,12], [11,4]],
     work_start		interval DEFAULT '9 hour',
-    work_count          interval DEFAULT '8 hour',
+    work_count      interval DEFAULT '8 hour',
     rest_start		interval DEFAULT '13 hour',
-    rest_count          interval DEFAULT '1 hour',
+    rest_count      interval DEFAULT '1 hour',
     CONSTRAINT ch_calendar_week CHECK (week BETWEEN 1 AND 7),
     CONSTRAINT ch_calendar_dayoff CHECK (min_array(dayoff) >= 1 AND max_array(dayoff) <= 7),
     CONSTRAINT fk_calendar_reference FOREIGN KEY (reference) REFERENCES db.reference(id)
@@ -74,15 +74,15 @@ CREATE TRIGGER t_calendar_update
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.cdate (
-    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
-    calendar		numeric(12) NOT NULL,
-    date		date NOT NULL,
-    flag		bit(4) NOT NULL DEFAULT B'0000',
-    work_start		interval,
-    work_count          interval,
-    rest_start		interval,
-    rest_count          interval,
-    userid		numeric(12),
+    id              numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
+    calendar        numeric(12) NOT NULL,
+    date            date NOT NULL,
+    flag            bit(4) NOT NULL DEFAULT B'0000',
+    work_start      interval,
+    work_count      interval,
+    rest_start      interval,
+    rest_count      interval,
+    userid          numeric(12),
     CONSTRAINT fk_cdate_userid FOREIGN KEY (userid) REFERENCES db.user(id),
     CONSTRAINT fk_cdate_calendar FOREIGN KEY (calendar) REFERENCES db.calendar(id)
 );
@@ -124,24 +124,24 @@ CREATE UNIQUE INDEX ON db.cdate (calendar, date, userid);
  * @return {(id|exception)} - Id или ошибку
  */
 CREATE OR REPLACE FUNCTION CreateCalendar (
-  pParent	numeric,
+  pParent       numeric,
   pType         numeric,
-  pCode		varchar,
-  pName		varchar,
-  pWeek		numeric,
-  pDayOff	integer[],
-  pHoliday	integer[][],
-  pWorkStart	interval,
+  pCode         varchar,
+  pName         varchar,
+  pWeek         numeric,
+  pDayOff       integer[],
+  pHoliday      integer[][],
+  pWorkStart    interval,
   pWorkCount    interval,
   pRestStart	interval,
   pRestCount    interval,
   pDescription	text default null
-) RETURNS 	numeric
+) RETURNS       numeric
 AS $$
 DECLARE
   nReference	numeric;
-  nClass	numeric;
-  nMethod	numeric;
+  nClass        numeric;
+  nMethod       numeric;
 BEGIN
   nReference := CreateReference(pParent, pType, pCode, pName, pDescription);
 
@@ -183,24 +183,24 @@ $$ LANGUAGE plpgsql
  * @return {(void|exception)}
  */
 CREATE OR REPLACE FUNCTION EditCalendar (
-  pId		numeric,
-  pParent	numeric default null,
+  pId           numeric,
+  pParent       numeric default null,
   pType         numeric default null,
-  pCode		varchar default null,
-  pName		varchar default null,
-  pWeek		numeric default null,
-  pDayOff	integer[] default null,
-  pHoliday	integer[][] default null,
+  pCode         varchar default null,
+  pName         varchar default null,
+  pWeek         numeric default null,
+  pDayOff       integer[] default null,
+  pHoliday      integer[][] default null,
   pWorkStart	interval default null,
   pWorkCount    interval default null,
   pRestStart	interval default null,
   pRestCount    interval default null,
   pDescription	text default null
-) RETURNS 	void
+) RETURNS       void
 AS $$
 DECLARE
-  nClass	numeric;
-  nMethod	numeric;
+  nClass        numeric;
+  nMethod       numeric;
 BEGIN
   PERFORM EditReference(pId, pParent, pType, pCode, pName, pDescription);
 
@@ -234,7 +234,7 @@ AS $$
 DECLARE
   nId		numeric;
 BEGIN
-  RETURN GetReference(GetClass('pcl:wrk'), pCode);
+  RETURN GetReference(pCode || '.calendar');
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
@@ -289,19 +289,19 @@ GRANT SELECT ON ObjectCalendar TO administrator;
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION AddCalendarDate (
-  pCalendar	numeric,
-  pDate		date,
-  pFlag		bit,
+  pCalendar     numeric,
+  pDate         date,
+  pFlag         bit,
   pWorkStart	interval,
   pWorkCount	interval,
   pRestStart	interval,
   pRestCount	interval,
-  pUserId	numeric default null
-) RETURNS	numeric
+  pUserId       numeric default null
+) RETURNS       numeric
 AS $$
 DECLARE
-  nId		numeric;
-  r		db.calendar%rowtype;
+  nId           numeric;
+  r             db.calendar%rowtype;
 BEGIN
   SELECT * INTO r FROM db.calendar WHERE id = pCalendar;
 
@@ -321,16 +321,16 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION EditCalendarDate (
-  pId		numeric,
-  pCalendar	numeric default null,
-  pDate		date default null,
-  pFlag		bit default null,
+  pId           numeric,
+  pCalendar     numeric default null,
+  pDate         date default null,
+  pFlag         bit default null,
   pWorkStart	interval default null,
   pWorkCount	interval default null,
   pRestStart	interval default null,
   pRestCount	interval default null,
-  pUserId	numeric default null
-) RETURNS	void
+  pUserId       numeric default null
+) RETURNS       void
 AS $$
 BEGIN
   UPDATE db.cdate
@@ -477,8 +477,8 @@ AS $$
 DECLARE
   nId		numeric;
 
-  i		integer;		
-  r		db.calendar%rowtype;
+  i         integer;
+  r         db.calendar%rowtype;
 
   nMonth	integer;
   nDay		integer;

@@ -3,11 +3,11 @@
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.reference (
-    id			numeric(12) PRIMARY KEY,
-    object		numeric(12) NOT NULL,
-    code		varchar(30) NOT NULL,
-    name		varchar(50),
-    description		text,
+    id              numeric(12) PRIMARY KEY,
+    object          numeric(12) NOT NULL,
+    code            varchar(30) NOT NULL,
+    name            varchar(50),
+    description     text,
     CONSTRAINT fk_reference_object FOREIGN KEY (object) REFERENCES db.object(id)
 );
 
@@ -73,15 +73,15 @@ CREATE TRIGGER t_reference_update
 --------------------------------------------------------------------------------
 
 create or replace function CreateReference (
-  pParent	numeric,
-  pType		numeric,
-  pCode		varchar,
-  pName		varchar,
-  pDescription	text default null
-) returns 	numeric
+  pParent       numeric,
+  pType         numeric,
+  pCode         varchar,
+  pName         varchar,
+  pDescription  text default null
+) returns       numeric
 as $$
 declare
-  nObject	numeric;
+  nObject       numeric;
 begin
   nObject := CreateObject(pParent, pType, pName);
 
@@ -100,18 +100,18 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 create or replace function EditReference (
-  pId		numeric,
-  pParent	numeric default null,
+  pId           numeric,
+  pParent       numeric default null,
   pType         numeric default null,
-  pCode		varchar default null,
-  pName		varchar default null,
-  pDescription	text default null
-) returns 	void
+  pCode         varchar default null,
+  pName         varchar default null,
+  pDescription  text default null
+) returns       void
 as $$
 declare
-  cParent	numeric;
+  cParent       numeric;
   cType         numeric;
-  cName		varchar;
+  cName         varchar;
 begin
   select parent, type, label into cParent, cType, cName from db.object where id = pId;
 
@@ -130,7 +130,7 @@ begin
   update db.reference
      set code = coalesce(pCode, code),
          name = coalesce(pName, name),
-         description = CheckNull(coalesce(pDescription, description, '<NULL>'))
+         description = CheckNull(coalesce(pDescription, description, '<null>'))
    where id = pId;
 end;
 $$ LANGUAGE plpgsql

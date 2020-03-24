@@ -1074,13 +1074,13 @@ GRANT SELECT ON ObjectGroupMember TO administrator;
 CREATE TABLE db.object_file (
     id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
     object		numeric(12) NOT NULL,
-    load_date		timestamp DEFAULT NOW() NOT NULL,
-    file_hash		text NOT NULL,
-    file_name		text NOT NULL,
-    file_path		text DEFAULT NULL,
-    file_size		numeric DEFAULT 0,
-    file_date		timestamp DEFAULT NULL,
-    file_body		bytea DEFAULT NULL,
+    load_date	timestamp DEFAULT NOW() NOT NULL,
+    file_hash	text NOT NULL,
+    file_name	text NOT NULL,
+    file_path	text DEFAULT NULL,
+    file_size	numeric DEFAULT 0,
+    file_date	timestamp DEFAULT NULL,
+    file_body	bytea DEFAULT NULL,
     CONSTRAINT fk_object_file_object FOREIGN KEY (object) REFERENCES db.object(id)
 );
 
@@ -1106,12 +1106,10 @@ CREATE INDEX ON db.object_file (file_date);
 -- VIEW ObjectFile -------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW ObjectFile (Id, Object, LoadDate, FileHash, FileName, FilePath,
-  FileSize, FileDate, FileBody
-) 
+CREATE OR REPLACE VIEW ObjectFile (Id, Object, Hash, Name, Path, Size, Date, Body, Loaded)
 AS
-  SELECT id, object, load_date, file_hash, file_name, file_path, file_size, file_date, file_body
-    FROM db.object_file;
+    SELECT id, object, file_hash, file_name, file_path, file_size, file_date, encode(file_body, 'base64'), load_date
+      FROM db.object_file;
 
 GRANT SELECT ON ObjectFile TO administrator;
 
@@ -1136,29 +1134,6 @@ BEGIN
   VALUES (pObject, pHash, pName, pPath, pSize, pDate, pBody) 
   RETURNING id INTO nId;
   RETURN nId;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- NewObjectFile ---------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION NewObjectFile (
-  pObject	numeric,
-  pHash		text,
-  pName		text,
-  pPath		text,
-  pSize		numeric,
-  pDate		timestamp,
-  pBody		bytea default null
-) RETURNS	void
-AS $$
-DECLARE
-  nId		numeric;
-BEGIN
-  nId := AddObjectFile(pObject, pHash, pName, pPath, pSize, pDate, pBody);
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
@@ -1219,16 +1194,16 @@ CREATE OR REPLACE FUNCTION GetObjectFiles (
 AS $$
 DECLARE
   arResult	text[][]; 
-  i		integer default 1;
-  r		db.object_file%rowtype;
+  i		    integer default 1;
+  r		    ObjectFile%rowtype;
 BEGIN
   FOR r IN
     SELECT *
-      FROM db.object_file
+      FROM ObjectFile
      WHERE object = pObject
-     ORDER BY load_date desc, file_path, file_name
+     ORDER BY Loaded desc, Path, Name
   LOOP
-    arResult[i] := ARRAY[r.id, r.file_hash, r.file_name, r.file_path, r.file_size, r.file_date];
+    arResult[i] := ARRAY[r.id, r.hash, r.name, r.path, r.size, r.date, r.body, r.loaded];
     i := i + 1;
   END LOOP;
 
@@ -1248,15 +1223,15 @@ CREATE OR REPLACE FUNCTION GetObjectFiles (
 AS $$
 DECLARE
   arResult	text[]; 
-  r		db.object_file%rowtype;
+  r		    ObjectFile%rowtype;
 BEGIN
   FOR r IN
     SELECT *
-      FROM db.object_file
+      FROM ObjectFile
      WHERE object = pObject
-     ORDER BY load_date desc, file_path, file_name
+     ORDER BY Loaded desc, Path, Name
   LOOP
-    arResult := array_cat(arResult, ARRAY[r.id, r.file_hash, r.file_name, r.file_path, r.file_size, r.file_date]);
+    arResult := array_cat(arResult, ARRAY[r.id, r.hash, r.name, r.path, r.size, r.date, r.body, r.loaded]);
   END LOOP;
 
   RETURN arResult;
@@ -1275,13 +1250,13 @@ CREATE OR REPLACE FUNCTION GetObjectFilesJson (
 AS $$
 DECLARE
   arResult	json[]; 
-  r		record;
+  r		    record;
 BEGIN
   FOR r IN
-    SELECT id, file_hash AS hash, file_name AS name, file_path AS path, file_size AS size, file_date AS date, encode(file_body, 'base64') AS body
-      FROM db.object_file
+    SELECT Id, Hash, Name, Path, Size, Date, Body, Loaded
+      FROM ObjectFile
      WHERE object = pObject
-     ORDER BY load_date desc, file_path, file_name
+     ORDER BY Loaded desc, Path, Name
   LOOP
     arResult := array_append(arResult, row_to_json(r));
   END LOOP;
@@ -1313,9 +1288,9 @@ $$ LANGUAGE plpgsql
 
 CREATE TABLE db.object_data_type (
     id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
-    code        	varchar(30) NOT NULL,
+    code        varchar(30) NOT NULL,
     name 		varchar(50) NOT NULL,
-    description		text
+    description	text
 );
 
 COMMENT ON TABLE db.object_data_type IS 'Тип произвольных данных объекта.';
@@ -1369,7 +1344,7 @@ CREATE TABLE db.object_data (
     id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
     object		numeric(12) NOT NULL,
     type		numeric(12) NOT NULL,
-    code        	varchar(30) NOT NULL,
+    code        varchar(30) NOT NULL,
     data		text,
     CONSTRAINT fk_object_data_object FOREIGN KEY (object) REFERENCES db.object(id),
     CONSTRAINT fk_object_data_type FOREIGN KEY (type) REFERENCES db.object_data_type(id)
@@ -1406,7 +1381,7 @@ GRANT SELECT ON ObjectData TO administrator;
 CREATE OR REPLACE FUNCTION AddObjectData (
   pObject	numeric,
   pType		numeric,
-  pCode		text,
+  pCode		varchar,
   pData		text
 ) RETURNS	numeric
 AS $$
@@ -1424,20 +1399,24 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- SetObjectData ---------------------------------------------------------------
+-- EditObjectData --------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION SetObjectData (
+CREATE OR REPLACE FUNCTION EditObjectData (
+  pId       numeric,
   pObject	numeric,
   pType		numeric,
-  pCode		text,
+  pCode		varchar,
   pData		text
 ) RETURNS	void
 AS $$
-DECLARE
-  nId		numeric;
 BEGIN
-  nId := AddObjectData(pObject, pType, pCode, pData);
+  UPDATE db.object_data
+     SET object = coalesce(pObject, object),
+         type = coalesce(pType, type),
+         code = coalesce(pCode, code),
+         data = coalesce(pData, data)
+   WHERE id = pId;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
@@ -1450,7 +1429,7 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION GetObjectData (
   pObject	numeric,
   pType		numeric,
-  pCode		text
+  pCode		varchar
 ) RETURNS	text
 AS $$
 DECLARE
@@ -1485,11 +1464,109 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION DeleteObjectData (
   pObject	numeric,
   pType		numeric,
-  pCode		text
+  pCode		varchar
 ) RETURNS	void
 AS $$
 BEGIN
   DELETE FROM db.object_data WHERE object = pObject AND type = pType AND code = pCode;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- GetObjectData ---------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetObjectData (
+  pObject	numeric
+) RETURNS	text[][]
+AS $$
+DECLARE
+  arResult	text[][];
+  i		    integer default 1;
+  r		    ObjectData%rowtype;
+BEGIN
+  FOR r IN
+    SELECT *
+      FROM ObjectData
+     WHERE object = pObject
+     ORDER BY type, code
+  LOOP
+    arResult[i] := ARRAY[r.id, r.typecode, r.code, r.data];
+    i := i + 1;
+  END LOOP;
+
+  RETURN arResult;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- GetObjectData ---------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetObjectData (
+  pObject	numeric
+) RETURNS	text[]
+AS $$
+DECLARE
+  arResult	text[];
+  r		    ObjectData%rowtype;
+BEGIN
+  FOR r IN
+    SELECT *
+      FROM ObjectData
+     WHERE object = pObject
+     ORDER BY type, code
+  LOOP
+    arResult := array_cat(arResult, ARRAY[r.id, r.typecode, r.code, r.data]);
+  END LOOP;
+
+  RETURN arResult;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- GetObjectDataJson -----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetObjectDataJson (
+  pObject	numeric
+) RETURNS	json
+AS $$
+DECLARE
+  arResult	json[];
+  r		    record;
+BEGIN
+  FOR r IN
+    SELECT Id, TypeCode AS type, Code, Data
+      FROM ObjectData
+     WHERE object = pObject
+     ORDER BY type, code
+  LOOP
+    arResult := array_append(arResult, row_to_json(r));
+  END LOOP;
+
+  RETURN array_to_json(arResult);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- GetObjectDataJsonb ----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetObjectDataJsonb (
+  pObject	numeric
+) RETURNS	jsonb
+AS $$
+BEGIN
+  RETURN GetObjectDataJson(pObject);
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER

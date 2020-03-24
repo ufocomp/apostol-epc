@@ -643,7 +643,6 @@ CREATE OR REPLACE FUNCTION EventCardCreate (
 AS $$
 BEGIN
   PERFORM WriteToEventLog('M', 1010, 'Карта создана.');
-  PERFORM ExecuteObjectAction(pObject, GetAction('enable'));
 END;
 $$ LANGUAGE plpgsql;
 

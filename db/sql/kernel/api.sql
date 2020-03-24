@@ -1296,6 +1296,29 @@ $$ LANGUAGE SQL
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
+-- api.get_groups_json ---------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.get_groups_json (
+  pMember	numeric
+) RETURNS	json
+AS $$
+DECLARE
+  arResult	json[];
+  r		    record;
+BEGIN
+  FOR r IN SELECT * FROM api.member_user(pMember)
+  LOOP
+    arResult := array_append(arResult, row_to_json(r));
+  END LOOP;
+
+  RETURN array_to_json(arResult);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
 -- api.is_user_role ------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -1908,9 +1931,9 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION api.member_interface_del (
   pMember		numeric,
-  pInterface		numeric,
-  OUT result		boolean,
-  OUT message		text
+  pInterface	numeric,
+  OUT result	boolean,
+  OUT message	text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1981,16 +2004,16 @@ GRANT SELECT ON api.member_interface TO daemon;
  * @return {SETOF record} - Запись
  */
 CREATE OR REPLACE FUNCTION api.interface_member (
-  pInterfaceId		numeric,
-  OUT id		numeric,
-  OUT type		char,
-  OUT username		varchar,
-  OUT fullname		text,
-  OUT email		text,
-  OUT description       text,
-  OUT status		text,
-  OUT system		text
-) RETURNS		SETOF record
+  pInterfaceId      numeric,
+  OUT id            numeric,
+  OUT type          char,
+  OUT username      varchar,
+  OUT fullname      text,
+  OUT email         text,
+  OUT description   text,
+  OUT status        text,
+  OUT system        text
+) RETURNS           SETOF record
 AS $$
   SELECT g.id, 'G' AS type, g.username, g.fullname, null AS email, g.description, null AS status, g.system
     FROM api.member_interface m INNER JOIN groups g ON g.id = m.memberid
@@ -2038,7 +2061,487 @@ $$ LANGUAGE SQL
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- API -------------------------------------------------------------------------
+-- REGISTER --------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.register
+AS
+  SELECT * FROM Register;
+
+GRANT SELECT ON api.register TO daemon;
+
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.register (
+  pId		numeric,
+  pKey		numeric,
+  pSubKey	numeric
+) RETURNS	SETOF api.register
+AS $$
+  SELECT *
+    FROM api.register
+   WHERE id = coalesce(pId, id)
+     AND key = coalesce(pKey, key)
+     AND subkey = coalesce(pSubKey, subkey)
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.register_ex
+AS
+  SELECT * FROM RegisterEx;
+
+GRANT SELECT ON api.register_ex TO daemon;
+
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.register_ex (
+  pId		numeric,
+  pKey		numeric,
+  pSubKey	numeric
+) RETURNS	SETOF api.register_ex
+AS $$
+  SELECT *
+    FROM api.register_ex
+   WHERE id = coalesce(pId, id)
+     AND key = coalesce(pKey, key)
+     AND subkey = coalesce(pSubKey, subkey)
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.register_key
+AS
+  SELECT * FROM RegisterKey;
+
+GRANT SELECT ON api.register_key TO daemon;
+
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.register_key (
+  pId		numeric,
+  pRoot		numeric,
+  pParent	numeric,
+  pKey		text
+) RETURNS	SETOF api.register_key
+AS $$
+  SELECT *
+    FROM api.register_key
+   WHERE id = coalesce(pId, id)
+     AND root = coalesce(pRoot, root)
+     AND parent = coalesce(pParent, parent)
+     AND key = coalesce(pKey, key)
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.register_value
+AS
+  SELECT * FROM RegisterValue;
+
+GRANT SELECT ON api.register_value TO daemon;
+
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.register_value_ex
+AS
+  SELECT * FROM RegisterValueEx;
+
+GRANT SELECT ON api.register_value_ex TO daemon;
+
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.register_value (
+  pId		numeric,
+  pKey		numeric
+) RETURNS	SETOF api.register_value
+AS $$
+  SELECT *
+    FROM api.register_value
+   WHERE id = coalesce(pId, id)
+     AND key = coalesce(pKey, key)
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.register_value_ex (
+  pId		numeric,
+  pKey		numeric
+) RETURNS	SETOF api.register_value_ex
+AS $$
+  SELECT *
+    FROM api.register_value_ex
+   WHERE id = coalesce(pId, id)
+     AND key = coalesce(pKey, key)
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.register_get_reg_key (
+  pKey		    numeric,
+  OUT key	    text,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS 	    record
+AS $$
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  key := get_reg_key(pKey);
+
+  SELECT * INTO result, message FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.register_enum_key -------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Перечисляет подключи указанной пары ключ/подключ реестра.
+ * @param {text} pKey - Ключ: CURRENT_CONFIG | CURRENT_USER
+ * @param {text} pSubKey - Подключ: Указанный подключ должен быть подключем ключа, указанного в параметре pKey.
+                                    Этот подключ не должен начинатся и заканчиваться знаком обратной черты ('\').
+ * @out param {numeric} id - Идентификатор подключа
+ * @out param {text} key - Ключ
+ * @out param {text} subkey - Подключ
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.register_enum_key (
+  pKey		    text,
+  pSubKey	    text,
+  OUT id	    numeric,
+  OUT key	    text,
+  OUT subkey	text
+) RETURNS	    SETOF record
+AS $$
+  SELECT R.id, pKey, get_reg_key(R.id) FROM RegEnumKey(RegOpenKey(pKey, pSubKey)) AS R;
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.register_enum_value -----------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Перечисляет значения для указанной пары ключ/подключ реестра.
+ * @param {text} pKey - Ключ: CURRENT_CONFIG | CURRENT_USER
+ * @param {text} pSubKey - Подключ: Указанный подключ должен быть подключем ключа, указанного в параметре pKey.
+                                    Этот подключ не должен начинатся и заканчиваться знаком обратной черты ('\').
+ * @out param {numeric} id - Идентификатор значения
+ * @out param {text} key - Ключ
+ * @out param {text} subkey - Подключ
+ * @out param {text} valuename - Имя значения
+ * @out param {variant} data - Данные
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.register_enum_value (
+  pKey		    text,
+  pSubKey	    text,
+  OUT id	    numeric,
+  OUT key	    text,
+  OUT subkey	text,
+  OUT valuename	text,
+  OUT value	    variant
+) RETURNS	    SETOF record
+AS $$
+  SELECT R.id, pKey, pSubKey, R.vname, get_reg_value(R.id) FROM RegEnumValue(RegOpenKey(pKey, pSubKey)) AS R;
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.register_enum_value_ex --------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Перечисляет значения для указанной пары ключ/подключ реестра.
+ * @param {text} pKey - Ключ: CURRENT_CONFIG | CURRENT_USER
+ * @param {text} pSubKey - Подключ: Указанный подключ должен быть подключем ключа, указанного в параметре pKey.
+                                    Этот подключ не должен начинатся и заканчиваться знаком обратной черты ('\').
+ * @out param {numeric} id - Идентификатор значения
+ * @out param {text} key - Ключ
+ * @out param {text} subkey - Подключ
+ * @out param {text} valuename - Имя значения
+ * @out param {integer} vtype - Тип данных: 0..4
+ * @out param {integer} vinteger - Целое число
+ * @out param {numeric} vnumeric - Число с произвольной точностью
+ * @out param {timestamp} vdatetime - Дата и время
+ * @out param {text} vstring - Строка
+ * @out param {boolean} vboolean - Логический
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.register_enum_value_ex (
+  pKey		    text,
+  pSubKey	    text,
+  OUT id	    numeric,
+  OUT key	    text,
+  OUT subkey	text,
+  OUT valuename	text,
+  OUT vtype	    integer,
+  OUT vinteger	integer,
+  OUT vnumeric	numeric,
+  OUT vdatetime	timestamp,
+  OUT vstring	text,
+  OUT vboolean	boolean
+) RETURNS	    SETOF record
+AS $$
+  SELECT R.id, pKey, pSubKey, R.vname, R.vtype, R.vinteger, R.vnumeric, R.vdatetime, R.vstring, R.vboolean FROM RegEnumValueEx(RegOpenKey(pKey, pSubKey)) AS R;
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.register_write ----------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Запись в реестр.
+ * @param {text} pKey - Ключ: CURRENT_CONFIG | CURRENT_USER
+ * @param {text} pSubKey - Подключ: Указанный подключ должен быть подключем ключа, указанного в параметре pKey.
+                                    Этот подключ не должен начинатся и заканчиваться знаком обратной черты ('\').
+ * @param {text} pValueName - Имя устанавливаемого значения. Если значение с таким именем не существует в ключе реестра, функция его создает.
+ * @param {integer} pType - Определяет тип сохраняемых данных значения. Где: 0 - Целое число;
+                                                                             1 - Число с произвольной точностью;
+                                                                             2 - Дата и время;
+                                                                             3 - Строка;
+                                                                             4 - Логический.
+ * @param {anynonarray} pData - Данные для установки их по указанному имени значения.
+ * @out param {numeric} id - Идентификатор заявки
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.register_write (
+  pId		    numeric,
+  pKey		    text,
+  pSubKey	    text,
+  pValueName	text,
+  pType		    integer,
+  pData		    anynonarray,
+  OUT id	    numeric,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS	    record
+AS $$
+DECLARE
+  vData		    Variant;
+BEGIN
+  id := null;
+  result := false;
+
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  vData.vType := pType;
+
+  CASE pType
+  WHEN 0 THEN vData.vInteger := pData;
+  WHEN 1 THEN vData.vNumeric := pData;
+  WHEN 2 THEN vData.vDateTime := pData;
+  WHEN 3 THEN vData.vString := pData;
+  WHEN 4 THEN vData.vBoolean := pData;
+  END CASE;
+
+  id := RegSetValue(coalesce(pId, RegCreateKey(pKey, pSubKey)), pValueName, vData);
+
+  IF id IS NOT NULL THEN
+    SELECT * INTO result, message FROM result_success();
+  END IF;
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.register_read -----------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Чтение из реестра.
+ * @param {text} pKey - Ключ: CURRENT_CONFIG | CURRENT_USER
+ * @param {text} pSubKey - Подключ: Указанный подключ должен быть подключем ключа, указанного в параметре pKey.
+                                    Этот подключ не должен начинатся и заканчиваться знаком обратной черты ('\').
+ * @param {text} pValueName - Имя устанавливаемого значения. Если значение с таким именем не существует в ключе реестра, функция его создает.
+ * @out param {Variant} data - Данные
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.register_read (
+  pKey		    text,
+  pSubKey	    text,
+  pValueName	text,
+  OUT data	    Variant,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS	    record
+AS $$
+BEGIN
+  result := false;
+
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  data := RegGetValue(RegOpenKey(pKey, pSubKey), pValueName);
+
+  SELECT * INTO result, message FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.register_delete_key -----------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Удаляет подключ и его значения.
+ * @param {text} pKey - Ключ: CURRENT_CONFIG | CURRENT_USER
+ * @param {text} pSubKey - Подключ: Указанный подключ должен быть подключем ключа, указанного в параметре pKey.
+                                    Этот подключ не должен начинатся и заканчиваться знаком обратной черты ('\').
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.register_delete_key (
+  pKey		    text,
+  pSubKey	    text,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS	    record
+AS $$
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  IF RegDeleteKey(pKey, pSubKey) THEN
+    SELECT * INTO result, message FROM result_success();
+  ELSE
+    result := false;
+    message := GetErrorMessage();
+  END IF;
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.register_delete_value ---------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Удаляет указанное значение из указанного ключа реестра и подключа.
+ * @param {text} pKey - Ключ: CURRENT_CONFIG | CURRENT_USER
+ * @param {text} pSubKey - Подключ: Указанный подключ должен быть подключем ключа, указанного в параметре pKey.
+                                    Этот подключ не должен начинатся и заканчиваться знаком обратной черты ('\').
+ * @param {text} pValueName - Имя удаляемого значения.
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.register_delete_value (
+  pId		    numeric,
+  pKey		    text,
+  pSubKey	    text,
+  pValueName	text,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS	    record
+AS $$
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  IF pId IS NOT NULL THEN
+    PERFORM DelRegKeyValue(pId);
+    SELECT * INTO result, message FROM result_success();
+  ELSE
+    IF RegDeleteKeyValue(pKey, pSubKey, pValueName) THEN
+      SELECT * INTO result, message FROM result_success();
+    ELSE
+      result := false;
+      message := GetErrorMessage();
+    END IF;
+  END IF;
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.register_delete_tree ----------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Удаляет подключи и значения указанного ключа рекурсивно.
+ * @param {text} pKey - Ключ: CURRENT_CONFIG | CURRENT_USER
+ * @param {text} pSubKey - Подключ: Указанный подключ должен быть подключем ключа, указанного в параметре pKey.
+                                    Этот подключ не должен начинатся и заканчиваться знаком обратной черты ('\').
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.register_delete_tree (
+  pKey		    text,
+  pSubKey	    text,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS	    record
+AS $$
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  IF RegDeleteTree(pKey, pSubKey) THEN
+    SELECT * INTO result, message FROM result_success();
+  ELSE
+    result := false;
+    message := GetErrorMessage();
+  END IF;
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- KERNEL ----------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
@@ -2107,7 +2610,7 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  arTables := array_cat(null, ARRAY['address_tree', 'address', 'client', 'client_address', 'card', 'charge_point', 'status_notification']);
+  arTables := array_cat(null, ARRAY['client', 'card', 'charge_point', 'address', 'calendar', 'address_tree', 'object_file', 'object_data', 'object_address', 'status_notification']);
 
   IF array_position(arTables, pTable) IS NULL THEN
     PERFORM IncorrectValueInArray(pTable, 'sql/api/table', arTables);
@@ -2212,9 +2715,28 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- KERNEL ----------------------------------------------------------------------
+-- LANGUAGE --------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
+--------------------------------------------------------------------------------
+-- api.language ----------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Язык
+ */
+CREATE OR REPLACE VIEW api.language
+AS
+  SELECT * FROM language;
+
+GRANT SELECT ON api.language TO daemon;
+
+--------------------------------------------------------------------------------
+-- WORKFLOW --------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+/**
+ * Сущность
+ */
 CREATE OR REPLACE VIEW api.essence
 AS
   SELECT * FROM Essence;
@@ -2601,6 +3123,21 @@ $$ LANGUAGE SQL
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
+-- api.list_state --------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает список состояний.
+ * @return {SETOF record} - Записи
+ */
+CREATE OR REPLACE FUNCTION api.list_state (
+) RETURNS		SETOF api.state
+AS $$
+  SELECT * FROM api.state
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
 -- ACTION ----------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -2810,6 +3347,46 @@ AS $$
      AND m.action = coalesce(pAction, m.action)
    ORDER BY m.sequence
 $$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_methods_json --------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.get_methods_json (
+  pClass	numeric,
+  pState	numeric
+) RETURNS	json
+AS $$
+DECLARE
+  arResult	json[];
+  r		    record;
+BEGIN
+  FOR r IN SELECT * FROM api.get_method(pClass, pState)
+  LOOP
+    arResult := array_append(arResult, row_to_json(r));
+  END LOOP;
+
+  RETURN array_to_json(arResult);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_methods_jsonb -------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.get_methods_jsonb (
+  pClass	numeric,
+  pState	numeric
+) RETURNS	jsonb
+AS $$
+BEGIN
+  RETURN api.get_methods_json(pClass, pState);
+END;
+$$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
@@ -3140,375 +3717,6 @@ $$ LANGUAGE SQL
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- TYPE ------------------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE VIEW api.type
-AS
-  SELECT * FROM Type;
-
-GRANT SELECT ON api.type TO daemon;
-
---------------------------------------------------------------------------------
--- api.type --------------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION api.type (
-  pEssence	numeric
-) RETURNS	SETOF api.type
-AS $$
-  SELECT * FROM api.type WHERE essence = pEssence;
-$$ LANGUAGE SQL
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.add_type ----------------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Создаёт тип.
- * @param {numeric} pClass - Идентификатор класса
- * @param {varchar} pCode - Код
- * @param {varchar} pName - Наименование
- * @param {text} pDescription - Описание
- * @out param {numeric} id - Идентификатор типа
- * @out param {boolean} result - Результат
- * @out param {text} message - Текст ошибки
- * @return {record}
- */
-CREATE OR REPLACE FUNCTION api.add_type (
-  pClass	numeric,
-  pCode		varchar,
-  pName		varchar,
-  pDescription	text default null,
-  OUT id	numeric,
-  OUT result	boolean,
-  OUT message	text
-) RETURNS 	record
-AS $$
-BEGIN
-  IF current_session() IS NULL THEN
-    PERFORM LoginFailed();
-  END IF;
-
-  id := AddType(pClass, pCode, pName, pDescription);
-  SELECT * INTO result, message FROM result_success();
-EXCEPTION
-WHEN others THEN
-  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
-  id := null;
-  result := false;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.update_type -------------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Обновляет тип.
- * @param {numeric} pId - Идентификатор типа
- * @param {numeric} pClass - Идентификатор класса
- * @param {varchar} pCode - Код
- * @param {varchar} pName - Наименование
- * @param {text} pDescription - Описание
- * @out param {numeric} id - Идентификатор типа
- * @out param {boolean} result - Результат
- * @out param {text} message - Текст ошибки
- * @return {record}
- */
-CREATE OR REPLACE FUNCTION api.update_type (
-  pId		numeric,
-  pClass	numeric default null,
-  pCode		varchar default null,
-  pName		varchar default null,
-  pDescription	text default null,
-  OUT id	numeric,
-  OUT result	boolean,
-  OUT message	text
-) RETURNS 	record
-AS $$
-BEGIN
-  id := pId;
-
-  IF current_session() IS NULL THEN
-    PERFORM LoginFailed();
-  END IF;
-
-  PERFORM EditType(pId, pClass, pCode, pName, pDescription);
-  SELECT * INTO result, message FROM result_success();
-EXCEPTION
-WHEN others THEN
-  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
-  result := false;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.del_type ----------------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Удаляет тип.
- * @param {numeric} pId - Идентификатор типа
- * @out param {numeric} id - Идентификатор типа
- * @out param {numeric} result - Результат
- * @out param {text} message - Текст ошибки
- * @return {record}
- */
-CREATE OR REPLACE FUNCTION api.del_type (
-  pId		numeric,
-  OUT id	numeric,
-  OUT result	boolean,
-  OUT message	text
-) RETURNS 	record
-AS $$
-BEGIN
-  id := pId;
-
-  IF current_session() IS NULL THEN
-    PERFORM LoginFailed();
-  END IF;
-
-  PERFORM DeleteType(pId);
-  SELECT * INTO result, message FROM result_success();
-EXCEPTION
-WHEN others THEN
-  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
-  result := false;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.get_type ----------------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Возвращает тип.
- * @return {Type} - Тип
- */
-CREATE OR REPLACE FUNCTION api.get_type (
-  pId			numeric
-) RETURNS		record
-AS $$
-  SELECT * FROM api.type WHERE id = pId
-$$ LANGUAGE SQL
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.list_type ---------------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Возвращает тип списоком.
- * @return {SETOF record} - Записи
- */
-CREATE OR REPLACE FUNCTION api.list_type (
-) RETURNS		SETOF api.type
-AS $$
-  SELECT * FROM api.type
-$$ LANGUAGE SQL
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- DIRECTORY -------------------------------------------------------------------
---------------------------------------------------------------------------------
-
---------------------------------------------------------------------------------
--- api.language ----------------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Языки.
- */
-CREATE OR REPLACE VIEW api.language
-AS
-  SELECT * FROM language;
-
-GRANT SELECT ON api.language TO daemon;
-
---------------------------------------------------------------------------------
--- OBJECT ----------------------------------------------------------------------
---------------------------------------------------------------------------------
-
---------------------------------------------------------------------------------
--- api.get_object_json_files ---------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION api.get_object_json_files (
-  pObject	numeric
-) RETURNS	json
-AS $$
-DECLARE
-  arResult	json[]; 
-  r		record;
-BEGIN
-  FOR r IN
-    SELECT id, file_hash AS hash, file_name AS name, file_path AS path, file_size AS size, file_date AS date
-      FROM db.object_file
-     WHERE object = pObject
-     ORDER BY load_date desc, file_path, file_name
-  LOOP
-    arResult := array_append(arResult, row_to_json(r));
-  END LOOP;
-
-  RETURN array_to_json(arResult);
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.get_object_jsonb_files --------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION api.get_object_jsonb_files (
-  pObject	numeric
-) RETURNS	jsonb
-AS $$
-BEGIN
-  RETURN api.get_object_json_files(pObject);
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.set_object_json_files ---------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION api.set_object_json_files (
-  pObject	numeric,
-  pFiles	jsonb,
-  OUT result	boolean,
-  OUT message	text
-) RETURNS 	record
-AS $$
-DECLARE
-  arKeys	text[];
-  nId		numeric;
-  r		record;
-BEGIN
-  IF current_session() IS NULL THEN
-    PERFORM LoginFailed();
-  END IF;
-
-  SELECT id INTO nId FROM Document WHERE object = pObject;
-  IF not found THEN
-    PERFORM ObjectNotFound('документ', 'id', pObject);
-  END IF;
-
-  IF pFiles IS NOT NULL THEN
-    arKeys := array_cat(arKeys, ARRAY['id', 'hash', 'name', 'path', 'size', 'date', 'delete']);
-    PERFORM CheckJsonbKeys('/object/file/files', arKeys, pFiles);
-
-    FOR r IN SELECT * FROM jsonb_to_recordset(pFiles) AS files(id numeric, hash text, name text, path text, size int, date timestamp, delete boolean)
-    LOOP
-      IF r.id IS NOT NULL THEN
-
-        SELECT id INTO nId FROM db.object_file WHERE id = r.id AND object = pObject;
-
-        IF NOT FOUND THEN
-          PERFORM ObjectNotFound('файл', r.name, r.id);
-        END IF;
-
-        IF coalesce(r.delete, false) THEN
-          PERFORM DeleteObjectFile(r.id);
-        ELSE
-          PERFORM EditObjectFile(r.id, r.hash, r.name, r.path, r.size, r.date);
-        END IF;
-      ELSE
-        PERFORM NewObjectFile(pObject, r.hash, r.name, r.path, r.size, r.date);
-      END IF;
-    END LOOP;
-
-    SELECT * INTO result, message FROM result_success();
-  ELSE
-    PERFORM JsonIsEmpty();
-  END IF;
-EXCEPTION
-WHEN others THEN
-  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
-  result := false;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.get_type ----------------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Возвращает тип объекта по коду.
- * @param {varchar} pCode - Код типа объекта
- * @return {numeric} - Тип объекта
- */
-CREATE OR REPLACE FUNCTION api.get_type (
-  pCode		varchar
-) RETURNS	numeric
-AS $$
-BEGIN
-  IF current_session() IS NOT NULL THEN
-    RETURN GetType(pCode);
-  END IF;
-
-  RETURN null;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- GetJsonMethods --------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION GetJsonMethods (
-  pClass	numeric,
-  pState	numeric
-) RETURNS	json
-AS $$
-DECLARE
-  arResult	json[];
-  r		    record;
-BEGIN
-  FOR r IN SELECT * FROM api.get_method(pClass, pState)
-  LOOP
-    arResult := array_append(arResult, row_to_json(r));
-  END LOOP;
-
-  RETURN array_to_json(arResult);
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- GetJsonGroups ---------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION GetJsonGroups (
-  pMember	numeric
-) RETURNS	json
-AS $$
-DECLARE
-  arResult	json[];
-  r		    record;
-BEGIN
-  FOR r IN SELECT * FROM api.member_user(pMember)
-  LOOP
-    arResult := array_append(arResult, row_to_json(r));
-  END LOOP;
-
-  RETURN array_to_json(arResult);
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
 -- api.run_action --------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
@@ -3605,7 +3813,7 @@ BEGIN
     arCodes := array_append(arCodes, r.code);
   END LOOP;
 
-  IF array_position(arCodes, pCode) IS NULL THEN
+  IF array_position(arCodes, pCode::text) IS NULL THEN
     PERFORM IncorrectCode(pCode, arCodes);
   END IF;
 
@@ -3678,43 +3886,30 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.get_document ------------------------------------------------------------
+-- OBJECT ----------------------------------------------------------------------
 --------------------------------------------------------------------------------
-/**
- * Возвращает документ.
- * @param {numeric} pId - Идентификатор документа
- * @return {VDocument} - Документ
- */
-CREATE OR REPLACE FUNCTION api.get_document (
-  pId		numeric
-) RETURNS	Document
-AS $$
-  SELECT * FROM Document WHERE id = pId
-$$ LANGUAGE SQL
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
 -- api.object_force_del --------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Принудительно "удалят" документ (минуя события документооборота).
- * @param {numeric} pObject - Идентификатор объекта (api.get_document)
- * @out param {numeric} id - Идентификатор заявки
+ * Принудительно "удаляет" документ (минуя события документооборота).
+ * @param {numeric} pObject - Идентификатор объекта
+ * @out param {numeric} id - Идентификатор
  * @out param {boolean} result - Результат
  * @out param {text} message - Текст ошибки
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.object_force_del (
-  pObject	numeric,
-  OUT id	numeric,
+  pObject	    numeric,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS	record
+) RETURNS	    record
 AS $$
 DECLARE
-  nId		numeric;
-  nState	numeric;
+  nId		    numeric;
+  nState	    numeric;
 BEGIN
   id := pObject;
   result := false;
@@ -3747,146 +3942,139 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- REGISTER --------------------------------------------------------------------
+-- TYPE ------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW api.register
+CREATE OR REPLACE VIEW api.type
 AS
-  SELECT * FROM Register;
+  SELECT * FROM Type;
 
-GRANT SELECT ON api.register TO daemon;
+GRANT SELECT ON api.type TO daemon;
 
 --------------------------------------------------------------------------------
+-- api.type --------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION api.register (
-  pId		numeric,
-  pKey		numeric,
-  pSubKey	numeric
-) RETURNS	SETOF api.register
+CREATE OR REPLACE FUNCTION api.type (
+  pEssence	numeric
+) RETURNS	SETOF api.type
 AS $$
-  SELECT * 
-    FROM api.register 
-   WHERE id = coalesce(pId, id)
-     AND key = coalesce(pKey, key)
-     AND subkey = coalesce(pSubKey, subkey)
+  SELECT * FROM api.type WHERE essence = pEssence;
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
-
-CREATE OR REPLACE VIEW api.register_ex
-AS
-  SELECT * FROM RegisterEx;
-
-GRANT SELECT ON api.register_ex TO daemon;
-
+-- api.add_type ----------------------------------------------------------------
 --------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION api.register_ex (
-  pId		numeric,
-  pKey		numeric,
-  pSubKey	numeric
-) RETURNS	SETOF api.register_ex
+/**
+ * Создаёт тип.
+ * @param {numeric} pClass - Идентификатор класса
+ * @param {varchar} pCode - Код
+ * @param {varchar} pName - Наименование
+ * @param {text} pDescription - Описание
+ * @out param {numeric} id - Идентификатор типа
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.add_type (
+  pClass	    numeric,
+  pCode		    varchar,
+  pName		    varchar,
+  pDescription	text default null,
+  OUT id	    numeric,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS 	    record
 AS $$
-  SELECT * 
-    FROM api.register_ex
-   WHERE id = coalesce(pId, id)
-     AND key = coalesce(pKey, key)
-     AND subkey = coalesce(pSubKey, subkey)
-$$ LANGUAGE SQL
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  id := AddType(pClass, pCode, pName, pDescription);
+  SELECT * INTO result, message FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  id := null;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
-
-CREATE OR REPLACE VIEW api.register_key
-AS
-  SELECT * FROM RegisterKey;
-
-GRANT SELECT ON api.register_key TO daemon;
-
+-- api.update_type -------------------------------------------------------------
 --------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION api.register_key (
-  pId		numeric,
-  pRoot		numeric,
-  pParent	numeric,
-  pKey		text
-) RETURNS	SETOF api.register_key
+/**
+ * Обновляет тип.
+ * @param {numeric} pId - Идентификатор типа
+ * @param {numeric} pClass - Идентификатор класса
+ * @param {varchar} pCode - Код
+ * @param {varchar} pName - Наименование
+ * @param {text} pDescription - Описание
+ * @out param {numeric} id - Идентификатор типа
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.update_type (
+  pId		    numeric,
+  pClass	    numeric default null,
+  pCode		    varchar default null,
+  pName		    varchar default null,
+  pDescription	text default null,
+  OUT id	    numeric,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS 	    record
 AS $$
-  SELECT * 
-    FROM api.register_key
-   WHERE id = coalesce(pId, id)
-     AND root = coalesce(pRoot, root)
-     AND parent = coalesce(pParent, parent)
-     AND key = coalesce(pKey, key)
-$$ LANGUAGE SQL
+BEGIN
+  id := pId;
+
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  PERFORM EditType(pId, pClass, pCode, pName, pDescription);
+  SELECT * INTO result, message FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
-
-CREATE OR REPLACE VIEW api.register_value
-AS
-  SELECT * FROM RegisterValue;
-
-GRANT SELECT ON api.register_value TO daemon;
-
+-- api.del_type ----------------------------------------------------------------
 --------------------------------------------------------------------------------
-
-CREATE OR REPLACE VIEW api.register_value_ex
-AS
-  SELECT * FROM RegisterValueEx;
-
-GRANT SELECT ON api.register_value_ex TO daemon;
-
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION api.register_value (
+/**
+ * Удаляет тип.
+ * @param {numeric} pId - Идентификатор типа
+ * @out param {numeric} id - Идентификатор типа
+ * @out param {numeric} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.del_type (
   pId		numeric,
-  pKey		numeric
-) RETURNS	SETOF api.register_value
-AS $$
-  SELECT * 
-    FROM api.register_value
-   WHERE id = coalesce(pId, id)
-     AND key = coalesce(pKey, key)
-$$ LANGUAGE SQL
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION api.register_value_ex (
-  pId		numeric,
-  pKey		numeric
-) RETURNS	SETOF api.register_value_ex
-AS $$
-  SELECT * 
-    FROM api.register_value_ex
-   WHERE id = coalesce(pId, id)
-     AND key = coalesce(pKey, key)
-$$ LANGUAGE SQL
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION api.register_get_reg_key (
-  pKey		numeric,
-  OUT key	text,
+  OUT id	numeric,
   OUT result	boolean,
   OUT message	text
 ) RETURNS 	record
 AS $$
 BEGIN
+  id := pId;
+
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
-  key := get_reg_key(pKey);
-
+  PERFORM DeleteType(pId);
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -3898,157 +4086,159 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.register_enum_key -------------------------------------------------------
+-- api.get_type ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Перечисляет подключи указанной пары ключ/подключ реестра.
- * @param {text} pKey - Ключ: CURRENT_CONFIG | CURRENT_USER
- * @param {text} pSubKey - Подключ: Указанный подключ должен быть подключем ключа, указанного в параметре pKey. 
-                                    Этот подключ не должен начинатся и заканчиваться знаком обратной черты ('\').
- * @out param {numeric} id - Идентификатор подключа
- * @out param {text} key - Ключ
- * @out param {text} subkey - Подключ
- * @return {record}
+ * Возвращает тип.
+ * @return {Type} - Тип
  */
-CREATE OR REPLACE FUNCTION api.register_enum_key (
-  pKey		text,
-  pSubKey	text,
-  OUT id	numeric,
-  OUT key	text,
-  OUT subkey	text
-) RETURNS	SETOF record
+CREATE OR REPLACE FUNCTION api.get_type (
+  pId			numeric
+) RETURNS		record
 AS $$
-  SELECT id, pKey, get_reg_key(id) FROM RegEnumKey(RegOpenKey(pKey, pSubKey));
+  SELECT * FROM api.type WHERE id = pId
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.register_enum_value -----------------------------------------------------
+-- api.get_type ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Перечисляет значения для указанной пары ключ/подключ реестра.
- * @param {text} pKey - Ключ: CURRENT_CONFIG | CURRENT_USER
- * @param {text} pSubKey - Подключ: Указанный подключ должен быть подключем ключа, указанного в параметре pKey. 
-                                    Этот подключ не должен начинатся и заканчиваться знаком обратной черты ('\').
- * @out param {numeric} id - Идентификатор значения
- * @out param {text} key - Ключ
- * @out param {text} subkey - Подключ
- * @out param {text} valuename - Имя значения
- * @out param {variant} data - Данные
- * @return {record}
+ * Возвращает тип объекта по коду.
+ * @param {varchar} pCode - Код типа объекта
+ * @return {numeric} - Тип объекта
  */
-CREATE OR REPLACE FUNCTION api.register_enum_value (
-  pKey		text,
-  pSubKey	text,
-  OUT id	numeric,
-  OUT key	text,
-  OUT subkey	text,
-  OUT valuename	text,
-  OUT value	variant
-) RETURNS	SETOF record
+CREATE OR REPLACE FUNCTION api.get_type (
+  pCode		varchar
+) RETURNS	numeric
 AS $$
-  SELECT id, pKey, pSubKey, vname, get_reg_value(id) FROM RegEnumValue(RegOpenKey(pKey, pSubKey));
+BEGIN
+  IF current_session() IS NOT NULL THEN
+    RETURN GetType(pCode);
+  END IF;
+
+  RETURN null;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.list_type ---------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает тип списоком.
+ * @return {SETOF record} - Записи
+ */
+CREATE OR REPLACE FUNCTION api.list_type (
+) RETURNS		SETOF api.type
+AS $$
+  SELECT * FROM api.type
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.register_enum_value_ex --------------------------------------------------
+-- OBJECT FILE -----------------------------------------------------------------
 --------------------------------------------------------------------------------
-/**
- * Перечисляет значения для указанной пары ключ/подключ реестра.
- * @param {text} pKey - Ключ: CURRENT_CONFIG | CURRENT_USER
- * @param {text} pSubKey - Подключ: Указанный подключ должен быть подключем ключа, указанного в параметре pKey. 
-                                    Этот подключ не должен начинатся и заканчиваться знаком обратной черты ('\').
- * @out param {numeric} id - Идентификатор значения
- * @out param {text} key - Ключ
- * @out param {text} subkey - Подключ
- * @out param {text} valuename - Имя значения
- * @out param {integer} vtype - Тип данных: 0..4
- * @out param {integer} vinteger - Целое число
- * @out param {numeric} vnumeric - Число с произвольной точностью
- * @out param {timestamp} vdatetime - Дата и время
- * @out param {text} vstring - Строка
- * @out param {boolean} vboolean - Логический
- * @return {record}
- */
-CREATE OR REPLACE FUNCTION api.register_enum_value_ex (
-  pKey		text,
-  pSubKey	text,
-  OUT id	numeric,
-  OUT key	text,
-  OUT subkey	text,
-  OUT valuename	text,
-  OUT vtype	integer,
-  OUT vinteger	integer,
-  OUT vnumeric	numeric,
-  OUT vdatetime	timestamp,
-  OUT vstring	text,
-  OUT vboolean	boolean
-) RETURNS	SETOF record
+
+--------------------------------------------------------------------------------
+-- api.object_file -------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.object_file
+AS
+  SELECT * FROM ObjectFile;
+
+GRANT SELECT ON api.object_file TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.get_object_files_json ---------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.get_object_files_json (
+  pObject	numeric
+) RETURNS	json
 AS $$
-  SELECT id, pKey, pSubKey, vname, vtype, vinteger, vnumeric, vdatetime, vstring, vboolean FROM RegEnumValueEx(RegOpenKey(pKey, pSubKey));
-$$ LANGUAGE SQL
+BEGIN
+  RETURN GetObjectFilesJson(pObject);
+END;
+$$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.register_write ----------------------------------------------------------
+-- api.get_object_files_jsonb --------------------------------------------------
 --------------------------------------------------------------------------------
-/**
- * Запись в реестр.
- * @param {text} pKey - Ключ: CURRENT_CONFIG | CURRENT_USER
- * @param {text} pSubKey - Подключ: Указанный подключ должен быть подключем ключа, указанного в параметре pKey. 
-                                    Этот подключ не должен начинатся и заканчиваться знаком обратной черты ('\').
- * @param {text} pValueName - Имя устанавливаемого значения. Если значение с таким именем не существует в ключе реестра, функция его создает.
- * @param {integer} pType - Определяет тип сохраняемых данных значения. Где: 0 - Целое число; 
-                                                                             1 - Число с произвольной точностью; 
-                                                                             2 - Дата и время; 
-                                                                             3 - Строка; 
-                                                                             4 - Логический.
- * @param {anynonarray} pData - Данные для установки их по указанному имени значения.
- * @out param {numeric} id - Идентификатор заявки
- * @out param {boolean} result - Результат
- * @out param {text} message - Текст ошибки
- * @return {record}
- */
-CREATE OR REPLACE FUNCTION api.register_write (
-  pId		numeric,
-  pKey		text,
-  pSubKey	text,
-  pValueName	text,
-  pType		integer,
-  pData		anynonarray,
-  OUT id	numeric,
+
+CREATE OR REPLACE FUNCTION api.get_object_files_jsonb (
+  pObject	numeric
+) RETURNS	jsonb
+AS $$
+BEGIN
+  RETURN GetObjectFilesJsonb(pObject);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.set_object_files_json ---------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.set_object_files_json (
+  pObject	    numeric,
+  pFiles	    json,
+  OUT id        numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS	record
+) RETURNS 	    record
 AS $$
 DECLARE
-  vData		Variant;
+  arKeys	    text[];
+  nId		    numeric;
+  r		        record;
 BEGIN
-  id := null;
-  result := false;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
-  vData.vType := pType;
+  SELECT o.id INTO nId FROM db.object o WHERE o.id = pObject;
+  IF not found THEN
+    PERFORM ObjectNotFound('объект', 'id', pObject);
+  END IF;
 
-  CASE pType 
-  WHEN 0 THEN vData.vInteger := pData;
-  WHEN 1 THEN vData.vNumeric := pData;
-  WHEN 2 THEN vData.vDateTime := pData;
-  WHEN 3 THEN vData.vString := pData;
-  WHEN 4 THEN vData.vBoolean := pData;
-  END CASE;
+  IF pFiles IS NOT NULL THEN
+    arKeys := array_cat(arKeys, ARRAY['id', 'hash', 'name', 'path', 'size', 'date', 'delete']);
+    PERFORM CheckJsonKeys('/object/file/files', arKeys, pFiles);
 
-  id := RegSetValue(coalesce(pId, RegCreateKey(pKey, pSubKey)), pValueName, vData);
+    FOR r IN SELECT * FROM json_to_recordset(pFiles) AS files(id numeric, hash text, name text, path text, size int, date timestamp, delete boolean)
+    LOOP
+      id := r.id;
 
-  IF id IS NOT NULL THEN
+      IF r.id IS NOT NULL THEN
+
+        SELECT o.id INTO nId FROM db.object_file o WHERE o.id = r.id AND object = pObject;
+
+        IF NOT FOUND THEN
+          PERFORM ObjectNotFound('файл', r.name, r.id);
+        END IF;
+
+        IF coalesce(r.delete, false) OR coalesce(r.name, true) THEN
+          PERFORM DeleteObjectFile(r.id);
+          id := null;
+        ELSE
+          PERFORM EditObjectFile(r.id, r.hash, r.name, r.path, r.size, r.date);
+        END IF;
+      ELSE
+        id := AddObjectFile(pObject, r.hash, r.name, r.path, r.size, r.date);
+      END IF;
+    END LOOP;
+
     SELECT * INTO result, message FROM result_success();
+  ELSE
+    PERFORM JsonIsEmpty();
   END IF;
 EXCEPTION
 WHEN others THEN
@@ -4060,42 +4250,290 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.register_read -----------------------------------------------------------
+-- api.set_object_files_jsonb --------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.set_object_files_jsonb (
+  pObject	    numeric,
+  pFiles	    jsonb,
+  OUT id        numeric,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS 	    record
+AS $$
+  SELECT * FROM api.set_object_files_json(pObject, pFiles::json);
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_object_file ---------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Чтение из реестра.
- * @param {text} pKey - Ключ: CURRENT_CONFIG | CURRENT_USER
- * @param {text} pSubKey - Подключ: Указанный подключ должен быть подключем ключа, указанного в параметре pKey. 
-                                    Этот подключ не должен начинатся и заканчиваться знаком обратной черты ('\').
- * @param {text} pValueName - Имя устанавливаемого значения. Если значение с таким именем не существует в ключе реестра, функция его создает.
- * @out param {Variant} data - Данные
+ * Возвращает файлы объекта
+ * @param {numeric} pId - Идентификатор объекта
+ * @return {api.object_file}
+ */
+CREATE OR REPLACE FUNCTION api.get_object_file (
+  pId		numeric
+) RETURNS	api.object_file
+AS $$
+  SELECT * FROM api.object_file WHERE id = pId
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.list_object_file --------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает список файлов объекта.
+ * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
+ * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
+ * @param {integer} pLimit - Лимит по количеству строк
+ * @param {integer} pOffSet - Пропустить указанное число строк
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
+ * @return {SETOF api.object_file}
+ */
+CREATE OR REPLACE FUNCTION api.list_object_file (
+  pSearch	jsonb default null,
+  pFilter	jsonb default null,
+  pLimit	integer default null,
+  pOffSet	integer default null,
+  pOrderBy	jsonb default null
+) RETURNS	SETOF api.object_file
+AS $$
+BEGIN
+  RETURN QUERY EXECUTE CreateApiSql('api', 'object_file', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- OBJECT DATA -----------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- api.object_data_type --------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.object_data_type
+AS
+  SELECT * FROM ObjectDataType;
+
+GRANT SELECT ON api.object_data_type TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.get_object_data_type_by_code --------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.get_object_data_type_by_code (
+  pCode		varchar
+) RETURNS	numeric
+AS $$
+BEGIN
+  RETURN GetObjectDataType(pCode);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.object_data -------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.object_data
+AS
+  SELECT * FROM ObjectData;
+
+GRANT SELECT ON api.object_data TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.get_object_data_json ----------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.get_object_data_json (
+  pObject	numeric
+) RETURNS	json
+AS $$
+BEGIN
+  RETURN GetObjectDataJson(pObject);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_object_data_jsonb ---------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.get_object_data_jsonb (
+  pObject	numeric
+) RETURNS	jsonb
+AS $$
+BEGIN
+  RETURN GetObjectDataJsonb(pObject);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.set_object_data_json ----------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.set_object_data_json (
+  pObject	    numeric,
+  pData	        json,
+  OUT id        numeric,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS 	    record
+AS $$
+DECLARE
+  arKeys	    text[];
+  arTypes       text[];
+
+  nId		    numeric;
+  nType		    numeric;
+
+  r		        record;
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  SELECT o.id INTO nId FROM db.object o WHERE o.id = pObject;
+  IF not found THEN
+    PERFORM ObjectNotFound('объект', 'id', pObject);
+  END IF;
+
+  IF pData IS NOT NULL THEN
+    arKeys := array_cat(arKeys, ARRAY['id', 'type', 'code', 'data', 'delete']);
+    PERFORM CheckJsonKeys('/object/data', arKeys, pData);
+
+    FOR r IN SELECT * FROM json_to_recordset(pData) AS data(id numeric, type varchar, code varchar, data text, delete boolean)
+    LOOP
+      arTypes := array_cat(arTypes, ARRAY['text', 'json', 'xml']);
+      IF array_position(arTypes, r.type::text) IS NULL THEN
+        PERFORM IncorrectCode(r.type, arTypes);
+      END IF;
+
+      id := r.id;
+
+      nType := GetObjectDataType(r.type);
+
+      IF r.id IS NOT NULL THEN
+
+        SELECT o.id INTO nId FROM db.object_data o WHERE o.id = r.id AND object = pObject;
+
+        IF NOT FOUND THEN
+          PERFORM ObjectNotFound('данные объекта', r.code, r.id);
+        END IF;
+
+        IF coalesce(r.delete, false) OR coalesce(r.data, true) THEN
+          PERFORM DeleteObjectData(r.id);
+          id := null;
+        ELSE
+          PERFORM EditObjectData(r.id, pObject, nType, r.code, r.data);
+        END IF;
+      ELSE
+        id := AddObjectData(pObject, nType, r.code, r.data);
+      END IF;
+    END LOOP;
+
+    SELECT * INTO result, message FROM result_success();
+  ELSE
+    PERFORM JsonIsEmpty();
+  END IF;
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.set_object_data_jsonb ---------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.set_object_data_jsonb (
+  pObject	    numeric,
+  pData	        jsonb,
+  OUT id        numeric,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS 	    record
+AS $$
+  SELECT * FROM api.set_object_data_json(pObject, pData::json);
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.set_object_data ---------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Устанавливает данные объекта
+ * @param {numeric} pObject - Идентификатор объекта
+ * @param {varchar} pType - Код типа данных
+ * @param {varchar} pCode - Код
+ * @param {text} pData - Данные
+ * @out param {numeric} id - Идентификатор
  * @out param {boolean} result - Результат
  * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.register_read (
-  pId		numeric,
-  pKey		text,
-  pSubKey	text,
-  pValueName	text,
-  OUT data	Variant,
+CREATE OR REPLACE FUNCTION api.set_object_data (
+  pObject	    numeric,
+  pType		    varchar,
+  pCode		    varchar,
+  pData		    text,
+  OUT id        numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS	record
+) RETURNS       record
 AS $$
+DECLARE
+  nId           numeric;
+  nType         numeric;
+  arTypes       text[];
 BEGIN
-  result := false;
+  id := null;
 
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
-  data := RegGetValue(RegOpenKey(pKey, pSubKey), pValueName);
+  pType := lower(pType);
+  arTypes := array_cat(arTypes, ARRAY['text', 'json', 'xml']);
+  IF array_position(arTypes, pType::text) IS NULL THEN
+    PERFORM IncorrectCode(pType, arTypes);
+  END IF;
+
+  nType := GetObjectDataType(pType);
+
+  SELECT d.id INTO nId FROM db.object_data d WHERE d.object = pObject AND d.type = nType AND d.code = pCode;
+
+  IF pData IS NOT NULL THEN
+    IF nId IS NULL THEN
+      id := AddObjectData(pObject, nType, pCode, pData);
+    ELSE
+      id := nId;
+      PERFORM EditObjectData(nId, pObject, nType, pCode, pData);
+    END IF;
+  ELSE
+    PERFORM DeleteObjectData(nId);
+  END IF;
 
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
   GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  id := null;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -4103,38 +4541,97 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.register_delete_key -----------------------------------------------------
+-- api.get_object_data ---------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Удаляет подключ и его значения.
- * @param {text} pKey - Ключ: CURRENT_CONFIG | CURRENT_USER
- * @param {text} pSubKey - Подключ: Указанный подключ должен быть подключем ключа, указанного в параметре pKey. 
-                                    Этот подключ не должен начинатся и заканчиваться знаком обратной черты ('\').
+ * Возвращает данные объекта
+ * @param {numeric} pId - Идентификатор объекта
+ * @return {api.object_data}
+ */
+CREATE OR REPLACE FUNCTION api.get_object_data (
+  pId		numeric
+) RETURNS	api.object_data
+AS $$
+  SELECT * FROM api.object_data WHERE id = pId
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.list_object_data --------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает список данных объекта.
+ * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
+ * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
+ * @param {integer} pLimit - Лимит по количеству строк
+ * @param {integer} pOffSet - Пропустить указанное число строк
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
+ * @return {SETOF api.object_data}
+ */
+CREATE OR REPLACE FUNCTION api.list_object_data (
+  pSearch	jsonb default null,
+  pFilter	jsonb default null,
+  pLimit	integer default null,
+  pOffSet	integer default null,
+  pOrderBy	jsonb default null
+) RETURNS	SETOF api.object_data
+AS $$
+BEGIN
+  RETURN QUERY EXECUTE CreateApiSql('api', 'object_data', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- OBJECT ADDRESS --------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- api.object_address ----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.object_address
+AS
+  SELECT * FROM ObjectAddresses;
+
+GRANT SELECT ON api.object_address TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.set_object_address ------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Устанавливает адрес объекта
+ * @param {numeric} pObject - Идентификатор объекта
+ * @param {numeric} pAddress - Идентификатор адреса
+ * @param {timestamp} pDateFrom - Дата операции
+ * @out param {numeric} id - Идентификатор
  * @out param {boolean} result - Результат
  * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.register_delete_key (
-  pKey		text,
-  pSubKey	text,
+CREATE OR REPLACE FUNCTION api.set_object_address (
+  pObject	    numeric,
+  pAddress	    numeric,
+  pDateFrom	    timestamp default oper_date(),
+  OUT id        numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS	record
+) RETURNS       record
 AS $$
 BEGIN
-  IF current_session() IS NULL THEN
+ IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
-  IF RegDeleteKey(pKey, pSubKey) THEN
-    SELECT * INTO result, message FROM result_success();
-  ELSE
-    result := false;
-    message := GetErrorMessage();
-  END IF;
+  id := SetObjectAddress(pObject, pAddress, pDateFrom);
+
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
   GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  id := null;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -4142,46 +4639,240 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.register_delete_value ---------------------------------------------------
+-- api.get_object_address ------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Удаляет указанное значение из указанного ключа реестра и подключа.
- * @param {text} pKey - Ключ: CURRENT_CONFIG | CURRENT_USER
- * @param {text} pSubKey - Подключ: Указанный подключ должен быть подключем ключа, указанного в параметре pKey. 
-                                    Этот подключ не должен начинатся и заканчиваться знаком обратной черты ('\').
- * @param {text} pValueName - Имя удаляемого значения.
+ * Возвращает адрес клиента
+ * @param {numeric} pId - Идентификатор адреса клиента
+ * @return {api.object_address}
+ */
+CREATE OR REPLACE FUNCTION api.get_object_address (
+  pId		numeric
+) RETURNS	api.object_address
+AS $$
+  SELECT * FROM api.object_address WHERE id = pId
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.list_object_address -----------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает список адресов.
+ * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
+ * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
+ * @param {integer} pLimit - Лимит по количеству строк
+ * @param {integer} pOffSet - Пропустить указанное число строк
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
+ * @return {SETOF api.object_address}
+ */
+CREATE OR REPLACE FUNCTION api.list_object_address (
+  pSearch	jsonb default null,
+  pFilter	jsonb default null,
+  pLimit	integer default null,
+  pOffSet	integer default null,
+  pOrderBy	jsonb default null
+) RETURNS	SETOF api.object_address
+AS $$
+BEGIN
+  RETURN QUERY EXECUTE CreateApiSql('api', 'object_address', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- DOCUMENT --------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- api.get_document ------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает документ.
+ * @param {numeric} pId - Идентификатор документа
+ * @return {VDocument} - Документ
+ */
+CREATE OR REPLACE FUNCTION api.get_document (
+  pId		numeric
+) RETURNS	Document
+AS $$
+  SELECT * FROM Document WHERE id = pId
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- CLIENT ----------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- api.client ------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.client
+AS
+  SELECT * FROM ObjectClient;
+
+GRANT SELECT ON api.client TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.add_client --------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Добавляет нового клиента.
+ * @param {numeric} pParent - Идентификатор родителя | null
+ * @param {varchar} pType - Tип клиента
+ * @param {varchar} pCode - ИНН - для юридического лица | Имя пользователя (login) | null
+ * @param {numeric} pUserId - Идентификатор пользователя системы | null
+ * @param {jsonb} pName - Полное наименование компании/Ф.И.О.
+ * @param {jsonb} pPhone - Телефоны
+ * @param {jsonb} pEmail - Электронные адреса
+ * @param {jsonb} pInfo - Дополнительная информация
+ * @param {text} pDescription - Информация о клиенте
+ * @out param {numeric} id - Идентификатор клиента
  * @out param {boolean} result - Результат
  * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.register_delete_value (
-  pId		numeric,
-  pKey		text,
-  pSubKey	text,
-  pValueName	text,
-  OUT result	boolean,
-  OUT message	text
-) RETURNS	record
+CREATE OR REPLACE FUNCTION api.add_client (
+  pParent       numeric,
+  pType         varchar,
+  pCode         varchar,
+  pUserId       numeric,
+  pName         jsonb,
+  pPhone        jsonb default null,
+  pEmail        jsonb default null,
+  pInfo         jsonb default null,
+  pDescription  text default null,
+  OUT id        numeric,
+  OUT result    boolean,
+  OUT message   text
+) RETURNS       record
 AS $$
+DECLARE
+  cn            record;
+  nClient       numeric;
+  arTypes       text[];
+  arKeys        text[];
 BEGIN
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
-  IF pId IS NOT NULL THEN
-    PERFORM DelRegKeyValue(pId);
-    SELECT * INTO result, message FROM result_success();
-  ELSE
-    IF RegDeleteKeyValue(pKey, pSubKey, pValueName) THEN
-      SELECT * INTO result, message FROM result_success();
-    ELSE
-      result := false;
-      message := GetErrorMessage();
+  pType := lower(pType);
+  arTypes := array_cat(arTypes, ARRAY['entity', 'natural', 'sole']);
+  IF array_position(arTypes, pType::text) IS NULL THEN
+    PERFORM IncorrectCode(pType, arTypes);
+  END IF;
+
+  arKeys := array_cat(arKeys, ARRAY['name', 'short', 'first', 'last', 'middle']);
+  PERFORM CheckJsonbKeys('add_client', arKeys, pName);
+
+  SELECT * INTO cn FROM jsonb_to_record(pName) AS x(name varchar, short varchar, first varchar, last varchar, middle varchar);
+
+  IF pUserId = 0 THEN
+    pUserId := CreateUser(pCode, pCode, cn.short, pPhone->>0, pEmail->>0, cn.name);
+  END IF;
+
+  nClient := CreateClient(pParent, GetType(pType || '.client'), pCode, pUserId, pPhone, pEmail, pInfo, pDescription);
+
+  PERFORM NewClientName(nClient, cn.name, cn.short, cn.first, cn.last, cn.middle);
+
+  id := nClient;
+
+  SELECT * INTO result, message FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  id := null;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.update_client -----------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Обновляет данные клиента.
+ * @param {numeric} pId - Идентификатор клиента (api.get_client)
+ * @param {numeric} pParent - Идентификатор родителя | null
+ * @param {varchar} pType - Tип клиента
+ * @param {varchar} pCode - ИНН - для юридического лица | Имя пользователя (login) | null
+ * @param {numeric} pUserId - Идентификатор пользователя системы | null
+ * @param {jsonb} pName - Полное наименование компании/Ф.И.О.
+ * @param {jsonb} pPhone - Телефоны
+ * @param {jsonb} pEmail - Электронные адреса
+ * @param {jsonb} pInfo - Дополнительная информация
+ * @param {text} pDescription - Информация о клиенте
+ * @out param {numeric} id - Идентификатор клиента
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.update_client (
+  pId           numeric,
+  pParent       numeric,
+  pType         varchar,
+  pCode         varchar,
+  pUserId       numeric,
+  pName         jsonb,
+  pPhone        jsonb default null,
+  pEmail        jsonb default null,
+  pInfo         jsonb default null,
+  pDescription  text default null,
+  OUT id        numeric,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS       record
+AS $$
+DECLARE
+  r             record;
+  nType         numeric;
+  nClient       numeric;
+  arTypes       text[];
+  arKeys        text[];
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  SELECT c.id INTO nClient FROM db.client c WHERE c.id = pId;
+  IF NOT FOUND THEN
+    PERFORM ObjectNotFound('клиент', 'id', pId);
+  END IF;
+
+  IF pType IS NOT NULL THEN
+    pType := lower(pType);
+    arTypes := array_cat(arTypes, ARRAY['entity', 'natural', 'sole']);
+    IF array_position(arTypes, pType::text) IS NULL THEN
+      PERFORM IncorrectCode(pType, arTypes);
     END IF;
+    nType := GetType(pType || '.client');
+  ELSE
+    SELECT o.type INTO nType FROM db.object o WHERE o.id = pId;
   END IF;
+
+  arKeys := array_cat(arKeys, ARRAY['name', 'short', 'first', 'last', 'middle']);
+  PERFORM CheckJsonbKeys('update_client', arKeys, pName);
+
+  PERFORM EditClient(nClient, pParent, nType, pCode, pUserId, pPhone, pEmail, pInfo, pDescription);
+
+  FOR r IN SELECT * FROM jsonb_to_record(pName) AS x(name varchar, short varchar, first varchar, last varchar, middle varchar)
+  LOOP
+    PERFORM EditClientName(nClient, r.name, r.short, r.first, r.last, r.middle);
+  END LOOP;
+
+  id := nClient;
+
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
   GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  id := null;
   result := false;
 END;
 $$ LANGUAGE plpgsql
@@ -4189,43 +4880,483 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.register_delete_tree ----------------------------------------------------
+-- api.get_client --------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Удаляет подключи и значения указанного ключа рекурсивно.
- * @param {text} pKey - Ключ: CURRENT_CONFIG | CURRENT_USER
- * @param {text} pSubKey - Подключ: Указанный подключ должен быть подключем ключа, указанного в параметре pKey. 
-                                    Этот подключ не должен начинатся и заканчиваться знаком обратной черты ('\').
+ * Возвращает клиента
+ * @param {numeric} pId - Идентификатор клиента
+ * @return {api.client} - Клиент
+ */
+CREATE OR REPLACE FUNCTION api.get_client (
+  pId		numeric
+) RETURNS	api.client
+AS $$
+  SELECT * FROM api.client WHERE id = pId
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.list_client -------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает список клиентов.
+ * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
+ * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
+ * @param {integer} pLimit - Лимит по количеству строк
+ * @param {integer} pOffSet - Пропустить указанное число строк
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
+ * @return {SETOF api.client} - Клиенты
+ */
+CREATE OR REPLACE FUNCTION api.list_client (
+  pSearch	jsonb default null,
+  pFilter	jsonb default null,
+  pLimit	integer default null,
+  pOffSet	integer default null,
+  pOrderBy	jsonb default null
+) RETURNS	SETOF api.client
+AS $$
+BEGIN
+  RETURN QUERY EXECUTE CreateApiSql('api', 'client', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- CARD ------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- api.card --------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.card
+AS
+  SELECT * FROM ObjectCard;
+
+GRANT SELECT ON api.card TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.add_card ----------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Добавляет карту.
+ * @param {varchar} pType - Tип карты
+ * @param {varchar} pCode - Код карты
+ * @param {numeric} pClient - Идентификатор клиента
+ * @param {text} pDescription - Описание
+ * @out param {numeric} id - Идентификатор карты
  * @out param {boolean} result - Результат
  * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.register_delete_tree (
-  pKey		text,
-  pSubKey	text,
-  OUT result	boolean,
-  OUT message	text
-) RETURNS	record
+CREATE OR REPLACE FUNCTION api.add_card (
+  pType         varchar,
+  pCode         varchar,
+  pClient       numeric,
+  pDescription  text default null,
+  OUT id        numeric,
+  OUT result    boolean,
+  OUT message   text
+) RETURNS       record
 AS $$
+DECLARE
+  nCard         numeric;
+  arTypes       text[];
 BEGIN
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
-  IF RegDeleteTree(pKey, pSubKey) THEN
-    SELECT * INTO result, message FROM result_success();
-  ELSE
-    result := false;
-    message := GetErrorMessage();
+  pType := lower(pType);
+  arTypes := array_cat(arTypes, ARRAY['plastic']);
+  IF array_position(arTypes, pType::text) IS NULL THEN
+    PERFORM IncorrectCode(pType, arTypes);
   END IF;
+
+  nCard := CreateCard(null, GetType(pType || '.card'), pCode, pClient, pDescription);
+
+  id := nCard;
+
+  SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
   GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  id := null;
   result := false;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.update_card -------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Обновляет данные карты.
+ * @param {numeric} pId - Идентификатор карты (api.get_card)
+ * @param {varchar} pType - Tип карты
+ * @param {varchar} pCode - Код карты
+ * @param {numeric} pClient - Идентификатор клиента
+ * @param {text} pDescription - Описание
+ * @out param {numeric} id - Идентификатор карты
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.update_card (
+  pId           numeric,
+  pType         varchar default null,
+  pCode         varchar default null,
+  pClient       numeric default null,
+  pDescription  text default null,
+  OUT id        numeric,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS       record
+AS $$
+DECLARE
+  nType         numeric;
+  nCard         numeric;
+  arTypes       text[];
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  SELECT c.id INTO nCard FROM db.card c WHERE c.id = pId;
+  IF NOT FOUND THEN
+    PERFORM ObjectNotFound('карта', 'id', pId);
+  END IF;
+
+  IF pType IS NOT NULL THEN
+    pType := lower(pType);
+    arTypes := array_cat(arTypes, ARRAY['plastic']);
+    IF array_position(arTypes, pType::text) IS NULL THEN
+      PERFORM IncorrectCode(pType, arTypes);
+    END IF;
+    nType := GetType(pType || '.card');
+  ELSE
+    SELECT o.type INTO nType FROM db.object o WHERE o.id = pId;
+  END IF;
+
+  PERFORM EditCard(nCard, null, nType, pCode, pClient, pDescription);
+
+  id := nCard;
+
+  SELECT * INTO result, message FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  id := null;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_card ----------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает клиента
+ * @param {numeric} pId - Идентификатор клиента
+ * @return {api.card} - Клиент
+ */
+CREATE OR REPLACE FUNCTION api.get_card (
+  pId		numeric
+) RETURNS	api.card
+AS $$
+  SELECT * FROM api.card WHERE id = pId
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.list_card ---------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает список клиентов.
+ * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
+ * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
+ * @param {integer} pLimit - Лимит по количеству строк
+ * @param {integer} pOffSet - Пропустить указанное число строк
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
+ * @return {SETOF api.card} - Клиенты
+ */
+CREATE OR REPLACE FUNCTION api.list_card (
+  pSearch	jsonb default null,
+  pFilter	jsonb default null,
+  pLimit	integer default null,
+  pOffSet	integer default null,
+  pOrderBy	jsonb default null
+) RETURNS	SETOF api.card
+AS $$
+BEGIN
+  RETURN QUERY EXECUTE CreateApiSql('api', 'card', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- STATUS NOTIFICATION ---------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- VIEW api.status_notification ------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.status_notification
+AS
+  SELECT * FROM StatusNotification;
+
+GRANT SELECT ON api.status_notification TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.get_charge_point_status -------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает уведомление о статусе зарядной станций
+ * @param {numeric} pChargePoint - Идентификатор зарядной станции
+ * @param {integer} pConnectorId - Идентификатор разъёма зарядной станции
+ * @param {timestamptz} pData - Дата и время
+ * @return {api.status_notification} - Зарядная станция
+ */
+CREATE OR REPLACE FUNCTION api.get_charge_point_status (
+  pChargePoint  numeric,
+  pConnectorId  integer default null,
+  pDate         timestamptz default current_timestamp at time zone 'utc'
+) RETURNS	SETOF api.status_notification
+AS $$
+  SELECT *
+    FROM api.status_notification
+   WHERE chargepoint = pChargePoint
+     AND connectorid = coalesce(pConnectorId, connectorid)
+     AND pDate BETWEEN validfromdate AND validtodate
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.status_charge_point -----------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает уведомление о статусе зарядных станций.
+ * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
+ * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
+ * @param {integer} pLimit - Лимит по количеству строк
+ * @param {integer} pOffSet - Пропустить указанное число строк
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
+ * @return {SETOF api.status_notification} - уведомление о статусе
+ */
+CREATE OR REPLACE FUNCTION api.status_charge_point (
+  pSearch	jsonb default null,
+  pFilter	jsonb default null,
+  pLimit	integer default null,
+  pOffSet	integer default null,
+  pOrderBy	jsonb default null
+) RETURNS	SETOF api.status_notification
+AS $$
+BEGIN
+  RETURN QUERY EXECUTE CreateApiSql('api', 'status_notification', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- CHARGE POINT ----------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- VIEW api.charge_point -------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.charge_point
+AS
+  SELECT *, GetJsonStatusNotification(id) as StatusNotification FROM ObjectChargePoint;
+
+GRANT SELECT ON api.charge_point TO daemon;
+
+--------------------------------------------------------------------------------
+-- FUNCTION api.add_charge_point -----------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.add_charge_point (
+  pProtocol             varchar,
+  pIdentity             varchar,
+  pName                 varchar,
+  pModel                varchar,
+  pVendor               varchar,
+  pVersion              varchar,
+  pSerialNumber         varchar,
+  pBoxSerialNumber      varchar,
+  pMeterSerialNumber    varchar,
+  piccid                varchar,
+  pimsi                 varchar,
+  pDescription          text default null,
+  OUT id                numeric,
+  OUT result            boolean,
+  OUT message           text
+) RETURNS               record
+AS $$
+DECLARE
+  arProtocols           text[];
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  pProtocol := lower(pProtocol);
+  arProtocols := array_cat(arProtocols, ARRAY['soap', 'json']);
+  IF array_position(arProtocols, pProtocol::text) IS NULL THEN
+    PERFORM IncorrectCode(pProtocol, arProtocols);
+  END IF;
+
+  id := CreateChargePoint(null, GetType(pProtocol || '.charge_point'), pIdentity, pName, pModel, pVendor, pVersion,
+    pSerialNumber, pBoxSerialNumber, pMeterSerialNumber, piccid, pimsi, pDescription);
+
+  SELECT * INTO result, message FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  id := null;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- FUNCTION api.update_charge_point --------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.update_charge_point (
+  pId                   numeric,
+  pProtocol             varchar default null,
+  pIdentity             varchar default null,
+  pName                 varchar default null,
+  pModel                varchar default null,
+  pVendor               varchar default null,
+  pVersion              varchar default null,
+  pSerialNumber         varchar default null,
+  pBoxSerialNumber      varchar default null,
+  pMeterSerialNumber    varchar default null,
+  piccid                varchar default null,
+  pimsi                 varchar default null,
+  pDescription          text default null,
+  OUT id                numeric,
+  OUT result            boolean,
+  OUT message           text
+) RETURNS               record
+AS $$
+DECLARE
+  nId                 numeric;
+  nType               numeric;
+  arProtocols         text[];
+BEGIN
+  id := pId;
+
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  SELECT c.id INTO nId FROM db.charge_point c WHERE c.id = pId;
+  IF NOT FOUND THEN
+    PERFORM ObjectNotFound('зарядная станция', 'id', pId);
+  END IF;
+
+  IF pProtocol IS NOT NULL THEN
+    pProtocol := lower(pProtocol);
+    arProtocols := array_cat(arProtocols, ARRAY['soap', 'json']);
+    IF array_position(arProtocols, pProtocol::text) IS NULL THEN
+      PERFORM IncorrectCode(pProtocol, arProtocols);
+    END IF;
+    nType := GetType(pProtocol || '.charge_point');
+  ELSE
+    SELECT o.type INTO nType FROM db.object o WHERE o.id = pId;
+  END IF;
+
+  id := EditChargePoint(pId, null, nType, pIdentity, pName, pModel, pVendor, pVersion,
+    pSerialNumber, pBoxSerialNumber, pMeterSerialNumber, piccid, pimsi, pDescription);
+
+  SELECT * INTO result, message FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  id := null;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_charge_point --------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает зарядную станцию по идентификатору
+ * @param {numeric} pId - Идентификатор зарядной станции
+ * @return {api.charge_point} - Зарядная станция
+ */
+CREATE OR REPLACE FUNCTION api.get_charge_point (
+  pId		numeric
+) RETURNS	api.charge_point
+AS $$
+  SELECT * FROM api.charge_point WHERE id = pId
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_charge_point --------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает зарядную станцию по строковому идентификатору
+ * @param {numeric} pId - Идентификатор зарядной станции
+ * @return {api.charge_point} - Зарядная станция
+ */
+CREATE OR REPLACE FUNCTION api.get_charge_point (
+  pIdentity	varchar
+) RETURNS	api.charge_point
+AS $$
+  SELECT * FROM api.charge_point WHERE identity = pIdentity
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.list_charge_point -------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает список зарядных станций.
+ * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
+ * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
+ * @param {integer} pLimit - Лимит по количеству строк
+ * @param {integer} pOffSet - Пропустить указанное число строк
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
+ * @return {SETOF api.charge_point} - Зарядные станции
+ */
+CREATE OR REPLACE FUNCTION api.list_charge_point (
+  pSearch	jsonb default null,
+  pFilter	jsonb default null,
+  pLimit	integer default null,
+  pOffSet	integer default null,
+  pOrderBy	jsonb default null
+) RETURNS	SETOF api.charge_point
+AS $$
+BEGIN
+  RETURN QUERY EXECUTE CreateApiSql('api', 'charge_point', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- REFERENCE -------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
 -- CALENDAR --------------------------------------------------------------------
@@ -4343,7 +5474,7 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.update_calendar ------------------------------------------------------------
+-- api.update_calendar ---------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Обновляет календарь.
@@ -4364,27 +5495,27 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.update_calendar (
-  pId		numeric,
-  pCode		varchar default null,
-  pName		varchar default null,
-  pWeek		numeric default null,
-  pDayOff	jsonb default null,
-  pHoliday	jsonb default null,
+  pId		    numeric,
+  pCode		    varchar default null,
+  pName		    varchar default null,
+  pWeek		    numeric default null,
+  pDayOff	    jsonb default null,
+  pHoliday	    jsonb default null,
   pWorkStart	interval default null,
   pWorkCount    interval default null,
   pRestStart	interval default null,
   pRestCount    interval default null,
   pDescription	text default null,
-  OUT id	numeric,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 DECLARE
-  nId		numeric;
-  nCalendar	numeric;
-  aHoliday	integer[][2];
-  r		record;
+  nId		    numeric;
+  nCalendar	    numeric;
+  aHoliday	    integer[][2];
+  r		        record;
 BEGIN
   id := pId;
 
@@ -4447,7 +5578,7 @@ $$ LANGUAGE SQL
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.list_calendar ------------------------------------------------------------
+-- api.list_calendar -----------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
  * Возвращает календарь списком.
@@ -4455,8 +5586,7 @@ $$ LANGUAGE SQL
  * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
  * @param {integer} pLimit - Лимит по количеству строк
  * @param {integer} pOffSet - Пропустить указанное число строк
- * @param {jsonb} pOrderBy - Cортировать по указанным в массиве полям
- * @param {boolean} pUseCache - Использовать кеш
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
  * @return {SETOF api.calendar} - Календари
  */
 CREATE OR REPLACE FUNCTION api.list_calendar (
@@ -4464,12 +5594,11 @@ CREATE OR REPLACE FUNCTION api.list_calendar (
   pFilter	jsonb default null,
   pLimit	integer default null,
   pOffSet	integer default null,
-  pOrderBy	jsonb default null,
-  pUseCache	boolean default null
+  pOrderBy	jsonb default null
 ) RETURNS	SETOF api.calendar
 AS $$
 BEGIN
-  RETURN QUERY EXECUTE CreateApiSql('api', 'calendar', pSearch, pFilter, pLimit, pOffSet, pOrderBy, pUseCache);
+  RETURN QUERY EXECUTE CreateApiSql('api', 'calendar', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
@@ -4489,13 +5618,13 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.fill_calendar (
-  pCalendar	numeric,
-  pDateFrom	date,
-  pDateTo	date,
-  pUserId	numeric default null,
+  pCalendar     numeric,
+  pDateFrom     date,
+  pDateTo       date,
+  pUserId       numeric default null,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
@@ -4626,22 +5755,22 @@ $$ LANGUAGE SQL
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.set_calendar_date (
-  pCalendar	numeric,
-  pDate		date,
-  pFlag		bit default null,
+  pCalendar     numeric,
+  pDate         date,
+  pFlag         bit default null,
   pWorkStart	interval default null,
   pWorkCount	interval default null,
   pRestStart	interval default null,
   pRestCount	interval default null,
-  pUserId	numeric default null,
-  OUT id	numeric,
+  pUserId       numeric default null,
+  OUT id        numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS       record
 AS $$
 DECLARE
-  nId		numeric;
-  r		record;
+  nId           numeric;
+  r             record;
 BEGIN
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
@@ -4698,7 +5827,7 @@ CREATE OR REPLACE FUNCTION api.del_calendar_date (
 ) RETURNS       record
 AS $$
 DECLARE
-  nId		numeric;
+  nId           numeric;
 BEGIN
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
@@ -4997,7 +6126,7 @@ BEGIN
   IF pType IS NOT NULL THEN
     pType := lower(pType);
     arTypes := array_cat(arTypes, ARRAY['post', 'actual', 'legal']);
-    IF array_position(arTypes, pType) IS NULL THEN
+    IF array_position(arTypes, pType::text) IS NULL THEN
       PERFORM IncorrectCode(pType, arTypes);
     END IF;
     nType := GetType(pType || '.address');
@@ -5101,755 +6230,6 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- CLIENT ----------------------------------------------------------------------
---------------------------------------------------------------------------------
-
---------------------------------------------------------------------------------
--- api.client ------------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE VIEW api.client
-AS
-  SELECT * FROM ObjectClient;
-
-GRANT SELECT ON api.client TO daemon;
-
---------------------------------------------------------------------------------
--- api.add_client --------------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Добавляет нового клиента.
- * @param {numeric} pParent - Идентификатор родителя | null
- * @param {varchar} pType - Tип клиента
- * @param {varchar} pCode - ИНН - для юридического лица | Имя пользователя (login) | null
- * @param {numeric} pUserId - Идентификатор пользователя системы | null
- * @param {jsonb} pName - Полное наименование компании/Ф.И.О.
- * @param {jsonb} pPhone - Телефоны
- * @param {jsonb} pEmail - Электронные адреса
- * @param {jsonb} pAddress - Почтовые адреса
- * @param {jsonb} pInfo - Дополнительная информация
- * @param {text} pDescription - Информация о клиенте
- * @out param {numeric} id - Идентификатор клиента
- * @out param {boolean} result - Результат
- * @out param {text} message - Текст ошибки
- * @return {record}
- */
-CREATE OR REPLACE FUNCTION api.add_client (
-  pParent       numeric,
-  pType         varchar,
-  pCode         varchar,
-  pUserId       numeric,
-  pName         jsonb,
-  pPhone        jsonb default null,
-  pEmail        jsonb default null,
-  pAddress      jsonb default null,
-  pInfo         jsonb default null,
-  pDescription  text default null,
-  OUT id        numeric,
-  OUT result    boolean,
-  OUT message   text
-) RETURNS       record
-AS $$
-DECLARE
-  cn            record;
-  nClient       numeric;
-  arTypes       text[];
-  arKeys        text[];
-BEGIN
-  IF current_session() IS NULL THEN
-    PERFORM LoginFailed();
-  END IF;
-
-  pType := lower(pType);
-  arTypes := array_cat(arTypes, ARRAY['entity', 'natural', 'sole']);
-  IF array_position(arTypes, pType::text) IS NULL THEN
-    PERFORM IncorrectCode(pType, arTypes);
-  END IF;
-
-  arKeys := array_cat(arKeys, ARRAY['name', 'short', 'first', 'last', 'middle']);
-  PERFORM CheckJsonbKeys('add_client', arKeys, pName);
-
-  SELECT * INTO cn FROM jsonb_to_record(pName) AS x(name varchar, short varchar, first varchar, last varchar, middle varchar);
-
-  IF pUserId = 0 THEN
-    pUserId := CreateUser(pCode, pCode, cn.short, pPhone->>0, pEmail->>0, cn.name);
-  END IF;
-
-  nClient := CreateClient(pParent, GetType(pType || '.client'), pCode, pUserId, pPhone, pEmail, pInfo, pDescription);
-
-  PERFORM NewClientName(nClient, cn.name, cn.short, cn.first, cn.last, cn.middle);
-
-  id := nClient;
-
-  SELECT * INTO result, message FROM result_success();
-EXCEPTION
-WHEN others THEN
-  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
-  id := null;
-  result := false;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.update_client -----------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Обновляет данные клиента.
- * @param {numeric} pId - Идентификатор клиента (api.get_client)
- * @param {numeric} pParent - Идентификатор родителя | null
- * @param {varchar} pType - Tип клиента
- * @param {varchar} pCode - ИНН - для юридического лица | Имя пользователя (login) | null
- * @param {numeric} pUserId - Идентификатор пользователя системы | null
- * @param {jsonb} pName - Полное наименование компании/Ф.И.О.
- * @param {jsonb} pPhone - Телефоны
- * @param {jsonb} pEmail - Электронные адреса
- * @param {jsonb} pAddress - Почтовые адреса
- * @param {jsonb} pInfo - Дополнительная информация
- * @param {text} pDescription - Информация о клиенте
- * @out param {numeric} id - Идентификатор клиента
- * @out param {boolean} result - Результат
- * @out param {text} message - Текст ошибки
- * @return {record}
- */
-CREATE OR REPLACE FUNCTION api.update_client (
-  pId           numeric,
-  pParent       numeric,
-  pType         varchar,
-  pCode         varchar,
-  pUserId       numeric,
-  pName         jsonb,
-  pPhone        jsonb default null,
-  pEmail        jsonb default null,
-  pAddress      jsonb default null,
-  pInfo         jsonb default null,
-  pDescription  text default null,
-  OUT id        numeric,
-  OUT result	boolean,
-  OUT message	text
-) RETURNS       record
-AS $$
-DECLARE
-  r             record;
-  nType         numeric;
-  nClient       numeric;
-  arTypes       text[];
-  arKeys        text[];
-BEGIN
-  IF current_session() IS NULL THEN
-    PERFORM LoginFailed();
-  END IF;
-
-  SELECT c.id INTO nClient FROM db.client c WHERE c.id = pId;
-  IF NOT FOUND THEN
-    PERFORM ObjectNotFound('клиент', 'id', pId);
-  END IF;
-
-  IF pType IS NOT NULL THEN
-    pType := lower(pType);
-    arTypes := array_cat(arTypes, ARRAY['entity', 'natural', 'sole']);
-    IF array_position(arTypes, pType) IS NULL THEN
-      PERFORM IncorrectCode(pType, arTypes);
-    END IF;
-    nType := GetType(pType || '.client');
-  ELSE
-    SELECT o.type INTO nType FROM db.object o WHERE o.id = pId;
-  END IF;
-
-  arKeys := array_cat(arKeys, ARRAY['name', 'short', 'first', 'last', 'middle']);
-  PERFORM CheckJsonbKeys('update_client', arKeys, pName);
-
-  PERFORM EditClient(nClient, pParent, nType, pCode, pUserId, pPhone, pEmail, pInfo, pDescription);
-
-  FOR r IN SELECT * FROM jsonb_to_record(pName) AS x(name varchar, short varchar, first varchar, last varchar, middle varchar)
-  LOOP
-    PERFORM EditClientName(nClient, r.name, r.short, r.first, r.last, r.middle);
-  END LOOP;
-
-  id := nClient;
-
-  SELECT * INTO result, message FROM result_success();
-EXCEPTION
-WHEN others THEN
-  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
-  id := null;
-  result := false;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.get_client --------------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Возвращает клиента
- * @param {numeric} pId - Идентификатор клиента
- * @return {api.client} - Клиент
- */
-CREATE OR REPLACE FUNCTION api.get_client (
-  pId		numeric
-) RETURNS	api.client
-AS $$
-  SELECT * FROM api.client WHERE id = pId
-$$ LANGUAGE SQL
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.list_client -------------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Возвращает список клиентов.
- * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
- * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
- * @param {integer} pLimit - Лимит по количеству строк
- * @param {integer} pOffSet - Пропустить указанное число строк
- * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
- * @return {SETOF api.client} - Клиенты
- */
-CREATE OR REPLACE FUNCTION api.list_client (
-  pSearch	jsonb default null,
-  pFilter	jsonb default null,
-  pLimit	integer default null,
-  pOffSet	integer default null,
-  pOrderBy	jsonb default null
-) RETURNS	SETOF api.client
-AS $$
-BEGIN
-  RETURN QUERY EXECUTE CreateApiSql('api', 'client', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.client_address ----------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE VIEW api.client_address
-AS
-  SELECT * FROM ClientAddress;
-
-GRANT SELECT ON api.client_address TO daemon;
-
---------------------------------------------------------------------------------
--- api.add_client_address ------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Добавляет адрес клиента
- * @param {numeric} pClient - Идентификатор клиента
- * @param {numeric} pAddress - Идентификатор адреса
- * @param {timestamp} pDateFrom - Дата операции
- * @out param {numeric} id - Идентификатор
- * @out param {boolean} result - Результат
- * @out param {text} message - Текст ошибки
- * @return {record}
- */
-CREATE OR REPLACE FUNCTION api.add_client_address (
-  pClient	    numeric,
-  pAddress	    numeric,
-  pDateFrom	    timestamp default oper_date(),
-  OUT id        numeric,
-  OUT result	boolean,
-  OUT message	text
-) RETURNS       record
-AS $$
-BEGIN
- IF current_session() IS NULL THEN
-    PERFORM LoginFailed();
-  END IF;
-
-  id := AddClientAddress(pClient, pAddress, pDateFrom);
-
-  SELECT * INTO result, message FROM result_success();
-EXCEPTION
-WHEN others THEN
-  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
-  id := null;
-  result := false;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.get_client_address ------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Возвращает адрес клиента
- * @param {numeric} pId - Идентификатор адреса клиента
- * @return {api.client} - Клиент
- */
-CREATE OR REPLACE FUNCTION api.get_client_address (
-  pId		numeric
-) RETURNS	api.client_address
-AS $$
-  SELECT * FROM api.client_address WHERE id = pId
-$$ LANGUAGE SQL
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.list_client_address -----------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Возвращает список адресов клиентов.
- * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
- * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
- * @param {integer} pLimit - Лимит по количеству строк
- * @param {integer} pOffSet - Пропустить указанное число строк
- * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
- * @return {SETOF api.client} - Клиенты
- */
-CREATE OR REPLACE FUNCTION api.list_client_address (
-  pSearch	jsonb default null,
-  pFilter	jsonb default null,
-  pLimit	integer default null,
-  pOffSet	integer default null,
-  pOrderBy	jsonb default null
-) RETURNS	SETOF api.client_address
-AS $$
-BEGIN
-  RETURN QUERY EXECUTE CreateApiSql('api', 'client_address', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- CARD ------------------------------------------------------------------------
---------------------------------------------------------------------------------
-
---------------------------------------------------------------------------------
--- api.card --------------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE VIEW api.card
-AS
-  SELECT * FROM ObjectCard;
-
-GRANT SELECT ON api.card TO daemon;
-
---------------------------------------------------------------------------------
--- api.add_card ----------------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Добавляет карту.
- * @param {varchar} pType - Tип карты
- * @param {varchar} pCode - Код карты
- * @param {numeric} pClient - Идентификатор клиента
- * @param {text} pDescription - Описание
- * @out param {numeric} id - Идентификатор карты
- * @out param {boolean} result - Результат
- * @out param {text} message - Текст ошибки
- * @return {record}
- */
-CREATE OR REPLACE FUNCTION api.add_card (
-  pType         varchar,
-  pCode         varchar,
-  pClient       numeric,
-  pDescription  text default null,
-  OUT id        numeric,
-  OUT result    boolean,
-  OUT message   text
-) RETURNS       record
-AS $$
-DECLARE
-  nCard         numeric;
-  arTypes       text[];
-BEGIN
-  IF current_session() IS NULL THEN
-    PERFORM LoginFailed();
-  END IF;
-
-  pType := lower(pType);
-  arTypes := array_cat(arTypes, ARRAY['plastic']);
-  IF array_position(arTypes, pType) IS NULL THEN
-    PERFORM IncorrectCode(pType, arTypes);
-  END IF;
-
-  nCard := CreateCard(null, GetType(pType || '.card'), pCode, pClient, pDescription);
-
-  id := nCard;
-
-  SELECT * INTO result, message FROM result_success();
-EXCEPTION
-WHEN others THEN
-  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
-  id := null;
-  result := false;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.update_card -------------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Обновляет данные карты.
- * @param {numeric} pId - Идентификатор карты (api.get_card)
- * @param {varchar} pType - Tип карты
- * @param {varchar} pCode - Код карты
- * @param {numeric} pClient - Идентификатор клиента
- * @param {text} pDescription - Описание
- * @out param {numeric} id - Идентификатор карты
- * @out param {boolean} result - Результат
- * @out param {text} message - Текст ошибки
- * @return {record}
- */
-CREATE OR REPLACE FUNCTION api.update_card (
-  pId           numeric,
-  pType         varchar default null,
-  pCode         varchar default null,
-  pClient       numeric default null,
-  pDescription  text default null,
-  OUT id        numeric,
-  OUT result	boolean,
-  OUT message	text
-) RETURNS       record
-AS $$
-DECLARE
-  nType         numeric;
-  nCard         numeric;
-  arTypes       text[];
-BEGIN
-  IF current_session() IS NULL THEN
-    PERFORM LoginFailed();
-  END IF;
-
-  SELECT c.id INTO nCard FROM db.card c WHERE c.id = pId;
-  IF NOT FOUND THEN
-    PERFORM ObjectNotFound('карта', 'id', pId);
-  END IF;
-
-  IF pType IS NOT NULL THEN
-    pType := lower(pType);
-    arTypes := array_cat(arTypes, ARRAY['plastic']);
-    IF array_position(arTypes, pType) IS NULL THEN
-      PERFORM IncorrectCode(pType, arTypes);
-    END IF;
-    nType := GetType(pType || '.card');
-  ELSE
-    SELECT o.type INTO nType FROM db.object o WHERE o.id = pId;
-  END IF;
-
-  PERFORM EditCard(nCard, null, nType, pCode, pClient, pDescription);
-
-  id := nCard;
-
-  SELECT * INTO result, message FROM result_success();
-EXCEPTION
-WHEN others THEN
-  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
-  id := null;
-  result := false;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.get_card ----------------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Возвращает клиента
- * @param {numeric} pId - Идентификатор клиента
- * @return {api.card} - Клиент
- */
-CREATE OR REPLACE FUNCTION api.get_card (
-  pId		numeric
-) RETURNS	api.card
-AS $$
-  SELECT * FROM api.card WHERE id = pId
-$$ LANGUAGE SQL
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.list_card ---------------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Возвращает список клиентов.
- * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
- * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
- * @param {integer} pLimit - Лимит по количеству строк
- * @param {integer} pOffSet - Пропустить указанное число строк
- * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
- * @return {SETOF api.card} - Клиенты
- */
-CREATE OR REPLACE FUNCTION api.list_card (
-  pSearch	jsonb default null,
-  pFilter	jsonb default null,
-  pLimit	integer default null,
-  pOffSet	integer default null,
-  pOrderBy	jsonb default null
-) RETURNS	SETOF api.card
-AS $$
-BEGIN
-  RETURN QUERY EXECUTE CreateApiSql('api', 'card', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- STATUS NOTIFICATION ---------------------------------------------------------
---------------------------------------------------------------------------------
-
---------------------------------------------------------------------------------
--- VIEW api.status_notification ------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE VIEW api.status_notification
-AS
-  SELECT * FROM StatusNotification;
-
-GRANT SELECT ON api.status_notification TO daemon;
-
---------------------------------------------------------------------------------
--- api.get_charge_point_status -------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Возвращает уведомление о статусе зарядной станций
- * @param {numeric} pChargePoint - Идентификатор зарядной станции
- * @param {integer} pConnectorId - Идентификатор разъёма зарядной станции
- * @param {timestamptz} pData - Дата и время
- * @return {api.status_notification} - Зарядная станция
- */
-CREATE OR REPLACE FUNCTION api.get_charge_point_status (
-  pChargePoint  numeric,
-  pConnectorId  integer default null,
-  pDate         timestamptz default current_timestamp at time zone 'utc'
-) RETURNS	SETOF api.status_notification
-AS $$
-  SELECT *
-    FROM api.status_notification
-   WHERE chargepoint = pChargePoint
-     AND connectorid = coalesce(pConnectorId, connectorid)
-     AND pDate BETWEEN validfromdate AND validtodate
-$$ LANGUAGE SQL
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.status_charge_point -----------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Возвращает уведомление о статусе зарядных станций.
- * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
- * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
- * @param {integer} pLimit - Лимит по количеству строк
- * @param {integer} pOffSet - Пропустить указанное число строк
- * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
- * @return {SETOF api.status_notification} - уведомление о статусе
- */
-CREATE OR REPLACE FUNCTION api.status_charge_point (
-  pSearch	jsonb default null,
-  pFilter	jsonb default null,
-  pLimit	integer default null,
-  pOffSet	integer default null,
-  pOrderBy	jsonb default null
-) RETURNS	SETOF api.status_notification
-AS $$
-BEGIN
-  RETURN QUERY EXECUTE CreateApiSql('api', 'status_notification', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- CHARGE POINT ----------------------------------------------------------------
---------------------------------------------------------------------------------
-
---------------------------------------------------------------------------------
--- VIEW api.charge_point -------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE VIEW api.charge_point
-AS
-  SELECT *, GetJsonStatusNotification(id) as StatusNotification FROM ObjectChargePoint;
-
-GRANT SELECT ON api.charge_point TO daemon;
-
---------------------------------------------------------------------------------
--- FUNCTION api.add_charge_point -----------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION api.add_charge_point (
-  pProtocol             varchar,
-  pIdentity             varchar,
-  pName                 varchar,
-  pModel                varchar,
-  pVendor               varchar,
-  pVersion              varchar,
-  pSerialNumber         varchar,
-  pBoxSerialNumber      varchar,
-  pMeterSerialNumber    varchar,
-  piccid                varchar,
-  pimsi                 varchar,
-  pDescription          text default null,
-  OUT id                numeric,
-  OUT result            boolean,
-  OUT message           text
-) RETURNS               record
-AS $$
-DECLARE
-  arProtocols         text[];
-BEGIN
-  IF current_session() IS NULL THEN
-    PERFORM LoginFailed();
-  END IF;
-
-  pProtocol := lower(pProtocol);
-  arProtocols := array_cat(arProtocols, ARRAY['soap', 'json']);
-  IF array_position(arProtocols, pProtocol) IS NULL THEN
-    PERFORM IncorrectCode(pProtocol, arProtocols);
-  END IF;
-
-  id := CreateChargePoint(null, GetType(pProtocol || '.charge_point'), pIdentity, pName, pModel, pVendor, pVersion,
-    pSerialNumber, pBoxSerialNumber, pMeterSerialNumber, piccid, pimsi, pDescription);
-
-  SELECT * INTO result, message FROM result_success();
-EXCEPTION
-WHEN others THEN
-  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
-  id := null;
-  result := false;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- FUNCTION api.update_charge_point --------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION api.update_charge_point (
-  pId                   numeric,
-  pProtocol             varchar default null,
-  pIdentity             varchar default null,
-  pName                 varchar default null,
-  pModel                varchar default null,
-  pVendor               varchar default null,
-  pVersion              varchar default null,
-  pSerialNumber         varchar default null,
-  pBoxSerialNumber      varchar default null,
-  pMeterSerialNumber    varchar default null,
-  piccid                varchar default null,
-  pimsi                 varchar default null,
-  pDescription          text default null,
-  OUT id                numeric,
-  OUT result            boolean,
-  OUT message           text
-) RETURNS               record
-AS $$
-DECLARE
-  nId                 numeric;
-  nType               numeric;
-  arProtocols         text[];
-BEGIN
-  id := pId;
-
-  IF current_session() IS NULL THEN
-    PERFORM LoginFailed();
-  END IF;
-
-  SELECT c.id INTO nId FROM db.charge_point c WHERE c.id = pId;
-  IF NOT FOUND THEN
-    PERFORM ObjectNotFound('зарядная станция', 'id', pId);
-  END IF;
-
-  IF pProtocol IS NOT NULL THEN
-    pProtocol := lower(pProtocol);
-    arProtocols := array_cat(arProtocols, ARRAY['soap', 'json']);
-    IF array_position(arProtocols, pProtocol) IS NULL THEN
-      PERFORM IncorrectCode(pProtocol, arProtocols);
-    END IF;
-    nType := GetType(pProtocol || '.charge_point');
-  ELSE
-    SELECT o.type INTO nType FROM db.object o WHERE o.id = pId;
-  END IF;
-
-  id := EditChargePoint(pId, null, nType, pIdentity, pName, pModel, pVendor, pVersion,
-    pSerialNumber, pBoxSerialNumber, pMeterSerialNumber, piccid, pimsi, pDescription);
-
-  SELECT * INTO result, message FROM result_success();
-EXCEPTION
-WHEN others THEN
-  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
-  id := null;
-  result := false;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.get_charge_point --------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Возвращает зарядную станцию по идентификатору
- * @param {numeric} pId - Идентификатор зарядной станции
- * @return {api.charge_point} - Зарядная станция
- */
-CREATE OR REPLACE FUNCTION api.get_charge_point (
-  pId		numeric
-) RETURNS	api.charge_point
-AS $$
-  SELECT * FROM api.charge_point WHERE id = pId
-$$ LANGUAGE SQL
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.get_charge_point --------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Возвращает зарядную станцию по строковому идентификатору
- * @param {numeric} pId - Идентификатор зарядной станции
- * @return {api.charge_point} - Зарядная станция
- */
-CREATE OR REPLACE FUNCTION api.get_charge_point (
-  pIdentity	varchar
-) RETURNS	api.charge_point
-AS $$
-  SELECT * FROM api.charge_point WHERE identity = pIdentity
-$$ LANGUAGE SQL
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.list_charge_point -------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Возвращает список зарядных станций.
- * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
- * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
- * @param {integer} pLimit - Лимит по количеству строк
- * @param {integer} pOffSet - Пропустить указанное число строк
- * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
- * @return {SETOF api.charge_point} - Зарядные станции
- */
-CREATE OR REPLACE FUNCTION api.list_charge_point (
-  pSearch	jsonb default null,
-  pFilter	jsonb default null,
-  pLimit	integer default null,
-  pOffSet	integer default null,
-  pOrderBy	jsonb default null
-) RETURNS	SETOF api.charge_point
-AS $$
-BEGIN
-  RETURN QUERY EXECUTE CreateApiSql('api', 'charge_point', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
 -- OCPP ------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -5892,4 +6272,3 @@ AS $$
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
-
