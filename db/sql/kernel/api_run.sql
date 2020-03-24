@@ -1812,6 +1812,39 @@ BEGIN
         END LOOP;
       END LOOP;
 
+    WHEN '/object/address' THEN
+
+      IF pJson IS NULL THEN
+        PERFORM JsonIsEmpty();
+      END IF;
+
+      arKeys := array_cat(arKeys, ARRAY['id', 'addresses']);
+      PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+
+      IF jsonb_typeof(pJson) = 'array' THEN
+
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, addresses json)
+        LOOP
+          IF r.addresses IS NOT NULL THEN
+            RETURN NEXT row_to_json(api.set_object_addresses_json(r.id, r.addresses));
+          ELSE
+            RETURN NEXT api.get_object_addresses_json(r.id);
+          END IF;
+        END LOOP;
+
+      ELSE
+
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, addresses json)
+        LOOP
+          IF r.addresses IS NOT NULL THEN
+            RETURN NEXT row_to_json(api.set_object_addresses_json(r.id, r.addresses));
+          ELSE
+            RETURN NEXT api.get_object_addresses_json(r.id);
+          END IF;
+        END LOOP;
+
+      END IF;
+
     WHEN '/object/address/set' THEN
 
       IF pJson IS NULL THEN

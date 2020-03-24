@@ -1423,26 +1423,6 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- GetObjectData ---------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION GetObjectData (
-  pObject	numeric,
-  pType		numeric,
-  pCode		varchar
-) RETURNS	text
-AS $$
-DECLARE
-  vData		text;
-BEGIN
-  SELECT data INTO vData FROM db.object_data WHERE object = pObject AND type = pType AND code = pCode;
-  RETURN vData;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
 -- DeleteObjectData ------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -1469,6 +1449,26 @@ CREATE OR REPLACE FUNCTION DeleteObjectData (
 AS $$
 BEGIN
   DELETE FROM db.object_data WHERE object = pObject AND type = pType AND code = pCode;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- GetObjectData ---------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetObjectData (
+  pObject	numeric,
+  pType		numeric,
+  pCode		varchar
+) RETURNS	text
+AS $$
+DECLARE
+  vData		text;
+BEGIN
+  SELECT data INTO vData FROM db.object_data WHERE object = pObject AND type = pType AND code = pCode;
+  RETURN vData;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER

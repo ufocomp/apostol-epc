@@ -840,6 +840,25 @@ CREATE INDEX ON db.object_address (type);
 CREATE INDEX ON db.object_address (address);
 
 --------------------------------------------------------------------------------
+-- ObjectAddresses -------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW ObjectAddresses (Id, Object, Type, TypeCode, TypeName, TypeDescription,
+    Address, Code, Index, Country, Region, District, City, Settlement, Street, House,
+    Building, Structure, Apartment, SortNum,
+    ValidFromDate, ValidToDate
+)
+AS
+  SELECT ca.id, ca.object, ca.type, t.code, t.name, t.description, ca.address,
+         a.code, a.index, a.country, a.region, a.district, a.city, a.settlement, a.street, a.house,
+         a.building, a.structure, a.apartment, a.sortnum,
+         ca.validfromdate, ca.validtodate
+    FROM db.object_address ca INNER JOIN db.type t ON t.id = ca.type
+                              INNER JOIN db.address a ON a.id = ca.address;
+
+GRANT SELECT ON ObjectAddresses TO administrator;
+
+--------------------------------------------------------------------------------
 -- FUNCTION SetObjectAddress ---------------------------------------------------
 --------------------------------------------------------------------------------
 /**
@@ -933,20 +952,109 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- ObjectAddresses -------------------------------------------------------------
+-- GetObjectAddresses ----------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW ObjectAddresses (Id, Object, Type, TypeCode, TypeName, TypeDescription,
-    Address, Code, Index, Country, Region, District, City, Settlement, Street, House,
-    Building, Structure, Apartment, SortNum,
-    ValidFromDate, ValidToDate
-)
-AS
-  SELECT ca.id, ca.object, ca.type, t.code, t.name, t.description, ca.address,
-         a.code, a.index, a.country, a.region, a.district, a.city, a.settlement, a.street, a.house,
-         a.building, a.structure, a.apartment, a.sortnum,
-         ca.validfromdate, ca.validtodate
-    FROM db.object_address ca INNER JOIN db.type t ON t.id = ca.type
-                              INNER JOIN db.address a ON a.id = ca.address;
+CREATE OR REPLACE FUNCTION GetObjectAddresses (
+  pObject	numeric,
+  pDate		timestamp default oper_date()
+) RETURNS	text[][]
+AS $$
+DECLARE
+  arResult	text[][];
+  i		    integer default 1;
+  r		    ObjectAddresses%rowtype;
+BEGIN
+  FOR r IN
+    SELECT Address, TypeCode, TypeName, Code
+      FROM ObjectAddresses
+     WHERE Object = pObject
+       AND ValidFromDate <= pDate
+       AND ValidToDate > pDate
+     ORDER BY Type, SortNum
+  LOOP
+    arResult[i] := ARRAY[r.address, r.typecode, r.typename, r.code, GetAddressString(r.address)];
+    i := i + 1;
+  END LOOP;
 
-GRANT SELECT ON ObjectAddresses TO administrator;
+  RETURN arResult;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- GetObjectAddresses ----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetObjectAddresses (
+  pObject	numeric,
+  pDate		timestamp default oper_date()
+) RETURNS	text[]
+AS $$
+DECLARE
+  arResult	text[];
+  r		    ObjectAddresses%rowtype;
+BEGIN
+  FOR r IN
+    SELECT Address, TypeCode, TypeName, Code
+      FROM ObjectAddresses
+     WHERE Object = pObject
+       AND ValidFromDate <= pDate
+       AND ValidToDate > pDate
+     ORDER BY Type, SortNum
+  LOOP
+    arResult := array_cat(arResult, ARRAY[r.address, r.typecode, r.typename, r.code, GetAddressString(r.address)]);
+  END LOOP;
+
+  RETURN arResult;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- GetObjectAddressesJson ------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetObjectAddressesJson (
+  pObject	numeric,
+  pDate		timestamp default oper_date()
+) RETURNS	json
+AS $$
+DECLARE
+  arResult	json[];
+  r		    record;
+BEGIN
+  FOR r IN
+    SELECT Address AS Id, TypeCode, TypeName, Code, GetAddressString(Address) AS Address
+      FROM ObjectAddresses
+     WHERE Object = pObject
+       AND ValidFromDate <= pDate
+       AND ValidToDate > pDate
+     ORDER BY Type, SortNum
+  LOOP
+    arResult := array_append(arResult, row_to_json(r));
+  END LOOP;
+
+  RETURN array_to_json(arResult);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- GetObjectAddressesJsonb -----------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetObjectAddressesJsonb (
+  pObject	numeric,
+  pDate		timestamp default oper_date()
+) RETURNS	jsonb
+AS $$
+BEGIN
+  RETURN GetObjectAddressesJson(pObject, pDate);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;

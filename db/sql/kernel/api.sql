@@ -4154,36 +4154,6 @@ AS
 GRANT SELECT ON api.object_file TO daemon;
 
 --------------------------------------------------------------------------------
--- api.get_object_files_json ---------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION api.get_object_files_json (
-  pObject	numeric
-) RETURNS	json
-AS $$
-BEGIN
-  RETURN GetObjectFilesJson(pObject);
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.get_object_files_jsonb --------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION api.get_object_files_jsonb (
-  pObject	numeric
-) RETURNS	jsonb
-AS $$
-BEGIN
-  RETURN GetObjectFilesJsonb(pObject);
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
 -- api.set_object_files_json ---------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -4200,12 +4170,14 @@ DECLARE
   nId		    numeric;
   r		        record;
 BEGIN
+  id := pObject;
+
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   SELECT o.id INTO nId FROM db.object o WHERE o.id = pObject;
-  IF not found THEN
+  IF NOT FOUND THEN
     PERFORM ObjectNotFound('объект', 'id', pObject);
   END IF;
 
@@ -4215,8 +4187,6 @@ BEGIN
 
     FOR r IN SELECT * FROM json_to_recordset(pFiles) AS files(id numeric, hash text, name text, path text, size int, date timestamp, delete boolean)
     LOOP
-      id := r.id;
-
       IF r.id IS NOT NULL THEN
 
         SELECT o.id INTO nId FROM db.object_file o WHERE o.id = r.id AND object = pObject;
@@ -4225,14 +4195,13 @@ BEGIN
           PERFORM ObjectNotFound('файл', r.name, r.id);
         END IF;
 
-        IF coalesce(r.delete, false) OR coalesce(r.name, true) THEN
+        IF coalesce(r.delete, false) THEN
           PERFORM DeleteObjectFile(r.id);
-          id := null;
         ELSE
           PERFORM EditObjectFile(r.id, r.hash, r.name, r.path, r.size, r.date);
         END IF;
       ELSE
-        id := AddObjectFile(pObject, r.hash, r.name, r.path, r.size, r.date);
+        nId := AddObjectFile(pObject, r.hash, r.name, r.path, r.size, r.date);
       END IF;
     END LOOP;
 
@@ -4263,6 +4232,36 @@ CREATE OR REPLACE FUNCTION api.set_object_files_jsonb (
 AS $$
   SELECT * FROM api.set_object_files_json(pObject, pFiles::json);
 $$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_object_files_json ---------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.get_object_files_json (
+  pObject	numeric
+) RETURNS	json
+AS $$
+BEGIN
+  RETURN GetObjectFilesJson(pObject);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_object_files_jsonb --------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.get_object_files_jsonb (
+  pObject	numeric
+) RETURNS	jsonb
+AS $$
+BEGIN
+  RETURN GetObjectFilesJsonb(pObject);
+END;
+$$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
@@ -4350,130 +4349,6 @@ AS
 GRANT SELECT ON api.object_data TO daemon;
 
 --------------------------------------------------------------------------------
--- api.get_object_data_json ----------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION api.get_object_data_json (
-  pObject	numeric
-) RETURNS	json
-AS $$
-BEGIN
-  RETURN GetObjectDataJson(pObject);
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.get_object_data_jsonb ---------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION api.get_object_data_jsonb (
-  pObject	numeric
-) RETURNS	jsonb
-AS $$
-BEGIN
-  RETURN GetObjectDataJsonb(pObject);
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.set_object_data_json ----------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION api.set_object_data_json (
-  pObject	    numeric,
-  pData	        json,
-  OUT id        numeric,
-  OUT result	boolean,
-  OUT message	text
-) RETURNS 	    record
-AS $$
-DECLARE
-  arKeys	    text[];
-  arTypes       text[];
-
-  nId		    numeric;
-  nType		    numeric;
-
-  r		        record;
-BEGIN
-  IF current_session() IS NULL THEN
-    PERFORM LoginFailed();
-  END IF;
-
-  SELECT o.id INTO nId FROM db.object o WHERE o.id = pObject;
-  IF not found THEN
-    PERFORM ObjectNotFound('объект', 'id', pObject);
-  END IF;
-
-  IF pData IS NOT NULL THEN
-    arKeys := array_cat(arKeys, ARRAY['id', 'type', 'code', 'data', 'delete']);
-    PERFORM CheckJsonKeys('/object/data', arKeys, pData);
-
-    FOR r IN SELECT * FROM json_to_recordset(pData) AS data(id numeric, type varchar, code varchar, data text, delete boolean)
-    LOOP
-      arTypes := array_cat(arTypes, ARRAY['text', 'json', 'xml']);
-      IF array_position(arTypes, r.type::text) IS NULL THEN
-        PERFORM IncorrectCode(r.type, arTypes);
-      END IF;
-
-      id := r.id;
-
-      nType := GetObjectDataType(r.type);
-
-      IF r.id IS NOT NULL THEN
-
-        SELECT o.id INTO nId FROM db.object_data o WHERE o.id = r.id AND object = pObject;
-
-        IF NOT FOUND THEN
-          PERFORM ObjectNotFound('данные объекта', r.code, r.id);
-        END IF;
-
-        IF coalesce(r.delete, false) OR coalesce(r.data, true) THEN
-          PERFORM DeleteObjectData(r.id);
-          id := null;
-        ELSE
-          PERFORM EditObjectData(r.id, pObject, nType, r.code, r.data);
-        END IF;
-      ELSE
-        id := AddObjectData(pObject, nType, r.code, r.data);
-      END IF;
-    END LOOP;
-
-    SELECT * INTO result, message FROM result_success();
-  ELSE
-    PERFORM JsonIsEmpty();
-  END IF;
-EXCEPTION
-WHEN others THEN
-  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
-  result := false;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.set_object_data_jsonb ---------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION api.set_object_data_jsonb (
-  pObject	    numeric,
-  pData	        jsonb,
-  OUT id        numeric,
-  OUT result	boolean,
-  OUT message	text
-) RETURNS 	    record
-AS $$
-  SELECT * FROM api.set_object_data_json(pObject, pData::json);
-$$ LANGUAGE SQL
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
 -- api.set_object_data ---------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
@@ -4541,6 +4416,129 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
+-- api.set_object_data_json ----------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.set_object_data_json (
+  pObject	    numeric,
+  pData	        json,
+  OUT id        numeric,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS 	    record
+AS $$
+DECLARE
+  nId		    numeric;
+  nType         numeric;
+
+  arKeys	    text[];
+  arTypes       text[];
+
+  r		        record;
+BEGIN
+  id := pObject;
+
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  SELECT o.id INTO nId FROM db.object o WHERE o.id = pObject;
+  IF NOT FOUND THEN
+    PERFORM ObjectNotFound('объект', 'id', pObject);
+  END IF;
+
+  IF pData IS NOT NULL THEN
+    arKeys := array_cat(arKeys, ARRAY['id', 'type', 'code', 'data']);
+    PERFORM CheckJsonKeys('/object/data', arKeys, pData);
+
+    FOR r IN SELECT * FROM json_to_recordset(pData) AS data(id numeric, type varchar, code varchar, data text)
+    LOOP
+      arTypes := array_cat(arTypes, ARRAY['text', 'json', 'xml']);
+      IF array_position(arTypes, r.type::text) IS NULL THEN
+        PERFORM IncorrectCode(r.type, arTypes);
+      END IF;
+
+      nType := GetObjectDataType(r.type);
+
+      IF r.id IS NOT NULL THEN
+
+        SELECT o.id INTO nId FROM db.object_data o WHERE o.id = r.id AND object = pObject;
+
+        IF NOT FOUND THEN
+          PERFORM ObjectNotFound('данные', r.code, r.id);
+        END IF;
+
+        IF coalesce(r.data, true) THEN
+          PERFORM DeleteObjectData(r.id);
+        ELSE
+          PERFORM EditObjectData(r.id, pObject, nType, r.code, r.data);
+        END IF;
+      ELSE
+        nId := AddObjectData(pObject, nType, r.code, r.data);
+      END IF;
+    END LOOP;
+
+    SELECT * INTO result, message FROM result_success();
+  ELSE
+    PERFORM JsonIsEmpty();
+  END IF;
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.set_object_data_jsonb ---------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.set_object_data_jsonb (
+  pObject	    numeric,
+  pData	        jsonb,
+  OUT id        numeric,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS 	    record
+AS $$
+  SELECT * FROM api.set_object_data_json(pObject, pData::json);
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_object_data_json ----------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.get_object_data_json (
+  pObject	numeric
+) RETURNS	json
+AS $$
+BEGIN
+  RETURN GetObjectDataJson(pObject);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_object_data_jsonb ---------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.get_object_data_jsonb (
+  pObject	numeric
+) RETURNS	jsonb
+AS $$
+BEGIN
+  RETURN GetObjectDataJsonb(pObject);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
 -- api.get_object_data ---------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
@@ -4597,6 +4595,126 @@ AS
   SELECT * FROM ObjectAddresses;
 
 GRANT SELECT ON api.object_address TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.set_object_addresses_json -----------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.set_object_addresses_json (
+  pObject	    numeric,
+  pAddresses    json,
+  OUT id        numeric,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS 	    record
+AS $$
+DECLARE
+  nId		    numeric;
+  nType         numeric;
+  nAddress      numeric;
+
+  arKeys	    text[];
+  arTypes       text[];
+
+  r		        record;
+BEGIN
+  id := pObject;
+
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  SELECT o.id INTO nId FROM db.object o WHERE o.id = pObject;
+  IF NOT FOUND THEN
+    PERFORM ObjectNotFound('объект', 'id', pObject);
+  END IF;
+
+  IF pAddresses IS NOT NULL THEN
+    arKeys := array_cat(arKeys, ARRAY['id', 'parent', 'type', 'code', 'index', 'country', 'region', 'district', 'city', 'settlement', 'street', 'house', 'building', 'structure', 'apartment', 'address']);
+    PERFORM CheckJsonKeys('/object/address/addresses', arKeys, pAddresses);
+
+    FOR r IN SELECT * FROM json_to_recordset(pAddresses) AS addresses(id numeric, parent numeric, type varchar, code varchar, index varchar, country varchar, region varchar, district varchar, city varchar, settlement varchar, street varchar, house varchar, building varchar, structure varchar, apartment varchar, address text)
+    LOOP
+      arTypes := array_cat(arTypes, ARRAY['post', 'actual', 'legal']);
+      IF array_position(arTypes, r.type::text) IS NULL THEN
+        PERFORM IncorrectCode(r.type, arTypes);
+      END IF;
+
+      nType := GetType(r.type || '.address');
+
+      IF r.id IS NOT NULL THEN
+        SELECT o.id INTO nId FROM db.object_address o WHERE o.id = r.id AND object = pObject;
+
+        IF NOT FOUND THEN
+          PERFORM ObjectNotFound('адрес', r.code, r.id);
+        END IF;
+
+        PERFORM EditAddress(r.id, r.parent, nType, r.code, r.index, r.country, r.region, r.district, r.city, r.settlement, r.street, r.house, r.building, r.structure, r.apartment, r.address);
+      ELSE
+        nAddress := CreateAddress(r.parent, nType, r.code, r.index, r.country, r.region, r.district, r.city, r.settlement, r.street, r.house, r.building, r.structure, r.apartment, r.address);
+        nId := SetObjectAddress(pObject, nAddress);
+      END IF;
+    END LOOP;
+
+    SELECT * INTO result, message FROM result_success();
+  ELSE
+    PERFORM JsonIsEmpty();
+  END IF;
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.set_object_addresses_jsonb ----------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.set_object_addresses_jsonb (
+  pObject	    numeric,
+  pAddresses	jsonb,
+  OUT id        numeric,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS 	    record
+AS $$
+  SELECT * FROM api.set_object_addresses_json(pObject, pAddresses::json);
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_object_addresses_json -----------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.get_object_addresses_json (
+  pObject	numeric
+) RETURNS	json
+AS $$
+BEGIN
+  RETURN GetObjectAddressesJson(pObject);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_object_addresses_jsonb ----------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.get_object_addresses_jsonb (
+  pObject	numeric
+) RETURNS	jsonb
+AS $$
+BEGIN
+  RETURN GetObjectAddressesJsonb(pObject);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
 -- api.set_object_address ------------------------------------------------------
@@ -5121,7 +5239,7 @@ GRANT SELECT ON api.status_notification TO daemon;
  * Возвращает уведомление о статусе зарядной станций
  * @param {numeric} pChargePoint - Идентификатор зарядной станции
  * @param {integer} pConnectorId - Идентификатор разъёма зарядной станции
- * @param {timestamptz} pData - Дата и время
+ * @param {timestamptz} pDate - Дата и время
  * @return {api.status_notification} - Зарядная станция
  */
 CREATE OR REPLACE FUNCTION api.get_charge_point_status (
