@@ -3023,7 +3023,38 @@ BEGIN
         END LOOP;
       END LOOP;
 
-    WHEN '/charge_point/status' THEN
+    WHEN '/charge_point/status/get' THEN
+
+      IF pJson IS NULL THEN
+        PERFORM JsonIsEmpty();
+      END IF;
+
+      arKeys := array_cat(arKeys, ARRAY['id', 'fields']);
+      PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+
+      IF jsonb_typeof(pJson) = 'array' THEN
+
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, fields jsonb)
+        LOOP
+          FOR e IN EXECUTE format('SELECT %s FROM api.get_status_notification($1)', JsonbToFields(r.fields, GetColumns('status_notification', 'api'))) USING r.id
+          LOOP
+            RETURN NEXT row_to_json(e);
+          END LOOP;
+        END LOOP;
+
+      ELSE
+
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, fields jsonb)
+        LOOP
+          FOR e IN EXECUTE format('SELECT %s FROM api.get_status_notification($1)', JsonbToFields(r.fields, GetColumns('status_notification', 'api'))) USING r.id
+          LOOP
+            RETURN NEXT row_to_json(e);
+          END LOOP;
+        END LOOP;
+
+      END IF;
+
+    WHEN '/charge_point/status/list' THEN
 
       IF pJson IS NOT NULL THEN
         arKeys := array_cat(arKeys, ARRAY['fields', 'search', 'filter', 'reclimit', 'recoffset', 'orderby']);
@@ -3034,7 +3065,103 @@ BEGIN
 
       FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(fields jsonb, search jsonb, filter jsonb, reclimit integer, recoffset integer, orderby jsonb)
       LOOP
-        FOR e IN EXECUTE format('SELECT %s FROM api.status_charge_point($1, $2, $3, $4, $5)', JsonbToFields(r.fields, GetColumns('status_notification', 'api'))) USING r.search, r.filter, r.reclimit, r.recoffset, r.orderby
+        FOR e IN EXECUTE format('SELECT %s FROM api.list_status_notification($1, $2, $3, $4, $5)', JsonbToFields(r.fields, GetColumns('status_notification', 'api'))) USING r.search, r.filter, r.reclimit, r.recoffset, r.orderby
+        LOOP
+          RETURN NEXT row_to_json(e);
+        END LOOP;
+      END LOOP;
+
+    WHEN '/charge_point/transaction/get' THEN
+
+      IF pJson IS NULL THEN
+        PERFORM JsonIsEmpty();
+      END IF;
+
+      arKeys := array_cat(arKeys, ARRAY['id', 'fields']);
+      PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+
+      IF jsonb_typeof(pJson) = 'array' THEN
+
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, fields jsonb)
+        LOOP
+          FOR e IN EXECUTE format('SELECT %s FROM api.get_transaction($1)', JsonbToFields(r.fields, GetColumns('transaction', 'api'))) USING r.id
+          LOOP
+            RETURN NEXT row_to_json(e);
+          END LOOP;
+        END LOOP;
+
+      ELSE
+
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, fields jsonb)
+        LOOP
+          FOR e IN EXECUTE format('SELECT %s FROM api.get_transaction($1)', JsonbToFields(r.fields, GetColumns('transaction', 'api'))) USING r.id
+          LOOP
+            RETURN NEXT row_to_json(e);
+          END LOOP;
+        END LOOP;
+
+      END IF;
+
+    WHEN '/charge_point/transaction/list' THEN
+
+      IF pJson IS NOT NULL THEN
+        arKeys := array_cat(arKeys, ARRAY['fields', 'search', 'filter', 'reclimit', 'recoffset', 'orderby']);
+        PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+      ELSE
+        pJson := '{}';
+      END IF;
+
+      FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(fields jsonb, search jsonb, filter jsonb, reclimit integer, recoffset integer, orderby jsonb)
+      LOOP
+        FOR e IN EXECUTE format('SELECT %s FROM api.list_transaction($1, $2, $3, $4, $5)', JsonbToFields(r.fields, GetColumns('transaction', 'api'))) USING r.search, r.filter, r.reclimit, r.recoffset, r.orderby
+        LOOP
+          RETURN NEXT row_to_json(e);
+        END LOOP;
+      END LOOP;
+
+    WHEN '/charge_point/meter_value/get' THEN
+
+      IF pJson IS NULL THEN
+        PERFORM JsonIsEmpty();
+      END IF;
+
+      arKeys := array_cat(arKeys, ARRAY['id', 'fields']);
+      PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+
+      IF jsonb_typeof(pJson) = 'array' THEN
+
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, fields jsonb)
+        LOOP
+          FOR e IN EXECUTE format('SELECT %s FROM api.get_meter_value($1)', JsonbToFields(r.fields, GetColumns('meter_value', 'api'))) USING r.id
+          LOOP
+            RETURN NEXT row_to_json(e);
+          END LOOP;
+        END LOOP;
+
+      ELSE
+
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, fields jsonb)
+        LOOP
+          FOR e IN EXECUTE format('SELECT %s FROM api.get_meter_value($1)', JsonbToFields(r.fields, GetColumns('meter_value', 'api'))) USING r.id
+          LOOP
+            RETURN NEXT row_to_json(e);
+          END LOOP;
+        END LOOP;
+
+      END IF;
+
+    WHEN '/charge_point/meter_value/list' THEN
+
+      IF pJson IS NOT NULL THEN
+        arKeys := array_cat(arKeys, ARRAY['fields', 'search', 'filter', 'reclimit', 'recoffset', 'orderby']);
+        PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+      ELSE
+        pJson := '{}';
+      END IF;
+
+      FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(fields jsonb, search jsonb, filter jsonb, reclimit integer, recoffset integer, orderby jsonb)
+      LOOP
+        FOR e IN EXECUTE format('SELECT %s FROM api.list_meter_value($1, $2, $3, $4, $5)', JsonbToFields(r.fields, GetColumns('meter_value', 'api'))) USING r.search, r.filter, r.reclimit, r.recoffset, r.orderby
         LOOP
           RETURN NEXT row_to_json(e);
         END LOOP;

@@ -2610,7 +2610,7 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  arTables := array_cat(null, ARRAY['client', 'card', 'charge_point', 'address', 'calendar', 'address_tree', 'object_file', 'object_data', 'object_address', 'status_notification']);
+  arTables := array_cat(null, ARRAY['client', 'card', 'charge_point', 'address', 'calendar', 'address_tree', 'object_file', 'object_data', 'object_address', 'status_notification', 'transaction', 'meter_value']);
 
   IF array_position(arTables, pTable) IS NULL THEN
     PERFORM IncorrectValueInArray(pTable, 'sql/api/table', arTables);
@@ -5219,72 +5219,6 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- STATUS NOTIFICATION ---------------------------------------------------------
---------------------------------------------------------------------------------
-
---------------------------------------------------------------------------------
--- VIEW api.status_notification ------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE VIEW api.status_notification
-AS
-  SELECT * FROM StatusNotification;
-
-GRANT SELECT ON api.status_notification TO daemon;
-
---------------------------------------------------------------------------------
--- api.get_charge_point_status -------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Возвращает уведомление о статусе зарядной станций
- * @param {numeric} pChargePoint - Идентификатор зарядной станции
- * @param {integer} pConnectorId - Идентификатор разъёма зарядной станции
- * @param {timestamptz} pDate - Дата и время
- * @return {api.status_notification} - Зарядная станция
- */
-CREATE OR REPLACE FUNCTION api.get_charge_point_status (
-  pChargePoint  numeric,
-  pConnectorId  integer default null,
-  pDate         timestamptz default current_timestamp at time zone 'utc'
-) RETURNS	SETOF api.status_notification
-AS $$
-  SELECT *
-    FROM api.status_notification
-   WHERE chargepoint = pChargePoint
-     AND connectorid = coalesce(pConnectorId, connectorid)
-     AND pDate BETWEEN validfromdate AND validtodate
-$$ LANGUAGE SQL
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.status_charge_point -----------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Возвращает уведомление о статусе зарядных станций.
- * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
- * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
- * @param {integer} pLimit - Лимит по количеству строк
- * @param {integer} pOffSet - Пропустить указанное число строк
- * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
- * @return {SETOF api.status_notification} - уведомление о статусе
- */
-CREATE OR REPLACE FUNCTION api.status_charge_point (
-  pSearch	jsonb default null,
-  pFilter	jsonb default null,
-  pLimit	integer default null,
-  pOffSet	integer default null,
-  pOrderBy	jsonb default null
-) RETURNS	SETOF api.status_notification
-AS $$
-BEGIN
-  RETURN QUERY EXECUTE CreateApiSql('api', 'status_notification', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
 -- CHARGE POINT ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -5294,7 +5228,8 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE VIEW api.charge_point
 AS
-  SELECT *, GetJsonStatusNotification(id) as StatusNotification FROM ObjectChargePoint;
+  SELECT * FROM ObjectChargePoint;
+--  SELECT *, GetJsonStatusNotification(id) as StatusNotification FROM ObjectChargePoint;
 
 GRANT SELECT ON api.charge_point TO daemon;
 
@@ -5467,6 +5402,205 @@ CREATE OR REPLACE FUNCTION api.list_charge_point (
 AS $$
 BEGIN
   RETURN QUERY EXECUTE CreateApiSql('api', 'charge_point', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- STATUS NOTIFICATION ---------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- VIEW api.status_notification ------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.status_notification
+AS
+  SELECT * FROM StatusNotification;
+
+GRANT SELECT ON api.status_notification TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.status_notification -----------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает уведомления о статусе зарядной станций
+ * @param {numeric} pChargePoint - Идентификатор зарядной станции
+ * @param {integer} pConnectorId - Идентификатор разъёма зарядной станции
+ * @param {timestamptz} pDate - Дата и время
+ * @return {SETOF api.status_notification}
+ */
+CREATE OR REPLACE FUNCTION api.status_notification (
+  pChargePoint  numeric,
+  pConnectorId  integer default null,
+  pDate         timestamptz default current_timestamp at time zone 'utc'
+) RETURNS	    SETOF api.status_notification
+AS $$
+  SELECT *
+    FROM api.status_notification
+   WHERE chargepoint = pChargePoint
+     AND connectorid = coalesce(pConnectorId, connectorid)
+     AND pDate BETWEEN validfromdate AND validtodate
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_status_notification -------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает уведомление о статусе зарядной станции.
+ * @param {numeric} pId - Идентификатор
+ * @return {api.status_notification}
+ */
+CREATE OR REPLACE FUNCTION api.get_status_notification (
+  pId		numeric
+) RETURNS	api.status_notification
+AS $$
+  SELECT * FROM api.status_notification WHERE id = pId
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.list_status_notification ------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает уведомления о статусе зарядных станций.
+ * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
+ * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
+ * @param {integer} pLimit - Лимит по количеству строк
+ * @param {integer} pOffSet - Пропустить указанное число строк
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
+ * @return {SETOF api.status_notification}
+ */
+CREATE OR REPLACE FUNCTION api.list_status_notification (
+  pSearch	jsonb default null,
+  pFilter	jsonb default null,
+  pLimit	integer default null,
+  pOffSet	integer default null,
+  pOrderBy	jsonb default null
+) RETURNS	SETOF api.status_notification
+AS $$
+BEGIN
+  RETURN QUERY EXECUTE CreateApiSql('api', 'status_notification', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- TRANSACTION -----------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- VIEW api.transaction --------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.transaction
+AS
+  SELECT * FROM Transaction;
+
+GRANT SELECT ON api.transaction TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.get_transaction ---------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает транзакцию зарядной станции.
+ * @param {numeric} pId - Идентификатор
+ * @return {api.transaction}
+ */
+CREATE OR REPLACE FUNCTION api.get_transaction (
+  pId		numeric
+) RETURNS	api.transaction
+AS $$
+  SELECT * FROM api.transaction WHERE id = pId
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.list_transaction --------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает транзакции зарядных станций.
+ * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
+ * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
+ * @param {integer} pLimit - Лимит по количеству строк
+ * @param {integer} pOffSet - Пропустить указанное число строк
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
+ * @return {SETOF api.transaction} - уведомление о статусе
+ */
+CREATE OR REPLACE FUNCTION api.list_transaction (
+  pSearch	jsonb default null,
+  pFilter	jsonb default null,
+  pLimit	integer default null,
+  pOffSet	integer default null,
+  pOrderBy	jsonb default null
+) RETURNS	SETOF api.transaction
+AS $$
+BEGIN
+  RETURN QUERY EXECUTE CreateApiSql('api', 'transaction', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- METER VALUE -----------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- VIEW api.meter_value --------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.meter_value
+AS
+  SELECT * FROM MeterValue;
+
+GRANT SELECT ON api.meter_value TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.get_meter_value ---------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает показания счётчика зарядной станции.
+ * @param {numeric} pId - Идентификатор
+ * @return {api.meter_value}
+ */
+CREATE OR REPLACE FUNCTION api.get_meter_value (
+  pId		numeric
+) RETURNS	api.meter_value
+AS $$
+  SELECT * FROM api.meter_value WHERE id = pId
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.list_meter_value --------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает показания счётчика зарядных станций.
+ * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
+ * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
+ * @param {integer} pLimit - Лимит по количеству строк
+ * @param {integer} pOffSet - Пропустить указанное число строк
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
+ * @return {SETOF api.meter_value}
+ */
+CREATE OR REPLACE FUNCTION api.list_meter_value (
+  pSearch	jsonb default null,
+  pFilter	jsonb default null,
+  pLimit	integer default null,
+  pOffSet	integer default null,
+  pOrderBy	jsonb default null
+) RETURNS	SETOF api.meter_value
+AS $$
+BEGIN
+  RETURN QUERY EXECUTE CreateApiSql('api', 'meter_value', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER

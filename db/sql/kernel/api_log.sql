@@ -3,15 +3,15 @@
 --------------------------------------------------------------------------------
 
 CREATE TABLE api.log (
-    id			numeric PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_API_LOG'),
+    id			    numeric PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_API_LOG'),
     datetime		timestamp DEFAULT clock_timestamp() NOT NULL,
     username		text NOT NULL DEFAULT session_user,
     api_session		char(40),
     api_username	varchar(50),
-    route		text NOT NULL,
-    json		jsonb,
-    eventid		numeric(12),
-    runtime		interval,
+    route		    text NOT NULL,
+    json		    jsonb,
+    eventid		    numeric(12),
+    runtime		    interval,
     CONSTRAINT fk_api_log_eventid FOREIGN KEY (eventid) REFERENCES db.log(id)
 );
 

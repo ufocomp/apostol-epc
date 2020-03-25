@@ -335,15 +335,15 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.transaction (
-    Id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_OCPP_TRANSACTION'),
-    Card		numeric(12) NOT NULL,
+    Id			    numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_OCPP_TRANSACTION'),
+    Card		    numeric(12) NOT NULL,
     chargePoint		numeric(12) NOT NULL,
     connectorId		integer NOT NULL,
     meterStart		integer NOT NULL,
     meterStop		integer,
     reservationId	integer,
-    reason		text,
-    Data		json,
+    reason		    text,
+    Data		    json,
     dateStart		timestamp NOT NULL,
     dateStop		timestamp DEFAULT TO_DATE('4433-12-31', 'YYYY-MM-DD') NOT NULL,
     CONSTRAINT fk_transaction_Card FOREIGN KEY (Card) REFERENCES db.card(id),
@@ -378,16 +378,16 @@ CREATE INDEX ON db.transaction (Card, chargePoint, connectorId);
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION StartTransaction (
-  pCard			numeric,
+  pCard			    numeric,
   pChargePoint		numeric,
   pConnectorId		integer,
   pMeterStart		integer,
   pReservationId	integer,
   pTimeStamp		timestamp
-) RETURNS 		numeric
+) RETURNS 		    numeric
 AS $$
 DECLARE
-  nId			numeric;
+  nId			    numeric;
 BEGIN
   INSERT INTO db.transaction (Card, chargePoint, connectorId, meterStart, reservationId, dateStart)
   VALUES (pCard, pChargePoint, pConnectorId, pMeterStart, pReservationId, pTimeStamp)
@@ -405,14 +405,14 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION StopTransaction (
   pId			numeric,
-  pMeterStop		integer,
+  pMeterStop	integer,
   pReason		text,
   pData			json,
-  pTimeStamp		timestamp
+  pTimeStamp	timestamp
 ) RETURNS 		integer
 AS $$
 DECLARE
-  nMeterStart		integer;
+  nMeterStart	integer;
 BEGIN
   SELECT meterStart INTO nMeterStart FROM db.transaction WHERE Id = pId;
 
@@ -448,7 +448,7 @@ GRANT SELECT ON Transaction TO administrator;
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.meter_value (
-    Id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_OCPP_STATUS'),
+    Id			    numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_OCPP_STATUS'),
     chargePoint		numeric(12) NOT NULL,
     connectorId		integer NOT NULL,
     transactionId	numeric(12),
@@ -481,22 +481,22 @@ CREATE INDEX ON db.meter_value (chargePoint, ValidFromDate, ValidToDate);
 CREATE UNIQUE INDEX ON db.meter_value (chargePoint, connectorId, ValidFromDate, ValidToDate);
 
 --------------------------------------------------------------------------------
--- FUNCTION AddMeterValues -----------------------------------------------------
+-- FUNCTION AddMeterValue ------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION AddMeterValues (
+CREATE OR REPLACE FUNCTION AddMeterValue (
   pChargePoint		numeric,
   pConnectorId		integer,
   pTransactionId	numeric,
   pMeterValue		json,
   pTimeStamp		timestamp default now()
-) RETURNS 		numeric
+) RETURNS 		    numeric
 AS $$
 DECLARE
-  nId			numeric;
+  nId			    numeric;
 
   dtDateFrom 		timestamp;
-  dtDateTo 		timestamp;
+  dtDateTo 		    timestamp;
 BEGIN
   -- получим дату значения в текущем диапозоне дат
   SELECT max(ValidFromDate), max(ValidToDate) INTO dtDateFrom, dtDateTo
@@ -535,14 +535,14 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- VIEW MeterValues ------------------------------------------------------------
+-- VIEW MeterValue -------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW MeterValues
+CREATE OR REPLACE VIEW MeterValue
 AS
   SELECT * FROM db.meter_value;
 
-GRANT SELECT ON MeterValues TO administrator;
+GRANT SELECT ON MeterValue TO administrator;
 
 --------------------------------------------------------------------------------
 -- ChargePoint -----------------------------------------------------------------
