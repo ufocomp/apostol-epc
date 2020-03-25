@@ -444,7 +444,15 @@ CREATE OR REPLACE FUNCTION EventClientEnable (
   pObject	numeric default context_object()
 ) RETURNS	void
 AS $$
+DECLARE
+  nUserId	numeric;
 BEGIN
+  SELECT userid INTO nUserId FROM db.client WHERE id = pObject;
+
+  IF nUserId IS NOT NULL THEN
+    PERFORM UserUnLock(nUserId);
+  END IF;
+
   PERFORM WriteToEventLog('M', 1014, 'Клиент открыт.');
 END;
 $$ LANGUAGE plpgsql;
@@ -457,7 +465,15 @@ CREATE OR REPLACE FUNCTION EventClientDisable (
   pObject	numeric default context_object()
 ) RETURNS	void
 AS $$
+DECLARE
+  nUserId	numeric;
 BEGIN
+  SELECT userid INTO nUserId FROM db.client WHERE id = pObject;
+
+  IF nUserId IS NOT NULL THEN
+    PERFORM UserLock(nUserId);
+  END IF;
+
   PERFORM WriteToEventLog('M', 1015, 'Клиент закрыт.');
 END;
 $$ LANGUAGE plpgsql;
@@ -470,7 +486,17 @@ CREATE OR REPLACE FUNCTION EventClientDelete (
   pObject	numeric default context_object()
 ) RETURNS	void
 AS $$
+DECLARE
+  nUserId	numeric;
 BEGIN
+  SELECT userid INTO nUserId FROM client WHERE id = pObject;
+
+  IF nUserId IS NOT NULL THEN
+    DELETE FROM db.session WHERE userid = nUserId;
+    PERFORM UserLock(nUserId);
+    UPDATE db.user SET pwhash = null WHERE id = nUserId;
+  END IF;
+
   PERFORM WriteToEventLog('M', 1016, 'Клиент удалён.');
 END;
 $$ LANGUAGE plpgsql;

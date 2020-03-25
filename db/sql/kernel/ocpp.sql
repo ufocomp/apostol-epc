@@ -620,9 +620,9 @@ BEGIN
     UPDATE ocpp.log SET response = jResponse, runtime = age(clock_timestamp(), tsBegin) WHERE id = nLogId;
 
     RETURN json_build_object('result', true, 'response', jResponse);
---  EXCEPTION
---  WHEN others THEN
---    GET STACKED DIAGNOSTICS vError = MESSAGE_TEXT;
+  EXCEPTION
+  WHEN others THEN
+    GET STACKED DIAGNOSTICS vError = MESSAGE_TEXT;
   END;
 
   PERFORM SetErrorMessage(vError);
@@ -632,13 +632,13 @@ BEGIN
   UPDATE ocpp.log SET response = jResponse, runtime = age(clock_timestamp(), tsBegin) WHERE id = nLogId;
 
   RETURN json_build_object('result', false, 'response', jResponse);
---EXCEPTION
---WHEN others THEN
-  --GET STACKED DIAGNOSTICS vError = MESSAGE_TEXT;
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS vError = MESSAGE_TEXT;
 
-  --PERFORM SetErrorMessage(vError);
+  PERFORM SetErrorMessage(vError);
 
-  --RETURN json_build_object('result', false, 'response', json_build_object('error', vError));
+  RETURN json_build_object('result', false, 'response', json_build_object('error', vError));
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER

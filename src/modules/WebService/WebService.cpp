@@ -450,7 +450,7 @@ namespace Apostol {
                             Route << "/count";
                         } else {
                             if (Id.IsEmpty()) {
-                                Route << "/lst";
+                                Route << "/list";
                             } else {
                                 Route << "/get";
                             }
@@ -493,6 +493,9 @@ namespace Apostol {
                         CheckParam(Route, Content);
                     } else if (LCommand == "Card") {
                         Route = "/card";
+                        CheckParam(Route, Content);
+                    } else if (LCommand == "Address") {
+                        Route = "/address";
                         CheckParam(Route, Content);
                     }
 
