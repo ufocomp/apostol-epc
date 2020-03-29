@@ -80,6 +80,48 @@ AS
     FROM ocpp.log;
 
 --------------------------------------------------------------------------------
+-- ocpp.SetSession -------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION ocpp.SetSession (
+) RETURNS	    text
+AS $$
+DECLARE
+  nUserId	    numeric;
+  nArea         numeric;
+  nInterface	numeric;
+
+  vSession	    text;
+BEGIN
+  IF session_user <> 'ocpp' THEN
+    PERFORM AccessDeniedForUser(session_user);
+  END IF;
+
+  nUserId := GetUser('ocpp');
+
+  IF nUserId IS NOT NULL THEN
+    SELECT key INTO vSession FROM db.session WHERE userid = nUserId;
+
+    IF NOT FOUND THEN
+      nArea := GetDefaultArea(nUserId);
+      nInterface := GetDefaultInterface(nUserId);
+
+      INSERT INTO db.session (userid, area, interface, host)
+      VALUES (nUserId, nArea, nInterface, null)
+      RETURNING key INTO vSession;
+    END IF;
+
+    PERFORM SetSessionKey(vSession);
+    PERFORM SetUserId(nUserId);
+  END IF;
+
+  RETURN vSession;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
 -- ocpp.GetIdTagStatus ---------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -92,7 +134,7 @@ DECLARE
   nId           numeric;
   nCard         numeric;
 
-  card          record;
+  vStateCode    varchar;
 
   Status        text;
 BEGIN
@@ -106,23 +148,49 @@ BEGIN
       nCard := CreateCard(null, GetType('plastic.card'), pIdTag);
     END IF;
 
-    SELECT Code, GetObjectStateCode(id) AS StateCode INTO card FROM db.card WHERE id = nCard;
+    vStateCode := GetObjectStateTypeCode(nCard);
 
-    IF card.StateCode = 'enabled' THEN
-      SELECT t.id INTO nId FROM db.transaction t WHERE t.Card = nCard AND now() BETWEEN t.DateStart AND t.DateStop;
-      IF FOUND THEN
-      	Status := 'ConcurrentTx';
+    IF vStateCode IS NOT NULL THEN
+      IF vStateCode = 'enabled' THEN
+        SELECT id INTO nId FROM db.transaction WHERE Card = nCard AND now() BETWEEN DateStart AND DateStop;
+        IF FOUND THEN
+          Status := 'ConcurrentTx';
+        ELSE
+      	  Status := 'Accepted';
+        END IF;
+      ELSEIF vStateCode = 'deleted' THEN
+        Status := 'Expired';
       ELSE
-      	Status := 'Accepted';
+        Status := 'Blocked';
       END IF;
-    ELSEIF card.StateCode = 'deleted' THEN
-      Status := 'Expired';
-    ELSE
-      Status := 'Blocked';
     END IF;
   END IF;
 
   RETURN Status;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- ocpp.Heartbeat --------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION ocpp.Heartbeat (
+  pIdentity	    text,
+  pRequest	    jsonb default null
+) RETURNS	    json
+AS $$
+DECLARE
+  nChargePoint	numeric;
+BEGIN
+  nChargePoint := GetChargePoint(pIdentity);
+
+  IF nChargePoint IS NOT NULL THEN
+    PERFORM ExecuteObjectAction(nChargePoint, GetAction('heartbeat'), pRequest);
+  END IF;
+
+  RETURN json_build_object('currentTime', GetISOTime());
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
@@ -165,168 +233,23 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- ocpp.StartTransaction -------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION ocpp.StartTransaction (
-  pIdentity     text,
-  pRequest      jsonb
-) RETURNS       json
-AS $$
-DECLARE
-  nId           numeric;
-  nChargePoint	numeric;
-  nCard         numeric;
-
-  arKeys        text[];
-  vStatus       text;
-
-  idTag         text;
-  connectorId	integer;
-  meterStart	integer;
-  reservationId	integer;
-  dateStart     timestamp;
-BEGIN
-  IF pRequest IS NULL THEN
-    PERFORM JsonIsEmpty();
-  END IF;
-
-  arKeys := array_cat(arKeys, ARRAY['idTag', 'connectorId', 'meterStart', 'reservationId', 'timestamp']);
-  PERFORM CheckJsonbKeys(pIdentity || '/StartTransaction', arKeys, pRequest);
-
-  idTag := pRequest->>'idTag';
-  connectorId := pRequest->>'connectorId';
-  meterStart := pRequest->>'meterStart';
-  reservationId := pRequest->>'reservationId';
-  dateStart := pRequest->>'timestamp';
-
-  nChargePoint := GetChargePoint(pIdentity);
-
-  vStatus := ocpp.GetIdTagStatus(nChargePoint, idTag);
-
-  nCard := GetCard(idTag);
-
-  nId := StartTransaction(nCard, nChargePoint, connectorId, meterStart, reservationId, dateStart);
-
-  RETURN json_build_object('transactionId', nId, 'idTagInfo', json_build_object('expiryDate', GetISOTime(current_timestamp at time zone 'utc' + interval '1 day') , 'status', vStatus));
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- ocpp.StopTransaction --------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION ocpp.StopTransaction (
-  pIdentity     text,
-  pRequest      jsonb
-) RETURNS       json
-AS $$
-DECLARE
-  nChargePoint	numeric;
-
-  arKeys        text[];
-  vStatus       text;
-
-  Balance       integer default 0;
-
-  idTag         text;
-  transactionId integer;
-  meterStop     integer;
-  reason        text;
-  Data          json;
-  dateStop      timestamp;
-BEGIN
-  IF pRequest IS NULL THEN
-    PERFORM JsonIsEmpty();
-  END IF;
-
-  arKeys := array_cat(arKeys, ARRAY['idTag', 'transactionId', 'meterStop', 'reason', 'transactionData', 'timestamp']);
-  PERFORM CheckJsonbKeys(pIdentity || '/StopTransaction', arKeys, pRequest);
-
-  idTag := pRequest->>'idTag';
-  transactionId := pRequest->>'transactionId';
-  meterStop := pRequest->>'meterStop';
-  reason := pRequest->>'reason';
-  Data := pRequest->>'transactionData';
-  dateStop := pRequest->>'timestamp';
-
-  IF (transactionId > 0) THEN
-    Balance := StopTransaction(transactionId, meterStop, reason, Data, dateStop);
-  END IF;
-
-  IF idTag IS NOT NULL THEN
-    nChargePoint := GetChargePoint(pIdentity);
-
-    vStatus := ocpp.GetIdTagStatus(nChargePoint, idTag);
-
-    RETURN json_build_object('idTagInfo', json_build_object('expiryDate', GetISOTime(current_timestamp at time zone 'utc' + interval '1 day') , 'status', vStatus));
-  END IF;
-
-  RETURN '{}'::json;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- ocpp.MeterValues ------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION ocpp.MeterValues (
-  pIdentity     text,
-  pRequest      jsonb default null
-) RETURNS       json
-AS $$
-DECLARE
-  nId           numeric;
-  nChargePoint  numeric;
-
-  arKeys        text[];
-
-  connectorId	integer;
-  transactionId	integer;
-  meterValue	json;
-BEGIN
-  IF pRequest IS NULL THEN
-    PERFORM JsonIsEmpty();
-  END IF;
-
-  arKeys := array_cat(arKeys, ARRAY['connectorId', 'transactionId', 'meterValue']);
-  PERFORM CheckJsonbKeys(pIdentity || '/MeterValues', arKeys, pRequest);
-
-  nChargePoint := GetChargePoint(pIdentity);
-
-  connectorId := pRequest->>'connectorId';
-  transactionId := pRequest->>'transactionId';
-  meterValue := pRequest->>'meterValue';
-
-  nId := AddMeterValues(nChargePoint, connectorId, transactionId, meterValue);
-
-  RETURN '{}'::json;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
 -- ocpp.BootNotification -------------------------------------------------------
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION ocpp.BootNotification (
-  pIdentity	    text,
-  pRequest	    jsonb
-) RETURNS	    json
+  pIdentity         text,
+  pRequest          jsonb
+) RETURNS           json
 AS $$
 DECLARE
-  nChargePoint	numeric;
-  nType		    numeric;
+  nChargePoint      numeric;
+  nType             numeric;
 
-  point		    record;
+  arKeys            text[];
+  vStatus           text;
 
-  arKeys	    text[];
-  vStatus	    text;
+  vSerialNumber     text;
+  vStateCode        text;
 
   chargeBoxSerialNumber		text;
   chargePointModel		    text;
@@ -365,11 +288,12 @@ BEGIN
     nChargePoint := CreateChargePoint(null, nType, pIdentity, 'Charge Point', chargePointModel, chargePointVendor, firmwareVersion, chargePointSerialNumber, chargeBoxSerialNumber, meterSerialNumber, iccid, imsi);
   END IF;
 
-  SELECT SerialNumber, GetObjectStateCode(id) AS StateCode INTO point FROM db.charge_point WHERE id = nChargePoint;
+  SELECT SerialNumber INTO vSerialNumber FROM db.charge_point WHERE id = nChargePoint;
 
   vStatus := 'Rejected';
-  IF point.SerialNumber = chargePointSerialNumber THEN
-    IF point.StateCode = 'enabled' THEN
+  IF vSerialNumber = chargePointSerialNumber THEN
+    vStateCode := GetObjectStateTypeCode(nChargePoint);
+    IF coalesce(vStateCode, 'null') = 'enabled' THEN
       vStatus := 'Accepted';
     ELSE
       vStatus := 'Pending';
@@ -433,25 +357,180 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- ocpp.DataTransfer -----------------------------------------------------------
+-- ocpp.StartTransaction -------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION ocpp.DataTransfer (
-  pIdentity	text,
-  pRequest	jsonb
-) RETURNS	json
+CREATE OR REPLACE FUNCTION ocpp.StartTransaction (
+  pIdentity     text,
+  pRequest      jsonb
+) RETURNS       json
+AS $$
+DECLARE
+  nId           numeric;
+  nChargePoint	numeric;
+  nCard         numeric;
+
+  arKeys        text[];
+  vStatus       text;
+
+  idTag         text;
+  connectorId	integer;
+  meterStart	integer;
+  reservationId	integer;
+  dateStart     timestamp;
+BEGIN
+  IF pRequest IS NULL THEN
+    PERFORM JsonIsEmpty();
+  END IF;
+
+  arKeys := array_cat(arKeys, ARRAY['idTag', 'connectorId', 'meterStart', 'reservationId', 'timestamp']);
+  PERFORM CheckJsonbKeys(pIdentity || '/StartTransaction', arKeys, pRequest);
+
+  idTag := pRequest->>'idTag';
+  connectorId := pRequest->>'connectorId';
+  meterStart := pRequest->>'meterStart';
+  reservationId := pRequest->>'reservationId';
+  dateStart := pRequest->>'timestamp';
+
+  nChargePoint := GetChargePoint(pIdentity);
+
+  vStatus := ocpp.GetIdTagStatus(nChargePoint, idTag);
+
+  IF vStatus = 'Accepted' AND nChargePoint IS NOT NULL THEN
+    nCard := GetCard(idTag);
+
+    nId := kernel.StartTransaction(nCard, nChargePoint, connectorId, meterStart, reservationId, dateStart);
+
+    PERFORM ExecuteObjectAction(nChargePoint, GetAction('start'), pRequest);
+  END IF;
+
+  RETURN json_build_object('transactionId', nId, 'idTagInfo', json_build_object('expiryDate', GetISOTime(current_timestamp at time zone 'utc' + interval '1 day') , 'status', vStatus));
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- ocpp.StopTransaction --------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION ocpp.StopTransaction (
+  pIdentity     text,
+  pRequest      jsonb
+) RETURNS       json
 AS $$
 DECLARE
   nChargePoint	numeric;
 
-  point		record;
+  arKeys        text[];
+  vStatus       text;
 
-  arKeys	text[];
-  vStatus	text;
+  Balance       integer default 0;
 
-  vendorId 	text;
-  messageId	text;
-  data		text;
+  idTag         text;
+  transactionId integer;
+  meterStop     integer;
+  reason        text;
+  Data          json;
+  dateStop      timestamp;
+BEGIN
+  IF pRequest IS NULL THEN
+    PERFORM JsonIsEmpty();
+  END IF;
+
+  arKeys := array_cat(arKeys, ARRAY['idTag', 'transactionId', 'meterStop', 'reason', 'transactionData', 'timestamp']);
+  PERFORM CheckJsonbKeys(pIdentity || '/StopTransaction', arKeys, pRequest);
+
+  idTag := pRequest->>'idTag';
+  transactionId := pRequest->>'transactionId';
+  meterStop := pRequest->>'meterStop';
+  reason := pRequest->>'reason';
+  Data := pRequest->>'transactionData';
+  dateStop := pRequest->>'timestamp';
+
+  IF (transactionId > 0) THEN
+    Balance := kernel.StopTransaction(transactionId, meterStop, reason, Data, dateStop);
+  END IF;
+
+  nChargePoint := GetChargePoint(pIdentity);
+
+  IF nChargePoint IS NOT NULL THEN
+    PERFORM ExecuteObjectAction(nChargePoint, GetAction('stop'), pRequest);
+  END IF;
+
+  IF idTag IS NOT NULL THEN
+    vStatus := ocpp.GetIdTagStatus(nChargePoint, idTag);
+    RETURN json_build_object('idTagInfo', json_build_object('expiryDate', GetISOTime(current_timestamp at time zone 'utc' + interval '1 day') , 'status', vStatus));
+  END IF;
+
+  RETURN '{}'::json;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- ocpp.MeterValues ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION ocpp.MeterValues (
+  pIdentity     text,
+  pRequest      jsonb default null
+) RETURNS       json
+AS $$
+DECLARE
+  nId           numeric;
+  nChargePoint  numeric;
+
+  arKeys        text[];
+
+  connectorId	integer;
+  transactionId	integer;
+  meterValue	json;
+BEGIN
+  IF pRequest IS NULL THEN
+    PERFORM JsonIsEmpty();
+  END IF;
+
+  arKeys := array_cat(arKeys, ARRAY['connectorId', 'transactionId', 'meterValue']);
+  PERFORM CheckJsonbKeys(pIdentity || '/MeterValues', arKeys, pRequest);
+
+  nChargePoint := GetChargePoint(pIdentity);
+
+  IF nChargePoint IS NOT NULL THEN
+    connectorId := pRequest->>'connectorId';
+    transactionId := pRequest->>'transactionId';
+    meterValue := pRequest->>'meterValue';
+
+    nId := AddMeterValue(nChargePoint, connectorId, transactionId, meterValue);
+  END IF;
+
+  RETURN '{}'::json;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- ocpp.DataTransfer -----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION ocpp.DataTransfer (
+  pIdentity	    text,
+  pRequest	    jsonb
+) RETURNS	    json
+AS $$
+DECLARE
+  nChargePoint	numeric;
+
+  vVendor		varchar;
+
+  arKeys	    text[];
+  vStatus	    text;
+
+  vendorId 	    text;
+  messageId	    text;
+  data		    text;
 BEGIN
   vStatus := 'Rejected';
 
@@ -470,9 +549,9 @@ BEGIN
 
   IF nChargePoint IS NOT NULL THEN
 
-    SELECT Vendor INTO point FROM db.charge_point WHERE id = nChargePoint;
+    SELECT Vendor INTO vVendor FROM db.charge_point WHERE id = nChargePoint;
 
-    IF point.Vendor = vendorId THEN
+    IF vVendor = vendorId THEN
       vStatus := 'Accepted';
     ELSE
       vStatus := 'UnknownVendorId';
@@ -486,72 +565,10 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- ocpp.Heartbeat --------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION ocpp.Heartbeat (
-  pIdentity	    text,
-  pRequest	    jsonb default null
-) RETURNS	    json
-AS $$
-DECLARE
-  nChargePoint	numeric;
-BEGIN
-  nChargePoint := GetChargePoint(pIdentity);
-
-  RETURN json_build_object('currentTime', GetISOTime());
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- ocpp.SetSession -------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION ocpp.SetSession (
-) RETURNS	    text
-AS $$
-DECLARE
-  nUserId	    numeric;
-  nArea         numeric;
-  nInterface	numeric;
-
-  vSession	    text;
-BEGIN
-  IF session_user <> 'ocpp' THEN
-    PERFORM AccessDeniedForUser(session_user);
-  END IF;
-
-  nUserId := GetUser('ocpp');
-
-  IF nUserId IS NOT NULL THEN
-    SELECT key INTO vSession FROM db.session WHERE userid = nUserId;
-
-    IF NOT FOUND THEN
-      nArea := GetDefaultArea(nUserId);
-      nInterface := GetDefaultInterface(nUserId);
-
-      INSERT INTO db.session (userid, area, interface, host)
-      VALUES (nUserId, nArea, nInterface, null)
-      RETURNING key INTO vSession;
-    END IF;
-
-    PERFORM SetSessionKey(vSession);
-    PERFORM SetUserId(nUserId);
-  END IF;
-
-  RETURN vSession;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
 -- ocpp.Parse ------------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Выполнить команду OCPP в формате JSON.
+ * Разбор OCPP пакета полученного от зарядной станции.
  * @param {text} pIdentity - Идентификатор зарядной станции
  * @param {text} pAction - Действие
  * @param {jsonb} pRequest - JSON запрос
@@ -581,9 +598,21 @@ BEGIN
     tsBegin := clock_timestamp();
 
     CASE pAction
+    WHEN 'Heartbeat' THEN
+
+      jResponse := ocpp.Heartbeat(pIdentity, pRequest);
+
     WHEN 'Authorize' THEN
 
       jResponse := ocpp.Authorize(pIdentity, pRequest);
+
+    WHEN 'BootNotification' THEN
+
+      jResponse := ocpp.BootNotification(pIdentity, pRequest);
+
+    WHEN 'StatusNotification' THEN
+
+      jResponse := ocpp.StatusNotification(pIdentity, pRequest);
 
     WHEN 'StartTransaction' THEN
 
@@ -597,21 +626,9 @@ BEGIN
 
       jResponse := ocpp.MeterValues(pIdentity, pRequest);
 
-    WHEN 'BootNotification' THEN
-
-      jResponse := ocpp.BootNotification(pIdentity, pRequest);
-
-    WHEN 'StatusNotification' THEN
-
-      jResponse := ocpp.StatusNotification(pIdentity, pRequest);
-
     WHEN 'DataTransfer' THEN
 
       jResponse := ocpp.DataTransfer(pIdentity, pRequest);
-
-    WHEN 'Heartbeat' THEN
-
-      jResponse := ocpp.Heartbeat(pIdentity, pRequest);
 
     ELSE
       PERFORM ActionNotFound(pAction);

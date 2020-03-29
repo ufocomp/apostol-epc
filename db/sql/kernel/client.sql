@@ -51,10 +51,6 @@ BEGIN
     NEW.CODE := 'C:' || LPAD(TRIM(TO_CHAR(NEW.ID, '999999999999')), 10, '0');
   END IF;
 
-  IF NEW.USERID IS NOT NULL THEN
-    UPDATE db.object SET owner = NEW.USERID WHERE id = NEW.DOCUMENT;
-  END IF;
-
   RAISE DEBUG 'Создан клиент Id: %', NEW.id;
 
   RETURN NEW;

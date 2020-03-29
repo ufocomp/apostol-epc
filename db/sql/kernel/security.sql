@@ -645,7 +645,7 @@ AS
   SELECT md.id, md.area, d.code, d.name, d.description,
          md.member, u.type, u.username, u.fullname, u.description
     FROM db.member_area md INNER JOIN db.area d ON d.id = md.area
-                              INNER JOIN db.user u ON u.id = md.member;
+                           INNER JOIN db.user u ON u.id = md.member;
 
 GRANT SELECT ON MemberArea TO administrator;
 
@@ -1909,11 +1909,15 @@ BEGIN
 
   SELECT username INTO vUserName FROM db.user WHERE id = pId;
 
-  IF vUserName IN ('admin', 'daemon', 'mailbot', 'apibot') THEN
+  IF vUserName IN ('admin', 'daemon', 'ocpp', 'mailbot', 'apibot') THEN
     PERFORM SystemRoleError();
   END IF;
 
   IF FOUND THEN
+    UPDATE db.client SET userid = null WHERE userid = pId;
+
+    DELETE FROM db.aou WHERE userid = pId;
+
     DELETE FROM db.member_area WHERE member = pId;
     DELETE FROM db.member_interface WHERE member = pId;
     DELETE FROM db.member_group WHERE member = pId;

@@ -234,6 +234,38 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
+-- GetAddressTree --------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetAddressTree (
+  pCode		varchar
+) RETURNS   text[]
+AS $$
+DECLARE
+  r         record;
+  arResult	text[];
+BEGIN
+  FOR r IN (
+    WITH RECURSIVE addr_tree(id, parent, name, level) AS (
+      SELECT id, parent, name, level FROM db.address_tree WHERE code = pCode
+       UNION ALL
+      SELECT a.id, a.parent, a.name, a.level
+        FROM db.address_tree a, addr_tree t
+       WHERE a.id = t.parent
+    )
+    SELECT * FROM addr_tree ORDER BY level
+  )
+  LOOP
+    arResult[r.level] := r.name;
+  END LOOP;
+
+  RETURN arResult;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
 -- GetAddressTreeString --------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -245,16 +277,13 @@ CREATE OR REPLACE FUNCTION GetAddressTreeString (
 AS $$
 DECLARE
   r         record;
-  nId		numeric;
-  sIndex	numeric;
+  sIndex	text;
   sStr		text;
   sResult	text;
 BEGIN
-  SELECT id INTO nId FROM db.address_tree WHERE code = pCode;
-
   FOR r IN (
     WITH RECURSIVE addr_tree(id, parent, index, name, short, level) AS (
-      SELECT id, parent, index, name, short, level FROM db.address_tree WHERE id = nId
+      SELECT id, parent, index, name, short, level FROM db.address_tree WHERE code = pCode
        UNION ALL
       SELECT a.id, a.parent, a.index, a.name, a.short, a.level
         FROM db.address_tree a, addr_tree t
@@ -806,118 +835,24 @@ CREATE OR REPLACE VIEW ObjectAddress (Id, Object, Parent,
 GRANT SELECT ON ObjectAddress TO administrator;
 
 --------------------------------------------------------------------------------
--- db.object_address -----------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE TABLE db.object_address (
-    Id			    numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
-    Object		    numeric(12) NOT NULL,
-    Type		    numeric(12) NOT NULL,
-    Address		    numeric(12) NOT NULL,
-    ValidFromDate	timestamp DEFAULT NOW() NOT NULL,
-    ValidToDate		timestamp DEFAULT TO_DATE('4433-12-31', 'YYYY-MM-DD') NOT NULL,
-    CONSTRAINT fk_object_address_object FOREIGN KEY (object) REFERENCES db.object(id),
-    CONSTRAINT fk_object_address_type FOREIGN KEY (type) REFERENCES db.type(id),
-    CONSTRAINT fk_object_address_address FOREIGN KEY (address) REFERENCES db.address(id)
-);
-
---------------------------------------------------------------------------------
-
-COMMENT ON TABLE db.object_address IS 'Связанные с объектом адреса.';
-
-COMMENT ON COLUMN db.object_address.object IS 'Идентификатор объекта';
-COMMENT ON COLUMN db.object_address.type IS 'Идентификатор типа адреса';
-COMMENT ON COLUMN db.object_address.address IS 'Идентификатор адреса';
-COMMENT ON COLUMN db.object_address.validfromdate IS 'Дата начала периода действия';
-COMMENT ON COLUMN db.object_address.validtodate IS 'Дата окончания периода действия';
-
---------------------------------------------------------------------------------
-
-CREATE UNIQUE INDEX ON db.object_address (object, type, validfromdate, validtodate);
-
-CREATE INDEX ON db.object_address (object);
-CREATE INDEX ON db.object_address (type);
-CREATE INDEX ON db.object_address (address);
-
---------------------------------------------------------------------------------
 -- ObjectAddresses -------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW ObjectAddresses (Id, Object, Type, TypeCode, TypeName, TypeDescription,
-    Address, Code, Index, Country, Region, District, City, Settlement, Street, House,
+CREATE OR REPLACE VIEW ObjectAddresses (Id, Object, Address,
+    Type, TypeCode, TypeName, TypeDescription,
+    Code, Index, Country, Region, District, City, Settlement, Street, House,
     Building, Structure, Apartment, SortNum,
     ValidFromDate, ValidToDate
 )
 AS
-  SELECT ca.id, ca.object, ca.type, t.code, t.name, t.description, ca.address,
+  SELECT ol.id, ol.object, ol.linked, ol.type, t.code, t.name, t.description,
          a.code, a.index, a.country, a.region, a.district, a.city, a.settlement, a.street, a.house,
          a.building, a.structure, a.apartment, a.sortnum,
-         ca.validfromdate, ca.validtodate
-    FROM db.object_address ca INNER JOIN db.type t ON t.id = ca.type
-                              INNER JOIN db.address a ON a.id = ca.address;
+         ol.validfromdate, ol.validtodate
+    FROM db.object_link ol INNER JOIN db.type t ON t.id = ol.type
+                           INNER JOIN db.address a ON a.id = ol.linked;
 
 GRANT SELECT ON ObjectAddresses TO administrator;
-
---------------------------------------------------------------------------------
--- FUNCTION SetObjectAddress ---------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Устанавливает адрес объекта.
- * @param {numeric} pObject - Идентификатор объекта
- * @param {numeric} pAddress - Идентификатор адреса
- * @param {timestamp} pDateFrom - Дата изменения
- * @return {void}
- */
-CREATE OR REPLACE FUNCTION SetObjectAddress (
-  pObject	    numeric,
-  pAddress	    numeric,
-  pDateFrom	    timestamp default oper_date()
-) RETURNS 	    numeric
-AS $$
-DECLARE
-  nId		    numeric;
-  nType		    numeric;
-
-  dtDateFrom    timestamp;
-  dtDateTo 	    timestamp;
-BEGIN
-  nId := null;
-
-  SELECT type INTO nType FROM db.object WHERE id = pAddress;
-
-  -- получим дату значения в текущем диапозоне дат
-  SELECT max(ValidFromDate), max(ValidToDate) INTO dtDateFrom, dtDateTo
-    FROM db.object_address
-   WHERE Object = pObject
-     AND Type = nType
-     AND ValidFromDate <= pDateFrom
-     AND ValidToDate > pDateFrom;
-
-  IF dtDateFrom = pDateFrom THEN
-    -- обновим значение в текущем диапозоне дат
-    UPDATE db.object_address SET address = pAddress
-     WHERE Object = pObject
-       AND Type = nType
-       AND ValidFromDate <= pDateFrom
-       AND ValidToDate > pDateFrom;
-  ELSE
-    -- обновим дату значения в текущем диапозоне дат
-    UPDATE db.object_address SET ValidToDate = pDateFrom
-     WHERE Object = pObject
-       AND Type = nType
-       AND ValidFromDate <= pDateFrom
-       AND ValidToDate > pDateFrom;
-
-    INSERT INTO db.object_address (object, type, address, validfromdate, validtodate)
-    VALUES (pObject, nType, pAddress, pDateFrom, coalesce(dtDateTo, MAXDATE()))
-    RETURNING id INTO nId;
-  END IF;
-
-  RETURN nId;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
 -- FUNCTION GetObjectAddress ---------------------------------------------------
@@ -938,8 +873,8 @@ AS $$
 DECLARE
   nAddress		numeric;
 BEGIN
-  SELECT Address INTO nAddress
-    FROM db.object_address
+  SELECT Linked INTO nAddress
+    FROM db.object_link
    WHERE Object = pObject
      AND Type = pType
      AND ValidFromDate <= pDate

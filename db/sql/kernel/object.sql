@@ -16,7 +16,7 @@ CREATE TABLE db.object (
     udate		timestamp DEFAULT NOW() NOT NULL,
     CONSTRAINT fk_object_parent FOREIGN KEY (parent) REFERENCES db.object(id),
     CONSTRAINT fk_object_type FOREIGN KEY (type) REFERENCES db.type(id),
-    CONSTRAINT fk_object_state FOREIGN KEY (state) REFERENCES db.state_list(id),
+    CONSTRAINT fk_object_state FOREIGN KEY (state) REFERENCES db.state(id),
     CONSTRAINT fk_object_suid FOREIGN KEY (suid) REFERENCES db.user(id),
     CONSTRAINT fk_object_owner FOREIGN KEY (owner) REFERENCES db.user(id),
     CONSTRAINT fk_object_oper FOREIGN KEY (oper) REFERENCES db.user(id)
@@ -101,6 +101,15 @@ CREATE OR REPLACE FUNCTION db.ft_object_after_insert()
 RETURNS trigger AS $$
 BEGIN
   INSERT INTO db.aom SELECT NEW.ID;
+  INSERT INTO db.aou SELECT NEW.ID, 1000, B'000', B'111';
+  INSERT INTO db.aou SELECT NEW.ID, NEW.OWNER, B'000', B'111';
+
+  IF NEW.OWNER <> NEW.SUID THEN
+    IF NOT IsUserRole(1000, NEW.SUID) THEN
+      INSERT INTO db.aou SELECT NEW.ID, NEW.SUID, B'000', B'110';
+    END IF;
+  END IF;
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql
@@ -122,8 +131,8 @@ DECLARE
   nStateType	numeric;
   nOldEssence	numeric;
   nNewEssence	numeric;
-  nOldClass	numeric;
-  nNewClass	numeric;
+  nOldClass     numeric;
+  nNewClass     numeric;
 BEGIN
   IF lower(session_user) = 'kernel' THEN
     SELECT AccessDeniedForUser(session_user);
@@ -151,7 +160,7 @@ BEGIN
 
   IF nOldClass <> nNewClass THEN
 
-    SELECT type INTO nStateType FROM db.state_list WHERE id = OLD.STATE;
+    SELECT type INTO nStateType FROM db.state WHERE id = OLD.STATE;
     NEW.STATE := GetState(nNewClass, nStateType);
 
     IF coalesce(OLD.STATE <> NEW.STATE, false) THEN
@@ -192,6 +201,7 @@ BEGIN
     PERFORM AccessDenied();
   END IF;
 
+  DELETE FROM db.aou WHERE object = OLD.ID;
   DELETE FROM db.aom WHERE object = OLD.ID;
 
   RETURN OLD;
@@ -208,6 +218,266 @@ CREATE TRIGGER t_object_before_delete
   EXECUTE PROCEDURE db.ft_object_before_delete();
 
 --------------------------------------------------------------------------------
+-- TABLE db.aom ----------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE TABLE db.aom (
+    object		NUMERIC(12) NOT NULL,
+    mask		BIT(9) DEFAULT B'111100000' NOT NULL,
+    CONSTRAINT fk_aom_object FOREIGN KEY (object) REFERENCES db.object(id)
+);
+
+COMMENT ON TABLE db.aom IS 'Маска доступа к объекту.';
+
+COMMENT ON COLUMN db.aom.object IS 'Объект';
+COMMENT ON COLUMN db.aom.mask IS 'Маска доступа. Девять бит (a:{u:sud}{g:sud}{o:sud}), по три бита на действие s - select, u - update, d - delete, для: a - all (все) = u - user (владелец) g - group (группа) o - other (остальные)';
+
+CREATE UNIQUE INDEX ON db.aom (object);
+
+--------------------------------------------------------------------------------
+-- TABLE db.aou ----------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE TABLE db.aou (
+    object		numeric(12) NOT NULL,
+    userid		numeric(12) NOT NULL,
+    deny		bit(3) NOT NULL,
+    allow		bit(3) NOT NULL,
+    mask		bit(3) NOT NULL,
+    CONSTRAINT fk_aou_object FOREIGN KEY (object) REFERENCES db.object(id),
+    CONSTRAINT fk_aou_userid FOREIGN KEY (userid) REFERENCES db.user(id)
+);
+
+COMMENT ON TABLE db.aou IS 'Доступ пользователя и групп пользователей к объекту.';
+
+COMMENT ON COLUMN db.aou.object IS 'Объект';
+COMMENT ON COLUMN db.aou.userid IS 'Пользователь';
+COMMENT ON COLUMN db.aou.deny IS 'Запрещающие биты: {s - select, u - update, d - delete}';
+COMMENT ON COLUMN db.aou.allow IS 'Разрешающие биты: {s - select, u - update, d - delete}';
+COMMENT ON COLUMN db.aou.mask IS 'Маска доступа: {s - select, u - update, d - delete}';
+
+CREATE UNIQUE INDEX ON db.aou (object, userid);
+
+CREATE INDEX ON db.aou (object);
+CREATE INDEX ON db.aou (userid);
+
+CREATE OR REPLACE FUNCTION ft_aou_before()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF (TG_OP = 'INSERT') THEN
+    NEW.mask = NEW.allow & ~NEW.deny;
+    RETURN NEW;
+  ELSIF (TG_OP = 'UPDATE') THEN
+    NEW.mask = NEW.allow & ~NEW.deny;
+    RETURN NEW;
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER t_aou_before
+  BEFORE INSERT OR UPDATE ON db.aou
+  FOR EACH ROW
+  EXECUTE PROCEDURE ft_aou_before();
+
+--------------------------------------------------------------------------------
+-- FUNCTION aou ----------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION aou (
+  pUserId       numeric,
+  OUT object    numeric,
+  OUT deny      bit,
+  OUT allow     bit,
+  OUT mask      bit
+) RETURNS       SETOF record
+AS $$
+  WITH member_group AS (
+      SELECT pUserId AS userid UNION ALL SELECT userid FROM db.member_group WHERE member = pUserId
+  )
+  SELECT a.object, bit_or(a.deny), bit_or(a.allow), bit_or(a.mask)
+    FROM db.aou a INNER JOIN member_group m ON a.userid = m.userid
+   GROUP BY a.object;
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- FUNCTION aou ----------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION aou (
+  pUserId       numeric,
+  pObject       numeric,
+  OUT object    numeric,
+  OUT deny      bit,
+  OUT allow     bit,
+  OUT mask      bit
+) RETURNS       SETOF record
+AS $$
+  WITH member_group AS (
+      SELECT pUserId AS userid UNION ALL SELECT userid FROM db.member_group WHERE member = pUserId
+  )
+  SELECT a.object, bit_or(a.deny), bit_or(a.allow), bit_or(a.mask)
+    FROM db.aou a INNER JOIN member_group m ON a.userid = m.userid
+     AND a.object = pObject
+   GROUP BY a.object
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- chmodo ----------------------------------------------------------------------
+--------------------------------------------------------------------------------
+/*
+ * Устанавливает битовую маску доступа для объектов и пользователя.
+ * @param {numeric} pObject - Идентификатор объекта
+ * @param {bit} pMask - Маска доступа. Шесть бит (d:{sud}a:{sud}) где: d - запрещающие биты; a - разрешающие биты: {s - select, u - update, d - delete}
+ * @param {numeric} pUserId - Идентификатор пользователя/группы
+ * @param {char} pMarker - Маркер
+ * @return {void}
+*/
+CREATE OR REPLACE FUNCTION chmodo (
+  pObject	numeric,
+  pMask		bit,
+  pUserId	numeric default session_userid()
+) RETURNS	void
+AS $$
+DECLARE
+  bDeny      bit;
+  bAllow     bit;
+BEGIN
+  IF session_user <> 'kernel' THEN
+    IF NOT IsUserRole(1000) THEN
+      PERFORM AccessDenied();
+    END IF;
+  END IF;
+
+  IF pMask IS NOT NULL THEN
+    bDeny := NULLIF(SubString(pMask FROM 1 FOR 3), B'000');
+    bAllow := NULLIF(SubString(pMask FROM 4 FOR 3), B'000');
+
+    UPDATE db.aou SET deny = bDeny, allow = bAllow WHERE object = pObject AND userid = pUserId;
+    IF NOT FOUND THEN
+      INSERT INTO db.aou SELECT pObject, pUserId, bDeny, bAllow, 0;
+    END IF;
+  ELSE
+    DELETE FROM db.aou WHERE object = pObject AND userid = pUserId;
+  END IF;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- GetObjectMask ---------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetObjectMask (
+  pObject	numeric,
+  pUserId	numeric default current_userid()
+) RETURNS	bit
+AS $$
+  SELECT CASE
+         WHEN pUserId = o.owner THEN SubString(mask FROM 1 FOR 3)
+         WHEN EXISTS (SELECT id FROM db.user WHERE id = pUserId AND type = 'G') THEN SubString(mask FROM 4 FOR 3)
+         ELSE SubString(mask FROM 7 FOR 3)
+         END
+    FROM db.aom a INNER JOIN db.object o ON o.id = a.object
+   WHERE object = pObject
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- GetObjectAccessMask ---------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetObjectAccessMask (
+  pObject	numeric,
+  pUserId	numeric default session_userid()
+) RETURNS	bit
+AS $$
+  SELECT mask FROM aou(pUserId, pObject)
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- CheckObjectAccess -----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION CheckObjectAccess (
+  pObject	numeric,
+  pMask		bit,
+  pUserId	numeric default current_userid()
+) RETURNS	boolean
+AS $$
+BEGIN
+/*
+  IF session_user = 'ocpp' THEN
+    RETURN true;
+  END IF;
+
+  IF IsUserRole(1000, pUserId) THEN
+    RETURN true;
+  END IF;
+*/
+  RETURN coalesce(coalesce(GetObjectAccessMask(pObject, pUserId), GetObjectMask(pObject, pUserId)) & pMask = pMask, false);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- DecodeObjectAccess ----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION DecodeObjectAccess (
+  pObject	numeric,
+  pUserId	numeric default session_userid(),
+  OUT s		boolean,
+  OUT u		boolean,
+  OUT d		boolean
+) RETURNS 	record
+AS $$
+DECLARE
+  bMask		bit(3);
+BEGIN
+  bMask := coalesce(GetObjectAccessMask(pObject, pUserId), GetObjectMask(pObject, pUserId));
+
+  s := bMask & B'100' = B'100';
+  u := bMask & B'010' = B'010';
+  d := bMask & B'001' = B'001';
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- VIEW ObjectMembers ----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW ObjectMembers
+AS
+  SELECT object, userid, deny::int, allow::int, mask::int, u.type, username, fullname, description
+    FROM db.aou a INNER JOIN db.user u ON u.id = a.userid;
+
+GRANT SELECT ON ObjectMembers TO administrator;
+
+--------------------------------------------------------------------------------
+-- GetObjectMembers ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetObjectMembers (
+  pObject	numeric
+) RETURNS 	SETOF ObjectMembers
+AS $$
+  SELECT * FROM ObjectMembers WHERE object = pObject;
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
 -- VIEW Object -----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -221,6 +491,15 @@ CREATE OR REPLACE VIEW Object (Id, Parent,
   Owner, OwnerCode, OwnerName, Created,
   Oper, OperCode, OperName, OperDate
 ) AS
+WITH access AS (
+  WITH member_group AS (
+      SELECT current_userid() AS userid UNION ALL SELECT userid FROM db.member_group WHERE member = current_userid()
+  )
+  SELECT a.object
+    FROM db.aou a INNER JOIN member_group m ON a.userid = m.userid
+   GROUP BY a.object
+  HAVING bit_or(a.mask) & B'100' = B'100'
+)
   SELECT o.id, o.parent,
          e.id, e.code, e.name,
          c.id, c.code, c.label,
@@ -230,10 +509,11 @@ CREATE OR REPLACE VIEW Object (Id, Parent,
          o.state, s.code, s.label, o.udate,
          o.owner, w.username, w.fullname, o.pdate,
          o.oper, u.username, u.fullname, o.ldate
-    FROM db.object o INNER JOIN db.type t       ON t.id = o.type
+    FROM db.object o INNER JOIN access a        ON o.id = a.object
+                     INNER JOIN db.type t       ON t.id = o.type
                      INNER JOIN db.class_tree c ON c.id = t.class
                      INNER JOIN db.essence e    ON e.id = c.essence
-                     INNER JOIN db.state_list s ON s.id = o.state
+                     INNER JOIN db.state s      ON s.id = o.state
                      INNER JOIN db.state_type y ON y.id = s.type
                      INNER JOIN db.user w       ON w.id = o.owner AND w.type = 'U'
                      INNER JOIN db.user u       ON u.id = o.oper AND u.type = 'U';
@@ -414,79 +694,17 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- TABLE db.aom ----------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE TABLE db.aom (
-    object		NUMERIC(12) NOT NULL,
-    mask		BIT(9) DEFAULT B'111100000' NOT NULL,
-    CONSTRAINT fk_aom_object FOREIGN KEY (object) REFERENCES db.object(id)
-);
-
-COMMENT ON TABLE db.aom IS 'Маска доступа к объекту.';
-
-COMMENT ON COLUMN db.aom.object IS 'Объект';
-COMMENT ON COLUMN db.aom.mask IS 'Маска доступа. Девять бит (a:{u:sud}{g:sud}{o:sud}), по три бита на действие s - select, u - update, d - delete, для: a - all (все) = u - user (владелец) g - group (группа) o - other (остальные)';
-
-CREATE UNIQUE INDEX ON db.aom (object);
-
---------------------------------------------------------------------------------
--- GetObjectMask ---------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION GetObjectMask (
-  pObject	numeric,
-  pUserId	numeric default current_userid()
-) RETURNS	bit
-AS $$
-  SELECT CASE
-         WHEN pUserId = o.owner THEN SubString(mask FROM 1 FOR 3)
-         WHEN EXISTS (SELECT id FROM db.user WHERE id = pUserId AND type = 'G') THEN SubString(mask FROM 4 FOR 3)
-         ELSE SubString(mask FROM 7 FOR 3)
-         END
-    FROM db.aom a INNER JOIN db.object o ON o.id = a.object
-   WHERE object = pObject
-$$ LANGUAGE SQL
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- CheckObjectAccess -----------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION CheckObjectAccess (
-  pObject	numeric,
-  pMask		bit,
-  pUserId	numeric default current_userid()
-) RETURNS	boolean
-AS $$
-BEGIN
-  IF session_user = 'ocpp' THEN
-    RETURN true;
-  END IF;
-
-  IF IsUserRole(GetGroup('administrator'), pUserId) THEN
-    RETURN true;
-  END IF;
-
-  RETURN coalesce(GetObjectMask(pObject, pUserId) & pMask = pMask, false);
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
 -- OBJECT_STATE ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.object_state (
-    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
-    object		numeric(12) NOT NULL,
-    state		numeric(12) NOT NULL,
+    id			    numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
+    object		    numeric(12) NOT NULL,
+    state		    numeric(12) NOT NULL,
     validfromdate	timestamp DEFAULT NOW() NOT NULL,
     validtodate		timestamp DEFAULT TO_DATE('4433-12-31', 'YYYY-MM-DD') NOT NULL,
     CONSTRAINT fk_object_state_object FOREIGN KEY (object) REFERENCES db.object(id),
-    CONSTRAINT fk_object_state_state FOREIGN KEY (state) REFERENCES db.state_list(id)
+    CONSTRAINT fk_object_state_state FOREIGN KEY (state) REFERENCES db.state(id)
 );
 
 COMMENT ON TABLE db.object_state IS 'Состояние объекта.';
@@ -560,16 +778,16 @@ GRANT SELECT ON ObjectState TO administrator;
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION AddObjectState (
-  pObject	numeric,
-  pState	numeric,
-  pDateFrom	timestamp default oper_date()
-) RETURNS 	numeric
+  pObject       numeric,
+  pState        numeric,
+  pDateFrom     timestamp default oper_date()
+) RETURNS       numeric
 AS $$
 DECLARE
-  nId		numeric;
+  nId           numeric;
 
-  dtDateFrom 	timestamp;
-  dtDateTo 	timestamp;
+  dtDateFrom    timestamp;
+  dtDateTo      timestamp;
 BEGIN
   -- получим дату значения в текущем диапозоне дат
   SELECT max(ValidFromDate), max(ValidToDate) INTO dtDateFrom, dtDateTo
@@ -645,12 +863,63 @@ BEGIN
 
   nState := GetObjectState(pObject, pDate);
   IF nState IS NOT NULL THEN
-    SELECT code INTO vCode FROM db.state_list WHERE id = nState;
+    SELECT code INTO vCode FROM db.state WHERE id = nState;
   END IF;
 
   RETURN vCode;
-exception
-  when NO_DATA_FOUND THEN
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
+    RETURN null;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- FUNCTION GetObjectStateType -------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetObjectStateType (
+  pObject	numeric,
+  pDate		timestamp default oper_date()
+) RETURNS	numeric
+AS $$
+DECLARE
+  nState	numeric;
+BEGIN
+  SELECT state INTO nState
+    FROM db.object_state
+   WHERE object = pObject
+     AND ValidFromDate <= pDate
+     AND ValidToDate > pDate;
+
+  RETURN GetStateTypeByState(nState);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- FUNCTION GetObjectStateTypeCode ---------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetObjectStateTypeCode (
+  pObject	numeric,
+  pDate		timestamp default oper_date()
+) RETURNS 	varchar
+AS $$
+DECLARE
+  nState	numeric;
+BEGIN
+  SELECT state INTO nState
+    FROM db.object_state
+   WHERE object = pObject
+     AND ValidFromDate <= pDate
+     AND ValidToDate > pDate;
+
+  RETURN GetStateTypeCodeByState(nState);
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
     RETURN null;
 END;
 $$ LANGUAGE plpgsql
@@ -707,7 +976,7 @@ CREATE OR REPLACE FUNCTION GetObjectMethod (
 ) RETURNS	numeric
 AS $$
 DECLARE
-  nType         numeric;
+  nType     numeric;
   nClass	numeric;
   nState	numeric;
   nMethod	numeric;
@@ -765,20 +1034,20 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION ExecuteMethod (
-  pObject	numeric,
-  pMethod	numeric,
-  pForm		jsonb default null
-) RETURNS	void
+  pObject       numeric,
+  pMethod       numeric,
+  pForm         jsonb default null
+) RETURNS       void
 AS $$
 DECLARE
   nSaveObject	numeric;
   nSaveClass	numeric;
   nSaveMethod	numeric;
   nSaveAction	numeric;
-  pSaveForm	jsonb;
+  pSaveForm     jsonb;
 
-  nClass	numeric;
-  nAction	numeric;
+  nClass        numeric;
+  nAction       numeric;
 BEGIN
   nSaveObject := context_object();
   nSaveClass  := context_class();
@@ -861,11 +1130,11 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.object_group (
-    id                  numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
-    owner		numeric(12) NOT NULL,
-    code                varchar(30) NOT NULL,
-    name                varchar(50) NOT NULL,
-    description         text,
+    id          numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
+    owner       numeric(12) NOT NULL,
+    code        varchar(30) NOT NULL,
+    name        varchar(50) NOT NULL,
+    description text,
     CONSTRAINT fk_object_group_owner FOREIGN KEY (owner) REFERENCES db.user(id)
 );
 
@@ -931,11 +1200,11 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION EditObjectGroup (
-  pId		numeric,
-  pCode		varchar,
-  pName		varchar,
+  pId		    numeric,
+  pCode		    varchar,
+  pName		    varchar,
   pDescription	varchar
-) RETURNS	void
+) RETURNS	    void
 AS $$
 BEGIN
   UPDATE db.object_group
@@ -962,8 +1231,8 @@ BEGIN
   SELECT id INTO strict nId FROM db.object_group WHERE code = pCode;
 
   RETURN nId;
-exception
-  when NO_DATA_FOUND THEN
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
     RETURN null;
 END;
 $$ LANGUAGE plpgsql
@@ -978,7 +1247,7 @@ CREATE OR REPLACE VIEW ObjectGroup (Id, Code, Name, Description)
 AS
   SELECT id, code, name, description
     FROM db.object_group
-   WHERE coalesce(owner, coalesce(current_userid(), 0)) = coalesce(current_userid(), 0);
+   WHERE owner = coalesce(current_userid(), 0);
 
 GRANT SELECT ON ObjectGroup TO administrator;
 
@@ -987,9 +1256,9 @@ GRANT SELECT ON ObjectGroup TO administrator;
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.object_group_member (
-    id                  numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
-    gid                 numeric(12) NOT NULL,
-    object              numeric(12) NOT NULL,
+    id          numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
+    gid         numeric(12) NOT NULL,
+    object      numeric(12) NOT NULL,
     CONSTRAINT fk_object_group_member_gid FOREIGN KEY (gid) REFERENCES db.object_group(id),
     CONSTRAINT fk_object_group_member_object FOREIGN KEY (object) REFERENCES db.object(id)
 );
@@ -1066,6 +1335,133 @@ AS
     FROM db.object_group_member m INNER JOIN ObjectGroup g ON g.id = m.gid;
 
 GRANT SELECT ON ObjectGroupMember TO administrator;
+
+--------------------------------------------------------------------------------
+-- db.object_link --------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE TABLE db.object_link (
+    Id			    numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
+    Object		    numeric(12) NOT NULL,
+    Type		    numeric(12) NOT NULL,
+    Linked		    numeric(12),
+    ValidFromDate	timestamp DEFAULT NOW() NOT NULL,
+    ValidToDate		timestamp DEFAULT TO_DATE('4433-12-31', 'YYYY-MM-DD') NOT NULL,
+    CONSTRAINT fk_object_link_object FOREIGN KEY (object) REFERENCES db.object(id),
+    CONSTRAINT fk_object_link_type FOREIGN KEY (type) REFERENCES db.type(id),
+    CONSTRAINT fk_object_link_linked FOREIGN KEY (linked) REFERENCES db.object(id)
+);
+
+--------------------------------------------------------------------------------
+
+COMMENT ON TABLE db.object_link IS 'Связанные с объектом объекты.';
+
+COMMENT ON COLUMN db.object_link.object IS 'Идентификатор объекта';
+COMMENT ON COLUMN db.object_link.type IS 'Идентификатор типа связанного объекта';
+COMMENT ON COLUMN db.object_link.linked IS 'Идентификатор связанного объекта';
+COMMENT ON COLUMN db.object_link.validfromdate IS 'Дата начала периода действия';
+COMMENT ON COLUMN db.object_link.validtodate IS 'Дата окончания периода действия';
+
+--------------------------------------------------------------------------------
+
+CREATE UNIQUE INDEX ON db.object_link (object, type, validfromdate, validtodate);
+
+CREATE INDEX ON db.object_link (object);
+CREATE INDEX ON db.object_link (type);
+CREATE INDEX ON db.object_link (linked);
+
+--------------------------------------------------------------------------------
+-- FUNCTION SetObjectLink ------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Устанавливает связь с объектом.
+ * @param {numeric} pObject - Идентификатор объекта
+ * @param {numeric} pLinked - Идентификатор связанного объекта
+ * @param {timestamp} pDateFrom - Дата начала периода
+ * @return {void}
+ */
+CREATE OR REPLACE FUNCTION SetObjectLink (
+  pObject	    numeric,
+  pLinked	    numeric,
+  pDateFrom	    timestamp default oper_date()
+) RETURNS 	    numeric
+AS $$
+DECLARE
+  nId		    numeric;
+  nType		    numeric;
+
+  dtDateFrom    timestamp;
+  dtDateTo 	    timestamp;
+BEGIN
+  nId := null;
+
+  SELECT type INTO nType FROM db.object WHERE id = pLinked;
+
+  -- получим дату значения в текущем диапозоне дат
+  SELECT max(ValidFromDate), max(ValidToDate) INTO dtDateFrom, dtDateTo
+    FROM db.object_link
+   WHERE Object = pObject
+     AND Type = nType
+     AND ValidFromDate <= pDateFrom
+     AND ValidToDate > pDateFrom;
+
+  IF dtDateFrom = pDateFrom THEN
+    -- обновим значение в текущем диапозоне дат
+    UPDATE db.object_link SET linked = pLinked
+     WHERE Object = pObject
+       AND Type = nType
+       AND ValidFromDate <= pDateFrom
+       AND ValidToDate > pDateFrom;
+  ELSE
+    -- обновим дату значения в текущем диапозоне дат
+    UPDATE db.object_link SET ValidToDate = pDateFrom
+     WHERE Object = pObject
+       AND Type = nType
+       AND ValidFromDate <= pDateFrom
+       AND ValidToDate > pDateFrom;
+
+    INSERT INTO db.object_link (object, type, linked, validfromdate, validtodate)
+    VALUES (pObject, nType, pLinked, pDateFrom, coalesce(dtDateTo, MAXDATE()))
+    RETURNING id INTO nId;
+  END IF;
+
+  RETURN nId;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- FUNCTION GetObjectLink ------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает связанный с объектом объект.
+ * @param {numeric} pObject - Идентификатор объекта
+ * @param {numeric} pType - Идентификатор типа связанного объекта
+ * @param {timestamp} pDate - Дата
+ * @return {text}
+ */
+CREATE OR REPLACE FUNCTION GetObjectLink (
+  pObject	numeric,
+  pType	    numeric,
+  pDate		timestamp default oper_date()
+) RETURNS	text
+AS $$
+DECLARE
+  nLinked		numeric;
+BEGIN
+  SELECT Linked INTO nLinked
+    FROM db.object_link
+   WHERE Object = pObject
+     AND Type = pType
+     AND ValidFromDate <= pDate
+     AND ValidToDate > pDate;
+
+  RETURN nLinked;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
 -- db.object_file --------------------------------------------------------------

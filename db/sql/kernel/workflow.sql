@@ -95,9 +95,9 @@ GRANT SELECT ON Class TO administrator;
 CREATE OR REPLACE VIEW ClassTree
 AS
   WITH RECURSIVE tree AS (
-    SELECT *, ARRAY[row_number() OVER (ORDER BY label)] AS sortlist FROM Class WHERE parent IS NULL
+    SELECT *, ARRAY[row_number() OVER (ORDER BY id)] AS sortlist FROM Class WHERE parent IS NULL
     UNION ALL
-      SELECT c.*, array_append(t.sortlist, row_number() OVER (ORDER BY c.label))
+      SELECT c.*, array_append(t.sortlist, row_number() OVER (ORDER BY c.id))
         FROM Class c INNER JOIN tree t ON c.parent = t.id
     )
     SELECT * FROM tree
@@ -199,7 +199,7 @@ CREATE OR REPLACE FUNCTION DeleteClass (
 ) RETURNS 	void
 AS $$
 BEGIN
-  DELETE FROM db.state_list WHERE class = pId;
+  DELETE FROM db.state WHERE class = pId;
   DELETE FROM db.class_tree WHERE id = pId;
 END;
 $$ LANGUAGE plpgsql
@@ -492,36 +492,54 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- db.state_list ---------------------------------------------------------------
+-- FUNCTION GetStateTypeCode ---------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE TABLE db.state_list (
+CREATE OR REPLACE FUNCTION GetStateTypeCode (
+  pId		numeric
+) RETURNS	varchar
+AS $$
+DECLARE
+  vCode		varchar;
+BEGIN
+  SELECT code INTO vCode FROM db.state_type WHERE id = pId;
+  RETURN vCode;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- db.state ---------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE TABLE db.state (
     id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
     class		numeric(12) NOT NULL,
     type		numeric(12) NOT NULL,
     code		varchar(30) NOT NULL,
     label		text NOT NULL,
-    sequence		integer NOT NULL,
-    CONSTRAINT fk_state_list_class FOREIGN KEY (class) REFERENCES db.class_tree(id),
-    CONSTRAINT fk_state_list_type FOREIGN KEY (type) REFERENCES db.state_type(id)
+    sequence	integer NOT NULL,
+    CONSTRAINT fk_state_class FOREIGN KEY (class) REFERENCES db.class_tree(id),
+    CONSTRAINT fk_state_type FOREIGN KEY (type) REFERENCES db.state_type(id)
 );
 
-COMMENT ON TABLE db.state_list IS 'Список состояний объекта.';
+COMMENT ON TABLE db.state IS 'Список состояний объекта.';
 
-COMMENT ON COLUMN db.state_list.id IS 'Идентификатор';
-COMMENT ON COLUMN db.state_list.class IS 'Класс объекта';
-COMMENT ON COLUMN db.state_list.type IS 'Тип состояния';
-COMMENT ON COLUMN db.state_list.code IS 'Код состояния';
-COMMENT ON COLUMN db.state_list.label IS 'Состояние';
-COMMENT ON COLUMN db.state_list.sequence IS 'Очерёдность';
+COMMENT ON COLUMN db.state.id IS 'Идентификатор';
+COMMENT ON COLUMN db.state.class IS 'Класс объекта';
+COMMENT ON COLUMN db.state.type IS 'Тип состояния';
+COMMENT ON COLUMN db.state.code IS 'Код состояния';
+COMMENT ON COLUMN db.state.label IS 'Состояние';
+COMMENT ON COLUMN db.state.sequence IS 'Очерёдность';
 
-CREATE INDEX ON db.state_list (class);
-CREATE INDEX ON db.state_list (type);
-CREATE INDEX ON db.state_list (code);
+CREATE INDEX ON db.state (class);
+CREATE INDEX ON db.state (type);
+CREATE INDEX ON db.state (code);
 
-CREATE UNIQUE INDEX ON db.state_list (class, code);
+CREATE UNIQUE INDEX ON db.state (class, code);
 
-CREATE OR REPLACE FUNCTION ft_state_list_insert()
+CREATE OR REPLACE FUNCTION ft_state_insert()
 RETURNS trigger AS $$
 BEGIN
   IF NEW.CODE IS NULL THEN
@@ -534,10 +552,10 @@ $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
-CREATE TRIGGER t_state_list_insert
-  BEFORE INSERT ON db.state_list
+CREATE TRIGGER t_state_insert
+  BEFORE INSERT ON db.state
   FOR EACH ROW
-  EXECUTE PROCEDURE FT_state_list_INSERT();
+  EXECUTE PROCEDURE ft_state_insert();
 
 --------------------------------------------------------------------------------
 -- VIEW State ------------------------------------------------------------------
@@ -546,7 +564,7 @@ CREATE TRIGGER t_state_list_insert
 CREATE OR REPLACE VIEW State (Id, Class, Type, TypeCode, TypeName, Code, Label, Sequence)
 AS
   SELECT s.id, s.class, s.type, t.code, t.name, s.code, s.label, s.sequence
-    FROM db.state_list s INNER JOIN db.state_type t ON t.id = s.type;
+    FROM db.state s INNER JOIN db.state_type t ON t.id = s.type;
 
 GRANT SELECT ON State TO administrator;
 
@@ -567,12 +585,12 @@ DECLARE
 BEGIN
   IF pSequence IS NULL THEN
     SELECT coalesce(max(sequence), 0) + 1 INTO pSequence
-      FROM db.state_list
+      FROM db.state
      WHERE class = pClass
        AND type = pType;
   END IF;
 
-  INSERT INTO db.state_list (class, type, code, label, sequence)
+  INSERT INTO db.state (class, type, code, label, sequence)
   VALUES (pClass, pType, pCode, pLabel, pSequence)
   RETURNING id INTO nId;
 
@@ -596,7 +614,7 @@ CREATE OR REPLACE FUNCTION EditState (
 ) RETURNS	void
 AS $$
 BEGIN
-  UPDATE db.state_list
+  UPDATE db.state
      SET class = coalesce(pClass, class),
          type = coalesce(pType, type),
          code = coalesce(pCode, code),
@@ -617,7 +635,7 @@ CREATE OR REPLACE FUNCTION DeleteState (
 ) RETURNS 	void
 AS $$
 BEGIN
-  DELETE FROM db.state_list WHERE id = pId;
+  DELETE FROM db.state WHERE id = pId;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
@@ -636,7 +654,7 @@ DECLARE
   nId		numeric;
 BEGIN
   SELECT s.id INTO nId
-    FROM db.state_list s INNER JOIN db.class_tree c ON c.id = s.class
+    FROM db.state s INNER JOIN db.class_tree c ON c.id = s.class
    WHERE s.code = lower(pCode)
      AND s.class IN (
        WITH RECURSIVE classtree(id, parent) AS (
@@ -668,7 +686,7 @@ DECLARE
   nId		numeric;
 BEGIN
   SELECT s.id INTO nId
-    FROM db.state_list s INNER JOIN db.class_tree c ON c.id = s.class
+    FROM db.state s INNER JOIN db.class_tree c ON c.id = s.class
    WHERE s.type = pType
      AND s.class IN (
        WITH RECURSIVE classtree(id, parent) AS (
@@ -688,18 +706,36 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- FUNCTION GetStateType -------------------------------------------------------
+-- FUNCTION GetStateTypeByState ------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION GetStateType (
+CREATE OR REPLACE FUNCTION GetStateTypeByState (
   pState	numeric
 ) RETURNS	numeric
 AS $$
 DECLARE
   nType		numeric;
 BEGIN
-  SELECT type INTO nType FROM db.state_list WHERE id = pState;
+  SELECT type INTO nType FROM db.state WHERE id = pState;
   RETURN nType;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- FUNCTION GetStateTypeCodeByState --------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetStateTypeCodeByState (
+  pState	numeric
+) RETURNS	varchar
+AS $$
+DECLARE
+  vCode     varchar;
+BEGIN
+  SELECT code INTO vCode FROM db.state_type WHERE id = (SELECT type FROM db.state WHERE id = pState);
+  RETURN vCode;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
@@ -716,7 +752,7 @@ AS $$
 DECLARE
   vCode		varchar;
 BEGIN
-  SELECT code INTO vCode FROM db.state_list WHERE id = pState;
+  SELECT code INTO vCode FROM db.state WHERE id = pState;
   RETURN vCode;
 END;
 $$ LANGUAGE plpgsql
@@ -734,7 +770,7 @@ AS $$
 DECLARE
   vLabel	text;
 BEGIN
-  SELECT label INTO vLabel FROM db.state_list WHERE id = pState;
+  SELECT label INTO vLabel FROM db.state WHERE id = pState;
   RETURN vLabel;
 END;
 $$ LANGUAGE plpgsql
@@ -745,19 +781,19 @@ $$ LANGUAGE plpgsql
 -- ACTION ----------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE TABLE db.action_list (
+CREATE TABLE db.action (
     id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
     code		varchar(30) NOT NULL,
     name		varchar(50) NOT NULL
 );
 
-COMMENT ON TABLE db.action_list IS 'Список действий.';
+COMMENT ON TABLE db.action IS 'Список действий.';
 
-COMMENT ON COLUMN db.action_list.id IS 'Идентификатор';
-COMMENT ON COLUMN db.action_list.code IS 'Код действия';
-COMMENT ON COLUMN db.action_list.name IS 'Наименование действия';
+COMMENT ON COLUMN db.action.id IS 'Идентификатор';
+COMMENT ON COLUMN db.action.code IS 'Код действия';
+COMMENT ON COLUMN db.action.name IS 'Наименование действия';
 
-CREATE UNIQUE INDEX ON db.action_list (code);
+CREATE UNIQUE INDEX ON db.action (code);
 
 --------------------------------------------------------------------------------
 -- VIEW Action -----------------------------------------------------------------
@@ -765,7 +801,7 @@ CREATE UNIQUE INDEX ON db.action_list (code);
 
 CREATE OR REPLACE VIEW Action
 AS
-  SELECT * FROM db.action_list;
+  SELECT * FROM db.action;
 
 GRANT SELECT ON Action TO administrator;
 
@@ -780,7 +816,7 @@ AS $$
 DECLARE
   nId		numeric;
 BEGIN
-  SELECT id INTO nId FROM db.action_list WHERE code = lower(pCode);
+  SELECT id INTO nId FROM db.action WHERE code = lower(pCode);
   RETURN nId;
 END;
 $$ LANGUAGE plpgsql
@@ -798,7 +834,7 @@ AS $$
 DECLARE
   vCode		varchar;
 BEGIN
-  SELECT code INTO vCode FROM db.action_list WHERE id = pId;
+  SELECT code INTO vCode FROM db.action WHERE id = pId;
   RETURN vCode;
 END;
 $$ LANGUAGE plpgsql
@@ -820,8 +856,8 @@ CREATE TABLE db.method (
     sequence		integer NOT NULL,
     visible		boolean DEFAULT TRUE,
     CONSTRAINT fk_method_class FOREIGN KEY (class) REFERENCES db.class_tree(id),
-    CONSTRAINT fk_method_state FOREIGN KEY (state) REFERENCES db.state_list(id),
-    CONSTRAINT fk_method_action FOREIGN KEY (action) REFERENCES db.action_list(id)
+    CONSTRAINT fk_method_state FOREIGN KEY (state) REFERENCES db.state(id),
+    CONSTRAINT fk_method_action FOREIGN KEY (action) REFERENCES db.action(id)
 );
 
 COMMENT ON TABLE db.method IS 'Методы класса.';
@@ -908,8 +944,8 @@ AS
          m.action, a.code, a.name,
          m.code, m.label, m.sequence, m.visible
     FROM db.method m INNER JOIN db.class_tree c ON c.id = m.class
-                         LEFT JOIN db.state_list s ON s.id = m.state
-                        INNER JOIN db.action_list a ON a.id = m.action;
+                         LEFT JOIN db.state s ON s.id = m.state
+                        INNER JOIN db.action a ON a.id = m.action;
 
 GRANT SELECT ON Method TO administrator;
 
@@ -1038,9 +1074,9 @@ CREATE TABLE db.transition (
     state		numeric(12),
     method		numeric(12) NOT NULL,
     newstate		numeric(12) NOT NULL,
-    CONSTRAINT fk_transition_state FOREIGN KEY (state) REFERENCES db.state_list(id),
+    CONSTRAINT fk_transition_state FOREIGN KEY (state) REFERENCES db.state(id),
     CONSTRAINT fk_transition_method FOREIGN KEY (method) REFERENCES db.method(id),
-    CONSTRAINT fk_transition_newstate FOREIGN KEY (newstate) REFERENCES db.state_list(id)
+    CONSTRAINT fk_transition_newstate FOREIGN KEY (newstate) REFERENCES db.state(id)
 );
 
 COMMENT ON TABLE db.transition IS 'Таблица переходов из одного состояния объекта в другое состояние.';
@@ -1201,37 +1237,37 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- db.event_list ---------------------------------------------------------------
+-- db.event --------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE TABLE db.event_list (
+CREATE TABLE db.event (
     id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
     class		numeric(12) NOT NULL,
     type		numeric(12) NOT NULL,
     action		numeric(12) NOT NULL,
     label		text NOT NULL,
     text		text,
-    sequence		integer NOT NULL,
+    sequence	integer NOT NULL,
     enabled		boolean DEFAULT TRUE NOT NULL,
-    CONSTRAINT fk_event_list_class FOREIGN KEY (class) REFERENCES db.class_tree(id),
-    CONSTRAINT fk_event_list_type FOREIGN KEY (type) REFERENCES db.event_type(id),
-    CONSTRAINT fk_event_list_action FOREIGN KEY (action) REFERENCES db.action_list(id)
+    CONSTRAINT fk_event_class FOREIGN KEY (class) REFERENCES db.class_tree(id),
+    CONSTRAINT fk_event_type FOREIGN KEY (type) REFERENCES db.event_type(id),
+    CONSTRAINT fk_event_action FOREIGN KEY (action) REFERENCES db.action(id)
 );
 
-COMMENT ON TABLE db.event_list IS 'Список событий.';
+COMMENT ON TABLE db.event IS 'Список событий.';
 
-COMMENT ON COLUMN db.event_list.id IS 'Идентификатор';
-COMMENT ON COLUMN db.event_list.class IS 'Класс объекта';
-COMMENT ON COLUMN db.event_list.type IS 'Тип события';
-COMMENT ON COLUMN db.event_list.action IS 'Действие';
-COMMENT ON COLUMN db.event_list.label IS 'Событие';
-COMMENT ON COLUMN db.event_list.sequence IS 'Очерёдность';
-COMMENT ON COLUMN db.event_list.enabled IS 'Включено: Да/Нет';
+COMMENT ON COLUMN db.event.id IS 'Идентификатор';
+COMMENT ON COLUMN db.event.class IS 'Класс объекта';
+COMMENT ON COLUMN db.event.type IS 'Тип события';
+COMMENT ON COLUMN db.event.action IS 'Действие';
+COMMENT ON COLUMN db.event.label IS 'Событие';
+COMMENT ON COLUMN db.event.sequence IS 'Очерёдность';
+COMMENT ON COLUMN db.event.enabled IS 'Включено: Да/Нет';
 
-CREATE INDEX ON db.event_list (class);
-CREATE INDEX ON db.event_list (type);
-CREATE INDEX ON db.event_list (action);
-CREATE INDEX ON db.event_list (enabled);
+CREATE INDEX ON db.event (class);
+CREATE INDEX ON db.event (type);
+CREATE INDEX ON db.event (action);
+CREATE INDEX ON db.event (enabled);
 
 --------------------------------------------------------------------------------
 -- VIEW Event ------------------------------------------------------------------
@@ -1243,8 +1279,8 @@ CREATE OR REPLACE VIEW Event (Id, Class, Type, TypeCode, TypeName,
 AS
   SELECT el.id, el.class, el.type, et.code, et.name, el.action, al.code, al.name,
          el.label, el.text, el.sequence, el.enabled
-    FROM db.event_list el INNER JOIN db.event_type et ON et.id = el.type
-                       INNER JOIN db.action_list al ON al.id = el.action;
+    FROM db.event el INNER JOIN db.event_type et ON et.id = el.type
+                          INNER JOIN db.action al ON al.id = el.action;
 
 GRANT SELECT ON Event TO administrator;
 
@@ -1266,10 +1302,10 @@ DECLARE
   nId		numeric;
 BEGIN
   IF pSequence IS NULL THEN
-    SELECT coalesce(max(sequence), 0) + 1 INTO pSequence FROM db.event_list WHERE class = pClass AND action = pAction;
+    SELECT coalesce(max(sequence), 0) + 1 INTO pSequence FROM db.event WHERE class = pClass AND action = pAction;
   END IF;
 
-  INSERT INTO db.event_list (class, type, action, label, text, sequence, enabled)
+  INSERT INTO db.event (class, type, action, label, text, sequence, enabled)
   VALUES (pClass, pType, pAction, pLabel, NULLIF(pText, '<null>'), pSequence, pEnabled)
   RETURNING id INTO nId;
 
@@ -1295,7 +1331,7 @@ CREATE OR REPLACE FUNCTION EditEvent (
 ) RETURNS	void
 AS $$
 BEGIN
-  UPDATE db.event_list
+  UPDATE db.event
      SET class = coalesce(pClass, class),
          type = coalesce(pType, type),
          action = coalesce(pAction, action),
@@ -1318,7 +1354,7 @@ CREATE OR REPLACE FUNCTION DeleteEvent (
 ) RETURNS 	void
 AS $$
 BEGIN
-  DELETE FROM db.event_list WHERE id = pId;
+  DELETE FROM db.event WHERE id = pId;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER

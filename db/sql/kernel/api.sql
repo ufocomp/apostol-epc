@@ -318,7 +318,7 @@ CREATE OR REPLACE FUNCTION api.set_interface (
   pInterface	numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
@@ -367,7 +367,7 @@ CREATE OR REPLACE FUNCTION api.set_operdate (
   pOperDate 	timestamp,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
@@ -399,7 +399,7 @@ CREATE OR REPLACE FUNCTION api.set_operdate (
   pOperDate 	timestamptz,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
@@ -443,10 +443,10 @@ $$ LANGUAGE SQL
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.set_language (
-  pLang		numeric,
+  pLang		    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
@@ -475,10 +475,10 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.set_language (
-  pCode 	text default 'ru',
+  pCode 	    text default 'ru',
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
@@ -502,8 +502,7 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE VIEW api.event_log
 AS
-  SELECT e.*, coalesce(u.fullname, e.username) as fullname, u.email, u.description
-    FROM EventLog e LEFT JOIN users u ON u.username = e.username;
+  SELECT * FROM EventLog;
 
 GRANT SELECT ON api.event_log TO daemon;
 
@@ -511,26 +510,24 @@ GRANT SELECT ON api.event_log TO daemon;
 -- api.event_log ---------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Журнал событий.
+ * Журнал событий текущего пользователя.
  * @param {char} pType - Тип события: {M|W|E}
- * @param {varchar} pUserName - Имя пользователя (логин)
  * @param {integer} pCode - Код
  * @param {timestamp} pDateFrom - Дата начала периода
  * @param {timestamp} pDateTo - Дата окончания периода
- * @return {SETOF VEventLog} - Записи
+ * @return {SETOF api.event_log} - Записи
  */
 CREATE OR REPLACE FUNCTION api.event_log (
-  pType		char default null,
-  pUserName	varchar default null,
-  pCode		numeric default null,
-  pDateFrom	timestamp default null,
-  pDateTo	timestamp default null
-) RETURNS	SETOF api.event_log
+  pType		    char default null,
+  pCode		    numeric default null,
+  pDateFrom	    timestamp default null,
+  pDateTo	    timestamp default null
+) RETURNS	    SETOF api.event_log
 AS $$
   SELECT *
     FROM api.event_log
    WHERE type = coalesce(pType, type)
-     AND username = coalesce(pUserName, username)
+     AND username = current_username()
      AND code = coalesce(pCode, code)
      AND datetime >= coalesce(pDateFrom, MINDATE())
      AND datetime < coalesce(pDateTo, MAXDATE())
@@ -545,12 +542,12 @@ $$ LANGUAGE SQL
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION api.write_to_log (
-  pType		text,
-  pCode		numeric,
-  pText		text,
+  pType		    text,
+  pCode		    numeric,
+  pText		    text,
   OUT result	boolean,
   OUT message	text
-) RETURNS	record
+) RETURNS	    record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
@@ -638,28 +635,28 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.update_user (
-  pId			numeric,
-  pUserName		varchar,
-  pPassword		text,
-  pFullName		text,
-  pPhone		text,
-  pEmail		text,
-  pDescription		text,
-  pPasswordChange 	boolean,
+  pId			        numeric,
+  pUserName		        varchar,
+  pPassword		        text,
+  pFullName		        text,
+  pPhone		        text,
+  pEmail		        text,
+  pDescription		    text,
+  pPasswordChange 	    boolean,
   pPasswordNotChange	boolean,
-  OUT id		numeric,
-  OUT result		boolean,
-  OUT message		text
-) RETURNS 		record
+  OUT id		        numeric,
+  OUT result		    boolean,
+  OUT message		    text
+) RETURNS 		        record
 AS $$
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM UpdateUser(pId, pUserName, pPassword, pFullName, pPhone, pEmail, pDescription, pPasswordChange, pPasswordNotChange);
+
+  id := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -682,20 +679,20 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.del_user (
-  pId		numeric,
-  OUT id	numeric,
+  pId		    numeric,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM DeleteUser(pId);
+
+  id := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -718,7 +715,7 @@ CREATE OR REPLACE FUNCTION api.get_user (
 ) RETURNS	SETOF users
 AS $$
 DECLARE
-  r		users%rowtype;
+  r		    users%rowtype;
 BEGIN
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
@@ -824,16 +821,17 @@ $$ LANGUAGE plpgsql
  * @return {record} - Группы
  */
 CREATE OR REPLACE FUNCTION api.user_member (
-  pUserId		numeric default current_userid(),
-  OUT id		numeric,
+  pUserId		    numeric default current_userid(),
+  OUT id		    numeric,
   OUT username		varchar,
   OUT fullname		text,
-  OUT description       text
-) RETURNS		SETOF record
+  OUT description   text
+) RETURNS		    SETOF record
 AS $$
   SELECT g.id, g.username, g.fullname, g.description
     FROM db.member_group m INNER JOIN groups g ON g.id = m.userid
-   WHERE member = pUserId;
+   WHERE member = pUserId
+     AND current_session() IS NOT NULL;
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -846,12 +844,12 @@ $$ LANGUAGE SQL
  * @return {record} - Группы
  */
 CREATE OR REPLACE FUNCTION api.member_user (
-  pUserId		numeric default current_userid(),
-  OUT id		numeric,
-  OUT username		varchar,
-  OUT fullname		text,
-  OUT description       text
-) RETURNS		SETOF record
+  pUserId           numeric default current_userid(),
+  OUT id            numeric,
+  OUT username      varchar,
+  OUT fullname      text,
+  OUT description   text
+) RETURNS           SETOF record
 AS $$
   SELECT * FROM api.user_member(pUserId);
 $$ LANGUAGE SQL
@@ -869,10 +867,10 @@ $$ LANGUAGE SQL
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.user_lock (
-  pId		numeric,
-  OUT result	boolean,
-  OUT message	text
-) RETURNS 	record
+  pId           numeric,
+  OUT result    boolean,
+  OUT message   text
+) RETURNS       record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
@@ -941,7 +939,7 @@ CREATE OR REPLACE FUNCTION api.get_user_iptable (
   pType			char,
   OUT id		numeric,
   OUT type		char,
-  OUT iptable		text
+  OUT iptable	text
 ) RETURNS 		record
 AS $$
   SELECT pId, pType, GetIPTableStr(pId, pType) WHERE current_session() IS NOT NULL;
@@ -1005,12 +1003,12 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION api.add_group (
   pGroupName	varchar,
-  pFullName	text,
-  pDescription	text default null,
-  OUT id	numeric,
-  OUT result	boolean,
-  OUT message	text
-) RETURNS 	record
+  pFullName     text,
+  pDescription  text default null,
+  OUT id        numeric,
+  OUT result    boolean,
+  OUT message   text
+) RETURNS       record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
@@ -1044,23 +1042,23 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.update_group (
-  pId			numeric,
-  pGroupName		varchar,
-  pFullName		text,
-  pDescription		text,
-  OUT id		numeric,
-  OUT result		boolean,
-  OUT message		text
-) RETURNS 		record
+  pId           numeric,
+  pGroupName    varchar,
+  pFullName     text,
+  pDescription  text,
+  OUT id        numeric,
+  OUT result    boolean,
+  OUT message   text
+) RETURNS       record
 AS $$
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM UpdateGroup(pId, pGroupName, pFullName, pDescription);
+
+  id := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -1083,20 +1081,20 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.del_group (
-  pId		numeric,
-  OUT id	numeric,
-  OUT result	boolean,
-  OUT message	text
-) RETURNS 	record
+  pId           numeric,
+  OUT id        numeric,
+  OUT result    boolean,
+  OUT message   text
+) RETURNS       record
 AS $$
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM DeleteGroup(pId);
+
+  id := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -1118,8 +1116,7 @@ CREATE OR REPLACE FUNCTION api.get_group (
   pId			numeric
 ) RETURNS		groups
 AS $$
-  SELECT * FROM groups WHERE id = pId
-     AND current_session() IS NOT NULL;
+  SELECT * FROM groups WHERE id = pId AND current_session() IS NOT NULL;
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -1153,8 +1150,8 @@ $$ LANGUAGE SQL
 CREATE OR REPLACE FUNCTION api.member_group_add (
   pMember		numeric,
   pGroup		numeric,
-  OUT result		boolean,
-  OUT message		text
+  OUT result    boolean,
+  OUT message   text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1187,8 +1184,8 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION api.member_group_del (
   pMember		numeric,
   pGroup		numeric,
-  OUT result		boolean,
-  OUT message		text
+  OUT result    boolean,
+  OUT message   text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1221,8 +1218,8 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION api.group_member_del (
   pGroup		numeric,
   pMember		numeric default null,
-  OUT result		boolean,
-  OUT message		text
+  OUT result    boolean,
+  OUT message   text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1259,18 +1256,19 @@ GRANT SELECT ON api.member_group TO daemon;
  * @return {SETOF record} - Группы
  */
 CREATE OR REPLACE FUNCTION api.group_member (
-  pGroupId		numeric,
-  OUT id		numeric,
-  OUT username		varchar,
-  OUT fullname		text,
-  OUT email		text,
-  OUT status		text,
-  OUT description       text
-) RETURNS		SETOF record
+  pGroupId          numeric,
+  OUT id            numeric,
+  OUT username      varchar,
+  OUT fullname      text,
+  OUT email         text,
+  OUT status        text,
+  OUT description   text
+) RETURNS		    SETOF record
 AS $$
   SELECT u.id, u.username, u.fullname, u.email, u.status, u.description
     FROM db.member_group m INNER JOIN users u ON u.id = m.member
-   WHERE m.userid = pGroupId;
+   WHERE m.userid = pGroupId
+     AND current_session() IS NOT NULL;
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -1283,12 +1281,12 @@ $$ LANGUAGE SQL
  * @return {record} - Группы
  */
 CREATE OR REPLACE FUNCTION api.member_group (
-  pUserId		numeric default current_userid(),
-  OUT id		numeric,
+  pUserId		    numeric default current_userid(),
+  OUT id		    numeric,
   OUT username		varchar,
   OUT fullname		text,
-  OUT description       text
-) RETURNS		SETOF record
+  OUT description   text
+) RETURNS		    SETOF record
 AS $$
   SELECT * FROM api.member_user(pUserId)
 $$ LANGUAGE SQL
@@ -1323,11 +1321,11 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION api.is_user_role (
-  pRole			numeric,
-  pUser			numeric default current_userid(),
-  OUT result		boolean,
-  OUT message		text
-) RETURNS 		record
+  pRole         numeric,
+  pUser         numeric default current_userid(),
+  OUT result    boolean,
+  OUT message   text
+) RETURNS       record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
@@ -1350,11 +1348,11 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION api.is_user_role (
-  pRole			text,
-  pUser			text default session_username(),
-  OUT result		boolean,
-  OUT message		text
-) RETURNS 		record
+  pRole         text,
+  pUser         text default session_username(),
+  OUT result    boolean,
+  OUT message   text
+) RETURNS       record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
@@ -1394,9 +1392,7 @@ CREATE OR REPLACE FUNCTION api.get_area_type (
   pId		numeric
 ) RETURNS	api.area_type
 AS $$
-  SELECT *
-    FROM api.area_type
-   WHERE id = pId;
+  SELECT * FROM api.area_type WHERE id = pId
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -1425,15 +1421,15 @@ GRANT SELECT ON api.area TO daemon;
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_area (
-  pParent	numeric,
-  pType		numeric,
-  pCode		varchar,
-  pName		varchar,
-  pDescription	text default null,
-  OUT id	numeric,
+  pParent       numeric,
+  pType         numeric,
+  pCode         varchar,
+  pName         varchar,
+  pDescription  text default null,
+  OUT id        numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS       record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
@@ -1471,27 +1467,27 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.update_area (
-  pId			numeric,
-  pParent		numeric default null,
-  pType			numeric default null,
-  pCode			varchar default null,
-  pName			varchar default null,
+  pId			    numeric,
+  pParent		    numeric default null,
+  pType			    numeric default null,
+  pCode			    varchar default null,
+  pName			    varchar default null,
   pDescription		text default null,
   pValidFromDate	timestamptz default null,
   pValidToDate		timestamptz default null,
-  OUT id		numeric,
+  OUT id		    numeric,
   OUT result		boolean,
   OUT message		text
-) RETURNS 		record
+) RETURNS 		    record
 AS $$
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM EditArea(pId, pParent, pType, pCode, pName, pDescription, pValidFromDate, pValidToDate);
+
+  id := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -1514,20 +1510,20 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.del_area (
-  pId		numeric,
-  OUT id	numeric,
+  pId		    numeric,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM DeleteArea(pId);
+
+  id := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -1582,9 +1578,9 @@ $$ LANGUAGE SQL
  */
 CREATE OR REPLACE FUNCTION api.member_area_add (
   pMember		numeric,
-  pArea		numeric,
-  OUT result		boolean,
-  OUT message		text
+  pArea		    numeric,
+  OUT result	boolean,
+  OUT message	text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1617,8 +1613,8 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION api.member_area_del (
   pMember		numeric,
   pArea			numeric,
-  OUT result		boolean,
-  OUT message		text
+  OUT result    boolean,
+  OUT message   text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1649,10 +1645,10 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.area_member_del (
-  pArea		numeric,
+  pArea		    numeric,
   pMember		numeric default null,
-  OUT result		boolean,
-  OUT message		text
+  OUT result    boolean,
+  OUT message   text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1689,16 +1685,16 @@ GRANT SELECT ON api.member_area TO daemon;
  * @return {SETOF record} - Запись
  */
 CREATE OR REPLACE FUNCTION api.area_member (
-  pAreaId		numeric,
-  OUT id		numeric,
-  OUT type		char,
+  pAreaId		    numeric,
+  OUT id		    numeric,
+  OUT type		    char,
   OUT username		varchar,
   OUT fullname		text,
-  OUT email		text,
-  OUT description       text,
+  OUT email		    text,
+  OUT description   text,
   OUT status		text,
   OUT system		text
-) RETURNS		SETOF record
+) RETURNS		    SETOF record
 AS $$
   SELECT g.id, 'G' AS type, g.username, g.fullname, null AS email, g.description, null AS status, g.system
     FROM api.member_area m INNER JOIN groups g ON g.id = m.memberid
@@ -1768,12 +1764,12 @@ GRANT SELECT ON api.interface TO daemon;
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_interface (
-  pName		varchar,
+  pName		    varchar,
   pDescription	text default null,
-  OUT id	numeric,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
@@ -1806,22 +1802,22 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.update_interface (
-  pId		numeric,
-  pName		varchar,
+  pId		    numeric,
+  pName		    varchar,
   pDescription	text default null,
-  OUT id	numeric,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM UpdateInterface(pId, pName, pDescription);
+
+  id := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -1844,20 +1840,20 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.del_interface (
-  pId		numeric,
-  OUT id	numeric,
+  pId		    numeric,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
-  id  := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM DeleteInterface(pId);
+
+  id  := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -1897,9 +1893,9 @@ $$ LANGUAGE SQL
  */
 CREATE OR REPLACE FUNCTION api.member_interface_add (
   pMember		numeric,
-  pInterface		numeric,
-  OUT result		boolean,
-  OUT message		text
+  pInterface	numeric,
+  OUT result	boolean,
+  OUT message	text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1964,10 +1960,10 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.interface_member_del (
-  pInterface		numeric,
+  pInterface	numeric,
   pMember		numeric default null,
-  OUT result		boolean,
-  OUT message		text
+  OUT result	boolean,
+  OUT message	text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -2790,15 +2786,15 @@ GRANT SELECT ON api.class TO daemon;
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_class (
-  pParent	numeric,
-  pType		numeric,
-  pCode		varchar,
-  pLabel	text,
-  pAbstract	boolean default true,
-  OUT id	numeric,
+  pParent	    numeric,
+  pType		    numeric,
+  pCode		    varchar,
+  pLabel	    text,
+  pAbstract	    boolean default true,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
@@ -2834,25 +2830,25 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.update_class (
-  pId		numeric,
-  pParent	numeric,
-  pType		numeric,
-  pCode		varchar,
-  pLabel	text,
-  pAbstract	boolean default true,
-  OUT id	numeric,
+  pId		    numeric,
+  pParent	    numeric,
+  pType		    numeric,
+  pCode		    varchar,
+  pLabel	    text,
+  pAbstract	    boolean default true,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM EditClass(pId, pParent, pType, pCode, pLabel, pAbstract);
+
+  id := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -2875,20 +2871,20 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.del_class (
-  pId		numeric,
-  OUT id	numeric,
+  pId		    numeric,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM DeleteClass(pId);
+
+  id := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -2997,15 +2993,15 @@ $$ LANGUAGE SQL
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_state (
-  pClass	numeric,
-  pType		numeric,
-  pCode		varchar,
-  pLabel	text,
-  pSequence	integer,
-  OUT id	numeric,
+  pClass	    numeric,
+  pType		    numeric,
+  pCode		    varchar,
+  pLabel	    text,
+  pSequence	    integer,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
@@ -3041,25 +3037,25 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.update_state (
-  pId		numeric,
-  pClass	numeric default null,
-  pType		numeric default null,
-  pCode		varchar default null,
-  pLabel	text default null,
-  pSequence	integer default null,
-  OUT id	numeric,
+  pId		    numeric,
+  pClass	    numeric default null,
+  pType		    numeric default null,
+  pCode		    varchar default null,
+  pLabel	    text default null,
+  pSequence	    integer default null,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM EditState(pId, pClass, pType, pCode, pLabel, pSequence);
+
+  id := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -3082,20 +3078,20 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.del_state (
-  pId		numeric,
-  OUT id	numeric,
+  pId		    numeric,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM DeleteState(pId);
+
+  id := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -3194,18 +3190,18 @@ $$ LANGUAGE SQL
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_method (
-  pParent	numeric,
-  pClass	numeric,
-  pState	numeric,
-  pAction	numeric,
-  pCode		varchar,
-  pLabel	text,
-  pSequence	integer,
-  pVisible	boolean,
-  OUT id	numeric,
+  pParent	    numeric,
+  pClass	    numeric,
+  pState	    numeric,
+  pAction	    numeric,
+  pCode		    varchar,
+  pLabel	    text,
+  pSequence	    integer,
+  pVisible	    boolean,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
@@ -3244,28 +3240,28 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.update_method (
-  pId		numeric,
-  pParent	numeric default null,
-  pClass	numeric default null,
-  pState	numeric default null,
-  pAction	numeric default null,
-  pCode		varchar default null,
-  pLabel	text default null,
-  pSequence	integer default null,
-  pVisible	boolean default null,
-  OUT id	numeric,
+  pId		    numeric,
+  pParent	    numeric default null,
+  pClass	    numeric default null,
+  pState	    numeric default null,
+  pAction	    numeric default null,
+  pCode		    varchar default null,
+  pLabel	    text default null,
+  pSequence	    integer default null,
+  pVisible	    boolean default null,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM EditMethod(pId, pParent, pClass, pState, pAction, pCode, pLabel, pSequence, pVisible);
+
+  id := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -3288,20 +3284,20 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.del_method (
-  pId		numeric,
-  OUT id	numeric,
+  pId		    numeric,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM DeleteMethod(pId);
+
+  id := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -3329,16 +3325,16 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.get_method (
-  pClass		numeric,
-  pState		numeric default null,
-  pAction		numeric default null,
-  OUT id		numeric,
+  pClass		    numeric,
+  pState		    numeric default null,
+  pAction		    numeric default null,
+  OUT id		    numeric,
   OUT parent		numeric,
   OUT action		numeric,
   OUT actioncode	varchar,
-  OUT label		text,
+  OUT label		    text,
   OUT visible		boolean
-) RETURNS		SETOF record
+) RETURNS		    SETOF record
 AS $$
   SELECT m.id, m.parent, m.action, m.actioncode, m.label, m.visible
     FROM api.method m
@@ -3414,13 +3410,13 @@ GRANT SELECT ON api.transition TO daemon;
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_transition (
-  pState	numeric,
-  pMethod	numeric,
-  pNewState	numeric,
-  OUT id	numeric,
+  pState	    numeric,
+  pMethod	    numeric,
+  pNewState	    numeric,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
@@ -3454,23 +3450,23 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.update_transition (
-  pId		numeric,
-  pState	numeric default null,
-  pMethod	numeric default null,
-  pNewState	numeric default null,
-  OUT id	numeric,
+  pId		    numeric,
+  pState	    numeric default null,
+  pMethod	    numeric default null,
+  pNewState	    numeric default null,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM EditTransition(pId, pState, pMethod, pNewState);
+
+  id := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -3493,20 +3489,20 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.del_transition (
-  pId		numeric,
-  OUT id	numeric,
+  pId		    numeric,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM DeleteTransition(pId);
+
+  id := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -3585,17 +3581,17 @@ $$ LANGUAGE SQL
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_event (
-  pClass	numeric,
-  pType		numeric,
-  pAction	numeric,
-  pLabel	text,
-  pText		text,
-  pSequence	integer,
-  pEnabled	boolean,
-  OUT id	numeric,
+  pClass	    numeric,
+  pType		    numeric,
+  pAction	    numeric,
+  pLabel	    text,
+  pText		    text,
+  pSequence	    integer,
+  pEnabled	    boolean,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
@@ -3633,27 +3629,27 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.update_event (
-  pId		numeric,
-  pClass	numeric default null,
-  pType		numeric default null,
-  pAction	numeric default null,
-  pLabel	text default null,
-  pText		text default null,
-  pSequence	integer default null,
-  pEnabled	boolean default null,
-  OUT id	numeric,
+  pId		    numeric,
+  pClass	    numeric default null,
+  pType		    numeric default null,
+  pAction	    numeric default null,
+  pLabel	    text default null,
+  pText		    text default null,
+  pSequence	    integer default null,
+  pEnabled	    boolean default null,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM EditEvent(pId, pClass, pType, pAction, pLabel, pText, pSequence, pEnabled);
+
+  id := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -3676,20 +3672,20 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.del_state (
-  pId		numeric,
-  OUT id	numeric,
+  pId		    numeric,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM DeleteEvent(pId);
+
+  id := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -3742,8 +3738,6 @@ DECLARE
   nId		    numeric;
   nMethod	    numeric;
 BEGIN
-  id := pObject;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
@@ -3766,6 +3760,7 @@ BEGIN
 
   PERFORM ExecuteObjectAction(pObject, pAction, pForm);
 
+  id := pObject;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -3802,13 +3797,11 @@ DECLARE
   arCodes	    text[];
   r		        record;
 BEGIN
-  id := pObject;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
-  FOR r IN SELECT code FROM db.action_list
+  FOR r IN SELECT code FROM db.action
   LOOP
     arCodes := array_append(arCodes, r.code);
   END LOOP;
@@ -3853,8 +3846,6 @@ DECLARE
   nId		    numeric;
   nAction	    numeric;
 BEGIN
-  id := pObject;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
@@ -3911,7 +3902,6 @@ DECLARE
   nId		    numeric;
   nState	    numeric;
 BEGIN
-  id := pObject;
   result := false;
 
   IF current_session() IS NULL THEN
@@ -3924,12 +3914,12 @@ BEGIN
     PERFORM ObjectNotFound('объект', 'id', pObject);
   END IF;
 
-  SELECT s.id INTO nState FROM db.state_list s WHERE s.class = GetObjectClass(pObject) AND s.code = 'deleted';
+  SELECT s.id INTO nState FROM db.state s WHERE s.class = GetObjectClass(pObject) AND s.code = 'deleted';
 
   IF found THEN
-
     PERFORM AddObjectState(pObject, nState);
 
+    id := pObject;
     SELECT * INTO result, message FROM result_success();
   END IF;
 EXCEPTION
@@ -4032,13 +4022,13 @@ CREATE OR REPLACE FUNCTION api.update_type (
 ) RETURNS 	    record
 AS $$
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM EditType(pId, pClass, pCode, pName, pDescription);
+
+  id := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -4061,20 +4051,20 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.del_type (
-  pId		numeric,
-  OUT id	numeric,
+  pId		    numeric,
+  OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   PERFORM DeleteType(pId);
+
+  id := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -4170,8 +4160,6 @@ DECLARE
   nId		    numeric;
   r		        record;
 BEGIN
-  id := pObject;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
@@ -4205,6 +4193,7 @@ BEGIN
       END IF;
     END LOOP;
 
+    id := pObject;
     SELECT * INTO result, message FROM result_success();
   ELSE
     PERFORM JsonIsEmpty();
@@ -4377,8 +4366,6 @@ DECLARE
   nType         numeric;
   arTypes       text[];
 BEGIN
-  id := null;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
@@ -4395,15 +4382,15 @@ BEGIN
 
   IF pData IS NOT NULL THEN
     IF nId IS NULL THEN
-      id := AddObjectData(pObject, nType, pCode, pData);
+      nId := AddObjectData(pObject, nType, pCode, pData);
     ELSE
-      id := nId;
       PERFORM EditObjectData(nId, pObject, nType, pCode, pData);
     END IF;
   ELSE
     PERFORM DeleteObjectData(nId);
   END IF;
 
+  id := nId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -4436,8 +4423,6 @@ DECLARE
 
   r		        record;
 BEGIN
-  id := pObject;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
@@ -4461,7 +4446,6 @@ BEGIN
       nType := GetObjectDataType(r.type);
 
       IF r.id IS NOT NULL THEN
-
         SELECT o.id INTO nId FROM db.object_data o WHERE o.id = r.id AND object = pObject;
 
         IF NOT FOUND THEN
@@ -4478,6 +4462,7 @@ BEGIN
       END IF;
     END LOOP;
 
+    id := nId;
     SELECT * INTO result, message FROM result_success();
   ELSE
     PERFORM JsonIsEmpty();
@@ -4618,8 +4603,6 @@ DECLARE
 
   r		        record;
 BEGIN
-  id := pObject;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
@@ -4643,7 +4626,7 @@ BEGIN
       nType := GetType(r.type || '.address');
 
       IF r.id IS NOT NULL THEN
-        SELECT o.id INTO nId FROM db.object_address o WHERE o.id = r.id AND object = pObject;
+        SELECT o.id INTO nAddress FROM db.address o WHERE o.id = r.id;
 
         IF NOT FOUND THEN
           PERFORM ObjectNotFound('адрес', r.code, r.id);
@@ -4652,10 +4635,11 @@ BEGIN
         PERFORM EditAddress(r.id, r.parent, nType, r.code, r.index, r.country, r.region, r.district, r.city, r.settlement, r.street, r.house, r.building, r.structure, r.apartment, r.address);
       ELSE
         nAddress := CreateAddress(r.parent, nType, r.code, r.index, r.country, r.region, r.district, r.city, r.settlement, r.street, r.house, r.building, r.structure, r.apartment, r.address);
-        nId := SetObjectAddress(pObject, nAddress);
+        nId := SetObjectLink(pObject, nAddress);
       END IF;
     END LOOP;
 
+    id := nId;
     SELECT * INTO result, message FROM result_success();
   ELSE
     PERFORM JsonIsEmpty();
@@ -4743,7 +4727,7 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  id := SetObjectAddress(pObject, pAddress, pDateFrom);
+  id := SetObjectLink(pObject, pAddress, pDateFrom);
 
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
@@ -4760,8 +4744,8 @@ $$ LANGUAGE plpgsql
 -- api.get_object_address ------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Возвращает адрес клиента
- * @param {numeric} pId - Идентификатор адреса клиента
+ * Возвращает адрес объекта
+ * @param {numeric} pId - Идентификатор адреса
  * @return {api.object_address}
  */
 CREATE OR REPLACE FUNCTION api.get_object_address (
@@ -4777,7 +4761,7 @@ $$ LANGUAGE SQL
 -- api.list_object_address -----------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Возвращает список адресов.
+ * Возвращает список адресов объекта.
  * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
  * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
  * @param {integer} pLimit - Лимит по количеству строк

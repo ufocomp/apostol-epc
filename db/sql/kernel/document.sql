@@ -138,11 +138,6 @@ CREATE OR REPLACE VIEW ObjectDocument (Id, Object, Parent,
   Area, AreaCode, AreaName
 )
 AS
-/*
-  WITH cu AS (
-    SELECT current_userid() AS owner
-  )
-*/
   SELECT d.id, d.object, o.parent,
          o.essence, o.essencecode, o.essencename,
          o.class, o.classcode, o.classlabel,
@@ -154,6 +149,5 @@ AS
          o.oper, o.opercode, o.opername, o.operdate,
          d.area, d.areacode, d.areaname
     FROM Document d INNER JOIN Object o ON o.id = d.object;
---                    INNER JOIN cu              ON o.owner = cu.owner;
 
 GRANT SELECT ON ObjectDocument TO administrator;

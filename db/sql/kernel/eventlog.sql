@@ -10,7 +10,9 @@ CREATE TABLE db.log (
     session		varchar(40),
     code		numeric(5) NOT NULL,
     text		text NOT NULL,
-    CONSTRAINT ch_event_log_type CHECK (type IN ('M', 'W', 'E'))
+    object      numeric(12),
+    CONSTRAINT ch_event_log_type CHECK (type IN ('M', 'W', 'E')),
+    CONSTRAINT fk_event_log_object FOREIGN KEY (object) REFERENCES db.object(id)
 );
 
 COMMENT ON TABLE db.log IS 'Журнал событий.';
@@ -22,11 +24,13 @@ COMMENT ON COLUMN db.log.username IS 'Имя пользователя';
 COMMENT ON COLUMN db.log.session IS 'Сессия';
 COMMENT ON COLUMN db.log.code IS 'Код события';
 COMMENT ON COLUMN db.log.text IS 'Текст';
+COMMENT ON COLUMN db.log.object IS 'Идентификатор объекта';
 
 CREATE INDEX ON db.log (type);
 CREATE INDEX ON db.log (datetime);
 CREATE INDEX ON db.log (username);
 CREATE INDEX ON db.log (code);
+CREATE INDEX ON db.log (object);
 
 CREATE OR REPLACE FUNCTION ft_event_log_insert()
 RETURNS trigger AS $$
@@ -55,7 +59,7 @@ CREATE TRIGGER t_event_log_insert
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE VIEW EventLog (Id, Type, TypeName, DateTime, UserName,
-  Session, Code, Text
+  Session, Code, Text, Object
 )
 AS
   SELECT id, type,
@@ -64,7 +68,7 @@ AS
          WHEN type = 'W' THEN 'Предупреждение'
          WHEN type = 'E' THEN 'Ошибка'
          END,
-         datetime, username, session, code, text
+         datetime, username, session, code, text, object
     FROM db.log;
 
 GRANT SELECT ON EventLog TO administrator;
@@ -76,14 +80,15 @@ GRANT SELECT ON EventLog TO administrator;
 CREATE OR REPLACE FUNCTION AddEventLog (
   pType		text,
   pCode		numeric,
-  pText		text
+  pText		text,
+  pObject   numeric default null
 ) RETURNS	numeric
 AS $$
 DECLARE
   nId		numeric;
 BEGIN
-  INSERT INTO db.log (type, code, text)
-  VALUES (pType, pCode, pText)
+  INSERT INTO db.log (type, code, text, object)
+  VALUES (pType, pCode, pText, pObject)
   RETURNING id INTO nId;
   RETURN nId;
 END;
@@ -98,13 +103,14 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION NewEventLog (
   pType		text,
   pCode		numeric,
-  pText		text
+  pText		text,
+  pObject   numeric default null
 ) RETURNS	void
 AS $$
 DECLARE
   nId		numeric;
 BEGIN
-  nId := AddEventLog(pType, pCode, pText);
+  nId := AddEventLog(pType, pCode, pText, pObject);
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
@@ -117,21 +123,22 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION WriteToEventLog (
   pType		text,
   pCode		numeric,
-  pText		text
+  pText		text,
+  pObject   numeric default null
 ) RETURNS	void
 AS $$
 BEGIN
   IF pType IN ('M', 'W', 'E') THEN
-    PERFORM NewEventLog(pType, pCode, pText);
+    PERFORM NewEventLog(pType, pCode, pText, pObject);
   END IF;
 
   IF pType = 'D' THEN
-    RAISE DEBUG '[%] [%] %', pType, pCode, pText;
+    RAISE DEBUG '[%] [%] [%] %', pType, pCode, pObject, pText;
   END IF;
 
---  IF pType = 'N' THEN
---    RAISE NOTICE '[%] [%] %', pType, pCode, pText;
---  END IF;
+  IF pType = 'N' THEN
+    RAISE NOTICE '[%] [%] [%] %', pType, pCode, pObject, pText;
+  END IF;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
