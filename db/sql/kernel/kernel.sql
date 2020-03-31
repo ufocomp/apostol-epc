@@ -56,7 +56,19 @@ BEGIN
   INSERT INTO db.action (code, name) VALUES ('postpone', 'Отложить');
   INSERT INTO db.action (code, name) VALUES ('reserve', 'Резервировать');
 
-  INSERT INTO db.action (code, name) VALUES ('heartbeat', 'Heartbeat');
+  -- OCPP ----------------------------------------------------------------------
+
+  INSERT INTO db.action (code, name) VALUES ('Heartbeat', 'Heartbeat');
+
+  INSERT INTO db.action (code, name) VALUES ('Available', 'Available');
+  INSERT INTO db.action (code, name) VALUES ('Preparing', 'Preparing');
+  INSERT INTO db.action (code, name) VALUES ('Charging', 'Charging');
+  INSERT INTO db.action (code, name) VALUES ('SuspendedEV', 'SuspendedEV');
+  INSERT INTO db.action (code, name) VALUES ('SuspendedEVSE', 'SuspendedEVSE');
+  INSERT INTO db.action (code, name) VALUES ('Finishing', 'Finishing');
+  INSERT INTO db.action (code, name) VALUES ('Reserved', 'Reserved');
+  INSERT INTO db.action (code, name) VALUES ('Unavailable', 'Unavailable');
+  INSERT INTO db.action (code, name) VALUES ('Faulted', 'Faulted');
 
   ------------------------------------------------------------------------------
 
@@ -155,7 +167,9 @@ BEGIN
     END IF;
 
     IF rec_class.code = 'card' THEN
-      PERFORM AddType(rec_class.id, 'plastic.card', 'Пластиковая карта', 'Пластиковая карта для зарядной станции');
+      PERFORM AddType(rec_class.id, 'rfid.card', 'RFID карта', 'Пластиковая карта c радиочастотной идентификацией');
+      PERFORM AddType(rec_class.id, 'bank.card', 'Банковская карта', 'Банковская карта');
+      PERFORM AddType(rec_class.id, 'plastic.card', 'Пластиковая карта', 'Пластиковая карта');
     END IF;
 
     IF rec_class.code = 'address' THEN
@@ -510,9 +524,7 @@ BEGIN
     PERFORM AddMethod(null, rec_class.id, null, GetAction('restore'), null, 'Восстановить');
     PERFORM AddMethod(null, rec_class.id, null, GetAction('drop'), null, 'Уничтожить');
 
-    PERFORM AddMethod(null, rec_class.id, null, GetAction('heartbeat'), null, 'Heartbeat');
-    PERFORM AddMethod(null, rec_class.id, null, GetAction('start'), null, 'StartTransaction');
-    PERFORM AddMethod(null, rec_class.id, null, GetAction('stop'), null, 'StopTransaction');
+    PERFORM AddMethod(null, rec_class.id, null, GetAction('Heartbeat'), null, 'Heartbeat', null, false);
 
     -- Операции
 
@@ -529,26 +541,72 @@ BEGIN
 
       WHEN 'enabled' THEN
 
-        nState := AddState(rec_class.id, rec_type.id, rec_type.code, 'Включена');
+        nState := AddState(rec_class.id, rec_type.id, 'unavailable', 'Недоступна');
 
-          PERFORM AddMethod(null, rec_class.id, nState, GetAction('heartbeat'), null, 'Heartbeat');
-          PERFORM AddMethod(null, rec_class.id, nState, GetAction('disable'), null, 'Выключить');
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Heartbeat'), null, 'Heartbeat', null, false);
+
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Available'), null, 'Доступна', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Preparing'), null, 'Подготовка', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Charging'), null, 'Зарядка', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('SuspendedEV'), null, 'SuspendedEV', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('SuspendedEVSE'), null, 'SuspendedEVSE', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Faulted'), null, 'Неисправность', null, false);
+
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('disable'), null, 'Отключить');
           PERFORM AddMethod(null, rec_class.id, nState, GetAction('delete'), null, 'Удалить');
 
-        nState := AddState(rec_class.id, rec_type.id, 'available', 'Свободна');
+        nState := AddState(rec_class.id, rec_type.id, 'available', 'Доступна');
 
-          PERFORM AddMethod(null, rec_class.id, nState, GetAction('start'), null, 'Начать');
-          PERFORM AddMethod(null, rec_class.id, nState, GetAction('reserve'), null, 'Зарезервировать');
-          PERFORM AddMethod(null, rec_class.id, nState, GetAction('disable'), null, 'Выключить');
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Heartbeat'), null, 'Heartbeat', null, false);
+
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Preparing'), null, 'Подготовка', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Charging'), null, 'Зарядка', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('SuspendedEV'), null, 'SuspendedEV', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('SuspendedEVSE'), null, 'SuspendedEVSE', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Reserved'), null, 'Зарезервирована', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Unavailable'), null, 'Недоступна', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Faulted'), null, 'Неисправность', null, false);
+
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('disable'), null, 'Отключить');
 
         nState := AddState(rec_class.id, rec_type.id, 'charging', 'Заряжает');
 
-          PERFORM AddMethod(null, rec_class.id, nState, GetAction('stop'), null, 'Завершить');
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Heartbeat'), null, 'Heartbeat', null, false);
+
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Available'), null, 'Доступна', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('SuspendedEV'), null, 'SuspendedEV', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('SuspendedEVSE'), null, 'SuspendedEVSE', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Finishing'), null, 'Завершение', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Unavailable'), null, 'Недоступна', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Faulted'), null, 'Неисправна', null, false);
+
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('disable'), null, 'Отключить');
 
         nState := AddState(rec_class.id, rec_type.id, 'reserved', 'Зарезервирована');
 
-          PERFORM AddMethod(null, rec_class.id, nState, GetAction('start'), null, 'Начать');
-          PERFORM AddMethod(null, rec_class.id, nState, GetAction('cancel'), null, 'Отменить');
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Heartbeat'), null, 'Heartbeat', null, false);
+
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Available'), null, 'Доступна', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Preparing'), null, 'Подготовка', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Unavailable'), null, 'Недоступна', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Faulted'), null, 'Неисправна', null, false);
+
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('disable'), null, 'Отключить');
+
+        nState := AddState(rec_class.id, rec_type.id, 'faulted', 'Неисправна');
+
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Heartbeat'), null, 'Heartbeat', null, false);
+
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Available'), null, 'Доступна', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Preparing'), null, 'Подготовка', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Charging'), null, 'Зарядка', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('SuspendedEV'), null, 'SuspendedEV', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('SuspendedEVSE'), null, 'SuspendedEVSE', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Finishing'), null, 'Завершение', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Reserved'), null, 'Зарезервирована', null, false);
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('Unavailable'), null, 'Недоступна');
+
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('disable'), null, 'Отключить');
 
       WHEN 'disabled' THEN
 
@@ -599,7 +657,7 @@ BEGIN
         FOR rec_method IN SELECT * FROM Method WHERE state = rec_state.id
         LOOP
           IF rec_method.actioncode = 'enable' THEN
-            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'enabled'));
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'unavailable'));
           END IF;
 
           IF rec_method.actioncode = 'delete' THEN
@@ -607,12 +665,20 @@ BEGIN
           END IF;
         END LOOP;
 
-      WHEN 'enabled' THEN
+      WHEN 'unavailable' THEN
 
         FOR rec_method IN SELECT * FROM Method WHERE state = rec_state.id
         LOOP
-          IF rec_method.actioncode = 'heartbeat' THEN
+          IF rec_method.actioncode = 'Available' THEN
             PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'available'));
+          END IF;
+
+          IF rec_method.actioncode = 'Charging' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'charging'));
+          END IF;
+
+          IF rec_method.actioncode = 'Faulted' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'faulted'));
           END IF;
 
           IF rec_method.actioncode = 'disable' THEN
@@ -628,12 +694,20 @@ BEGIN
 
         FOR rec_method IN SELECT * FROM Method WHERE state = rec_state.id
         LOOP
-          IF rec_method.actioncode = 'start' THEN
+          IF rec_method.actioncode = 'Charging' THEN
             PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'charging'));
           END IF;
 
-          IF rec_method.actioncode = 'reserve' THEN
+          IF rec_method.actioncode = 'Reserved' THEN
             PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'reserved'));
+          END IF;
+
+          IF rec_method.actioncode = 'Unavailable' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'unavailable'));
+          END IF;
+
+          IF rec_method.actioncode = 'Faulted' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'faulted'));
           END IF;
 
           IF rec_method.actioncode = 'disable' THEN
@@ -645,8 +719,20 @@ BEGIN
 
         FOR rec_method IN SELECT * FROM Method WHERE state = rec_state.id
         LOOP
-          IF rec_method.actioncode = 'stop' THEN
+          IF rec_method.actioncode = 'Available' THEN
             PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'available'));
+          END IF;
+
+          IF rec_method.actioncode = 'Unavailable' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'unavailable'));
+          END IF;
+
+          IF rec_method.actioncode = 'Faulted' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'faulted'));
+          END IF;
+
+          IF rec_method.actioncode = 'disable' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'disabled'));
           END IF;
         END LOOP;
 
@@ -654,12 +740,45 @@ BEGIN
 
         FOR rec_method IN SELECT * FROM Method WHERE state = rec_state.id
         LOOP
-          IF rec_method.actioncode = 'start' THEN
+          IF rec_method.actioncode = 'Available' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'available'));
+          END IF;
+
+          IF rec_method.actioncode = 'Unavailable' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'unavailable'));
+          END IF;
+
+          IF rec_method.actioncode = 'Faulted' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'faulted'));
+          END IF;
+
+          IF rec_method.actioncode = 'disable' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'disabled'));
+          END IF;
+        END LOOP;
+
+      WHEN 'faulted' THEN
+
+        FOR rec_method IN SELECT * FROM Method WHERE state = rec_state.id
+        LOOP
+          IF rec_method.actioncode = 'Available' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'available'));
+          END IF;
+
+          IF rec_method.actioncode = 'Charging' THEN
             PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'charging'));
           END IF;
 
-          IF rec_method.actioncode = 'cancel' THEN
-            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'available'));
+          IF rec_method.actioncode = 'Reserved' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'reserved'));
+          END IF;
+
+          IF rec_method.actioncode = 'Unavailable' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'unavailable'));
+          END IF;
+
+          IF rec_method.actioncode = 'disable' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'disabled'));
           END IF;
         END LOOP;
 
@@ -668,7 +787,7 @@ BEGIN
         FOR rec_method IN SELECT * FROM Method WHERE state = rec_state.id
         LOOP
           IF rec_method.actioncode = 'enable' THEN
-            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'enabled'));
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'unavailable'));
           END IF;
 
           IF rec_method.actioncode = 'delete' THEN
@@ -1184,32 +1303,48 @@ BEGIN
             PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция включена', 'EventChargePointEnable();');
           END IF;
 
-          IF rec_action.code = 'heartbeat' THEN
+          IF rec_action.code = 'Heartbeat' THEN
             PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция на связи', 'EventChargePointHeartbeat();');
+          END IF;
+
+          IF rec_action.code = 'Available' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция доступна', 'EventChargePointAvailable();');
             PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Смена состояния', 'ChangeObjectState();');
           END IF;
 
-          IF rec_action.code = 'start' THEN
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция начала зарядку', 'EventChargePointStart();');
+          IF rec_action.code = 'Preparing' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция отправила статус: Preparing', 'EventChargePointPreparing();');
+          END IF;
+
+          IF rec_action.code = 'Charging' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция заряжает', 'EventChargePointCharging();');
             PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Смена состояния', 'ChangeObjectState();');
           END IF;
 
-          IF rec_action.code = 'stop' THEN
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция завершила зарядку', 'EventChargePointStop();');
+          IF rec_action.code = 'SuspendedEV' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция отправила статус: SuspendedEV', 'EventChargePointSuspendedEV();');
+          END IF;
+
+          IF rec_action.code = 'SuspendedEVSE' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция отправила статус: SuspendedEVSE', 'EventChargePointSuspendedEVSE();');
+          END IF;
+
+          IF rec_action.code = 'Finishing' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция отправила статус: Finishing', 'EventChargePointFinishing();');
+          END IF;
+
+          IF rec_action.code = 'Reserved' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция зарезервирована', 'EventChargePointReserved();');
             PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Смена состояния', 'ChangeObjectState();');
           END IF;
 
-          IF rec_action.code = 'abort' THEN
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция прервала зарядку', 'EventChargePointAbort();');
-          END IF;
-
-          IF rec_action.code = 'reserve' THEN
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция зарезервирована', 'EventChargePointReserve();');
+          IF rec_action.code = 'Unavailable' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция недоступна', 'EventChargePointUnavailable();');
             PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Смена состояния', 'ChangeObjectState();');
           END IF;
 
-          IF rec_action.code = 'cancel' THEN
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Резервирование зарядной станции отменено', 'EventChargePointCancel();');
+          IF rec_action.code = 'Faulted' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция неисправна', 'EventChargePointFaulted();');
             PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Смена состояния', 'ChangeObjectState();');
           END IF;
 

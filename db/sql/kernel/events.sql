@@ -1022,67 +1022,119 @@ END;
 $$ LANGUAGE plpgsql;
 
 --------------------------------------------------------------------------------
--- EventChargePointStart -------------------------------------------------------
+-- EventChargePointAvailable ---------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION EventChargePointStart (
+CREATE OR REPLACE FUNCTION EventChargePointAvailable (
   pObject	numeric default context_object()
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog('M', 1021, 'Зарядная станция начала зарядку.', pObject);
+  PERFORM WriteToEventLog('M', 1021, 'Зарядная станция отправила статус: Available.', pObject);
 END;
 $$ LANGUAGE plpgsql;
 
 --------------------------------------------------------------------------------
--- EventChargePointStop --------------------------------------------------------
+-- EventChargePointPreparing ---------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION EventChargePointStop (
+CREATE OR REPLACE FUNCTION EventChargePointPreparing (
   pObject	numeric default context_object()
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog('M', 1022, 'Зарядная станция завершила зарядку.', pObject);
+  PERFORM WriteToEventLog('M', 1022, 'Зарядная станция отправила статус: Preparing.', pObject);
 END;
 $$ LANGUAGE plpgsql;
 
 --------------------------------------------------------------------------------
--- EventChargePointAbort -------------------------------------------------------
+-- EventChargePointCharging ----------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION EventChargePointAbort (
+CREATE OR REPLACE FUNCTION EventChargePointCharging (
   pObject	numeric default context_object()
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog('M', 1022, 'Зарядная станция прервала зарядку.', pObject);
+  PERFORM WriteToEventLog('M', 1023, 'Зарядная станция отправила статус: Charging.', pObject);
 END;
 $$ LANGUAGE plpgsql;
 
 --------------------------------------------------------------------------------
--- EventChargePointReserve -----------------------------------------------------
+-- EventChargePointSuspendedEV -------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION EventChargePointReserve (
+CREATE OR REPLACE FUNCTION EventChargePointSuspendedEV (
   pObject	numeric default context_object()
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog('M', 1023, 'Зарядная зарезервирована.', pObject);
+  PERFORM WriteToEventLog('M', 1024, 'Зарядная станция отправила статус: SuspendedEV.', pObject);
 END;
 $$ LANGUAGE plpgsql;
 
 --------------------------------------------------------------------------------
--- EventChargePointCancel ------------------------------------------------------
+-- EventChargePointSuspendedEVSE ------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION EventChargePointCancel (
+CREATE OR REPLACE FUNCTION EventChargePointSuspendedEVSE (
   pObject	numeric default context_object()
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog('M', 1024, 'Резервирование зарядной станции отменено.', pObject);
+  PERFORM WriteToEventLog('M', 1025, 'Зарядная станция отправила статус: SuspendedEVSE.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventChargePointFinishing ---------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventChargePointFinishing (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1026, 'Зарядная станция отправила статус: Finishing.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventChargePointReserved ----------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventChargePointReserved (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1027, 'Зарядная станция отправила статус: Reserved.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventChargePointUnavailable -------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventChargePointUnavailable (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1028, 'Зарядная станция отправила статус: Unavailable.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventChargePointFaulted -----------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventChargePointFaulted (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1029, 'Зарядная станция отправила статус: Faulted.', pObject);
 END;
 $$ LANGUAGE plpgsql;
 

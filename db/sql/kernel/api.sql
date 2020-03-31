@@ -5044,9 +5044,12 @@ GRANT SELECT ON api.card TO daemon;
 --------------------------------------------------------------------------------
 /**
  * Добавляет карту.
+ * @param {numeric} pParent - Ссылка на родительский объект: api.document | null
  * @param {varchar} pType - Tип карты
- * @param {varchar} pCode - Код карты
  * @param {numeric} pClient - Идентификатор клиента
+ * @param {varchar} pCode - Код
+ * @param {text} pName - Наименование
+ * @param {date} pExpire - Дата окончания
  * @param {text} pDescription - Описание
  * @out param {numeric} id - Идентификатор карты
  * @out param {boolean} result - Результат
@@ -5054,9 +5057,12 @@ GRANT SELECT ON api.card TO daemon;
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.add_card (
+  pParent       numeric,
   pType         varchar,
-  pCode         varchar,
   pClient       numeric,
+  pCode         varchar,
+  pName         text default null,
+  pExpire       date default null,
   pDescription  text default null,
   OUT id        numeric,
   OUT result    boolean,
@@ -5072,12 +5078,12 @@ BEGIN
   END IF;
 
   pType := lower(pType);
-  arTypes := array_cat(arTypes, ARRAY['plastic']);
+  arTypes := array_cat(arTypes, ARRAY['rfid', 'bank', 'plastic']);
   IF array_position(arTypes, pType::text) IS NULL THEN
     PERFORM IncorrectCode(pType, arTypes);
   END IF;
 
-  nCard := CreateCard(null, GetType(pType || '.card'), pCode, pClient, pDescription);
+  nCard := CreateCard(pParent, GetType(pType || '.card'), pClient, pCode, pName, pExpire, pDescription);
 
   id := nCard;
 
@@ -5098,9 +5104,12 @@ $$ LANGUAGE plpgsql
 /**
  * Обновляет данные карты.
  * @param {numeric} pId - Идентификатор карты (api.get_card)
+ * @param {numeric} pParent - Ссылка на родительский объект: api.document | null
  * @param {varchar} pType - Tип карты
- * @param {varchar} pCode - Код карты
  * @param {numeric} pClient - Идентификатор клиента
+ * @param {varchar} pCode - Код
+ * @param {text} pName - Наименование
+ * @param {date} pExpire - Дата окончания
  * @param {text} pDescription - Описание
  * @out param {numeric} id - Идентификатор карты
  * @out param {boolean} result - Результат
@@ -5109,9 +5118,12 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION api.update_card (
   pId           numeric,
-  pType         varchar default null,
-  pCode         varchar default null,
-  pClient       numeric default null,
+  pParent       numeric,
+  pType         varchar,
+  pClient       numeric,
+  pCode         varchar,
+  pName         text default null,
+  pExpire       date default null,
   pDescription  text default null,
   OUT id        numeric,
   OUT result	boolean,
@@ -5134,7 +5146,7 @@ BEGIN
 
   IF pType IS NOT NULL THEN
     pType := lower(pType);
-    arTypes := array_cat(arTypes, ARRAY['plastic']);
+    arTypes := array_cat(arTypes, ARRAY['rfid', 'bank', 'plastic']);
     IF array_position(arTypes, pType::text) IS NULL THEN
       PERFORM IncorrectCode(pType, arTypes);
     END IF;
@@ -5143,7 +5155,7 @@ BEGIN
     SELECT o.type INTO nType FROM db.object o WHERE o.id = pId;
   END IF;
 
-  PERFORM EditCard(nCard, null, nType, pCode, pClient, pDescription);
+  PERFORM EditCard(nCard, pParent, nType, pClient,pCode, pName, pExpire, pDescription);
 
   id := nCard;
 

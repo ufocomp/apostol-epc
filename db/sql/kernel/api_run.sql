@@ -2764,21 +2764,21 @@ BEGIN
         PERFORM JsonIsEmpty();
       END IF;
 
-      arKeys := array_cat(arKeys, ARRAY['type', 'code', 'client', 'description']);
+      arKeys := array_cat(arKeys, ARRAY['parent', 'type', 'client', 'code', 'name', 'expire', 'description']);
       PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
 
       IF jsonb_typeof(pJson) = 'array' THEN
 
-        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(type varchar, code varchar, client numeric, description text)
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(parent numeric, type varchar, client numeric, code varchar, name text, expire date, description text)
         LOOP
-          RETURN NEXT row_to_json(api.add_card(r.type, r.code, r.client, r.description));
+          RETURN NEXT row_to_json(api.add_card(r.parent, r.type, r.client,r.code, r.name, r.expire, r.description));
         END LOOP;
 
       ELSE
 
-        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(type varchar, code varchar, client numeric, description text)
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(parent numeric, type varchar, client numeric, code varchar, name text, expire date, description text)
         LOOP
-          RETURN NEXT row_to_json(api.add_card(r.type, r.code, r.client, r.description));
+          RETURN NEXT row_to_json(api.add_card(r.parent, r.type, r.client,r.code, r.name, r.expire, r.description));
         END LOOP;
 
       END IF;
@@ -2789,21 +2789,21 @@ BEGIN
         PERFORM JsonIsEmpty();
       END IF;
 
-      arKeys := array_cat(arKeys, ARRAY['id', 'type', 'code', 'client', 'description']);
+      arKeys := array_cat(arKeys, ARRAY['id', 'parent', 'type', 'client', 'code', 'name', 'expire', 'description']);
       PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
 
       IF jsonb_typeof(pJson) = 'array' THEN
 
-        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, type varchar, code varchar, client numeric, description text)
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, parent numeric, type varchar, client numeric, code varchar, name text, expire date, description text)
         LOOP
-          RETURN NEXT row_to_json(api.update_card(r.id, r.type, r.code, r.client, r.description));
+          RETURN NEXT row_to_json(api.update_card(r.id, r.parent, r.type, r.client,r.code, r.name, r.expire, r.description));
         END LOOP;
 
       ELSE
 
-        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, type varchar, code varchar, client numeric, description text)
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, parent numeric, type varchar, client numeric, code varchar, name text, expire date, description text)
         LOOP
-          RETURN NEXT row_to_json(api.update_card(r.id, r.type, r.code, r.client, r.description));
+          RETURN NEXT row_to_json(api.update_card(r.id, r.parent, r.type, r.client,r.code, r.name, r.expire, r.description));
         END LOOP;
 
       END IF;

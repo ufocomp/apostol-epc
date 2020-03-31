@@ -36,7 +36,7 @@ AS $$
 DECLARE
   nId		numeric;
 BEGIN
-  SELECT id INTO nId FROM db.essence WHERE code = lower(pCode);
+  SELECT id INTO nId FROM db.essence WHERE code = pCode;
   RETURN nId;
 END;
 $$ LANGUAGE plpgsql
@@ -655,7 +655,7 @@ DECLARE
 BEGIN
   SELECT s.id INTO nId
     FROM db.state s INNER JOIN db.class_tree c ON c.id = s.class
-   WHERE s.code = lower(pCode)
+   WHERE s.code = pCode
      AND s.class IN (
        WITH RECURSIVE classtree(id, parent) AS (
          SELECT id, parent FROM db.class_tree WHERE id = pClass
@@ -816,7 +816,7 @@ AS $$
 DECLARE
   nId		numeric;
 BEGIN
-  SELECT id INTO nId FROM db.action WHERE code = lower(pCode);
+  SELECT id INTO nId FROM db.action WHERE code = pCode;
   RETURN nId;
 END;
 $$ LANGUAGE plpgsql
@@ -853,7 +853,7 @@ CREATE TABLE db.method (
     action		numeric(12) NOT NULL,
     code		varchar(30) NOT NULL,
     label		text NOT NULL,
-    sequence		integer NOT NULL,
+    sequence	integer NOT NULL,
     visible		boolean DEFAULT TRUE,
     CONSTRAINT fk_method_class FOREIGN KEY (class) REFERENCES db.class_tree(id),
     CONSTRAINT fk_method_state FOREIGN KEY (state) REFERENCES db.state(id),
@@ -944,8 +944,8 @@ AS
          m.action, a.code, a.name,
          m.code, m.label, m.sequence, m.visible
     FROM db.method m INNER JOIN db.class_tree c ON c.id = m.class
-                         LEFT JOIN db.state s ON s.id = m.state
-                        INNER JOIN db.action a ON a.id = m.action;
+                     INNER JOIN db.action a ON a.id = m.action
+                      LEFT JOIN db.state s ON s.id = m.state;
 
 GRANT SELECT ON Method TO administrator;
 
@@ -1228,7 +1228,7 @@ AS $$
 DECLARE
   nId		numeric;
 BEGIN
-  SELECT id INTO nId FROM db.event_type WHERE code = lower(pCode);
+  SELECT id INTO nId FROM db.event_type WHERE code = pCode;
 
   RETURN nId;
 END;

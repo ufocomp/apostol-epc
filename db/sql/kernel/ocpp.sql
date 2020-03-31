@@ -145,7 +145,7 @@ BEGIN
     nCard := GetCard(pIdTag);
 
     IF nCard IS NULL THEN
-      nCard := CreateCard(null, GetType('plastic.card'), pIdTag);
+      nCard := CreateCard(null, GetType('rfid.card'), null,pIdTag);
     END IF;
 
     vStateCode := GetObjectStateTypeCode(nCard);
@@ -187,7 +187,7 @@ BEGIN
   nChargePoint := GetChargePoint(pIdentity);
 
   IF nChargePoint IS NOT NULL THEN
-    PERFORM ExecuteObjectAction(nChargePoint, GetAction('heartbeat'), pRequest);
+    PERFORM ExecuteObjectAction(nChargePoint, GetAction('Heartbeat'), pRequest);
   END IF;
 
   RETURN json_build_object('currentTime', GetISOTime());
@@ -348,6 +348,7 @@ BEGIN
 
   IF nChargePoint IS NOT NULL THEN
     nId := AddStatusNotification(nChargePoint, connectorId, status, errorCode, info, vendorId, vendorErrorCode, timestamp);
+    PERFORM ExecuteObjectAction(nChargePoint, GetAction(status), pRequest);
   END IF;
 
   RETURN '{}'::json;
@@ -400,8 +401,6 @@ BEGIN
     nCard := GetCard(idTag);
 
     nId := kernel.StartTransaction(nCard, nChargePoint, connectorId, meterStart, reservationId, dateStart);
-
-    PERFORM ExecuteObjectAction(nChargePoint, GetAction('start'), pRequest);
   END IF;
 
   RETURN json_build_object('transactionId', nId, 'idTagInfo', json_build_object('expiryDate', GetISOTime(current_timestamp at time zone 'utc' + interval '1 day') , 'status', vStatus));
@@ -453,10 +452,6 @@ BEGIN
   END IF;
 
   nChargePoint := GetChargePoint(pIdentity);
-
-  IF nChargePoint IS NOT NULL THEN
-    PERFORM ExecuteObjectAction(nChargePoint, GetAction('stop'), pRequest);
-  END IF;
 
   IF idTag IS NOT NULL THEN
     vStatus := ocpp.GetIdTagStatus(nChargePoint, idTag);

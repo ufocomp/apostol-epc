@@ -5,8 +5,10 @@
 CREATE TABLE db.card (
     id			numeric(12) PRIMARY KEY,
     document	numeric(12) NOT NULL,
-    code		varchar(30) NOT NULL,
     client		numeric(12),
+    code		varchar(30) NOT NULL,
+    name        text,
+    expire      date,
     CONSTRAINT fk_card_document FOREIGN KEY (document) REFERENCES db.document(id),
     CONSTRAINT fk_card_client FOREIGN KEY (client) REFERENCES db.client(id)
 );
@@ -17,8 +19,10 @@ COMMENT ON TABLE db.card IS 'Пластиковая карта для заряд
 
 COMMENT ON COLUMN db.card.id IS 'Идентификатор';
 COMMENT ON COLUMN db.card.document IS 'Ссылка на документ';
-COMMENT ON COLUMN db.card.code IS 'Код';
 COMMENT ON COLUMN db.card.client IS 'Клиент';
+COMMENT ON COLUMN db.card.code IS 'Код';
+COMMENT ON COLUMN db.card.name IS 'Наименование';
+COMMENT ON COLUMN db.card.expire IS 'Дата окончания';
 
 --------------------------------------------------------------------------------
 
@@ -89,28 +93,32 @@ CREATE TRIGGER t_card_update
 --------------------------------------------------------------------------------
 /**
  * Создаёт новую карту
- * @param {numeric} pParent - Ссылка на родительский объект: VObject.Parent | null
+ * @param {numeric} pParent - Ссылка на родительский объект: Object.Parent | null
  * @param {numeric} pType - Тип
- * @param {varchar} pCode - Код
  * @param {numeric} pClient - Клиент
+ * @param {varchar} pCode - Код
+ * @param {text} pName - Наименование
+ * @param {date} pExpire - Дата окончания
  * @param {text} pDescription - Описание
  * @return {numeric} - Id карты
  */
 CREATE OR REPLACE FUNCTION CreateCard (
-  pParent	numeric,
-  pType		numeric,
-  pCode		varchar,
-  pClient	numeric default null,
-  pDescription	text default null
-) RETURNS 	numeric
+  pParent       numeric,
+  pType         numeric,
+  pClient       numeric,
+  pCode         varchar,
+  pName         text default null,
+  pExpire       date default null,
+  pDescription  text default null
+) RETURNS       numeric
 AS $$
 DECLARE
-  nId		numeric;
-  nCard		numeric;
-  nDocument	numeric;
+  nId           numeric;
+  nCard         numeric;
+  nDocument     numeric;
 
-  nClass	numeric;
-  nMethod	numeric;
+  nClass        numeric;
+  nMethod       numeric;
 BEGIN
   SELECT class INTO nClass FROM type WHERE id = pType;
 
@@ -126,8 +134,8 @@ BEGIN
 
   nDocument := CreateDocument(pParent, pType, null, pDescription);
 
-  INSERT INTO db.card (id, document, code, client)
-  VALUES (nDocument, nDocument, pCode, pClient)
+  INSERT INTO db.card (id, document, client, code, name, expire)
+  VALUES (nDocument, nDocument, pClient, pCode, pName, pExpire)
   RETURNING id INTO nCard;
 
   nMethod := GetMethod(nClass, null, GetAction('create'));
@@ -145,42 +153,44 @@ $$ LANGUAGE plpgsql
 /**
  * Меняет основные параметры клиента.
  * @param {numeric} pId - Идентификатор клиента
- * @param {numeric} pParent - Ссылка на родительский объект: VObject.Parent | null
+ * @param {numeric} pParent - Ссылка на родительский объект: Object.Parent | null
  * @param {numeric} pType - Тип
- * @param {varchar} pCode - Код
  * @param {numeric} pClient - Клиент
+ * @param {varchar} pCode - Код
+ * @param {text} pName - Наименование
+ * @param {date} pExpire - Дата окончания
  * @param {text} pDescription - Описание
  * @return {void}
  */
 CREATE OR REPLACE FUNCTION EditCard (
-  pId		numeric,
-  pParent	numeric default null,
-  pType		numeric default null,
-  pCode		varchar default null,
-  pClient	numeric default null,
-  pDescription	text default null
-) RETURNS 	void
+  pId           numeric,
+  pParent       numeric default null,
+  pType         numeric default null,
+  pClient       numeric default null,
+  pCode         varchar default null,
+  pName         text default null,
+  pExpire       date default null,
+  pDescription  text default null
+) RETURNS       void
 AS $$
 DECLARE
-  nId		numeric;
-  nClass	numeric;
-  nMethod	numeric;
+  nId           numeric;
+  nClass        numeric;
+  nMethod       numeric;
 
   -- current
-  cParent	numeric;
-  cType		numeric;
-  cCode		varchar;
-  cClient	numeric;
-  cDescription	text;
+  cParent       numeric;
+  cType         numeric;
+  cCode         varchar;
+  cDescription  text;
 BEGIN
   SELECT parent, type INTO cParent, cType FROM db.object WHERE id = pId;
   SELECT description INTO cDescription FROM db.document WHERE id = pId;
-  SELECT code, client INTO cCode, cClient FROM db.card WHERE id = pId;
+  SELECT code INTO cCode FROM db.card WHERE id = pId;
 
   pParent := coalesce(pParent, cParent, 0);
   pType := coalesce(pType, cType);
   pCode := coalesce(pCode, cCode);
-  pClient := coalesce(pClient, cClient);
   pDescription := coalesce(pDescription, cDescription, '<null>');
 
   IF pCode <> cCode THEN
@@ -204,7 +214,9 @@ BEGIN
 
   UPDATE db.card
      SET Code = pCode,
-         Client = pClient
+         Client = coalesce(pClient, client),
+         Name = coalesce(pName, name),
+         Expire = coalesce(pExpire, expire)
    WHERE Id = pId;
 
   nClass := GetObjectClass(pId);

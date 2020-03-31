@@ -148,7 +148,7 @@ AS $$
 DECLARE
   nId		numeric;
 BEGIN
-  SELECT id INTO nId FROM db.reference WHERE code = lower(pCode);
+  SELECT id INTO nId FROM db.reference WHERE code = pCode;
   RETURN nId;
 END;
 $$ LANGUAGE plpgsql

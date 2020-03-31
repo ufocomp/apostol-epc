@@ -3,16 +3,16 @@
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.charge_point (
-    Id			numeric(12) PRIMARY KEY,
-    Reference		numeric(12) NOT NULL,
-    Model		varchar(20) NOT NULL,
-    Vendor		varchar(20) NOT NULL,
-    Version		varchar(50),
-    SerialNumber	varchar(25),
-    BoxSerialNumber	varchar(25),
-    MeterSerialNumber	varchar(25),
-    iccid		varchar(20),
-    imsi		varchar(20),
+    Id                  numeric(12) PRIMARY KEY,
+    Reference           numeric(12) NOT NULL,
+    Model               varchar(20) NOT NULL,
+    Vendor              varchar(20) NOT NULL,
+    Version             varchar(50),
+    SerialNumber        varchar(25),
+    BoxSerialNumber     varchar(25),
+    MeterSerialNumber   varchar(25),
+    iccid               varchar(20),
+    imsi                varchar(20),
     CONSTRAINT fk_charge_point_reference FOREIGN KEY (reference) REFERENCES db.reference(id)
 );
 
@@ -86,25 +86,25 @@ CREATE TRIGGER t_charge_point_update
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION CreateChargePoint (
-  pParent	      numeric,
-  pType		      numeric,
-  pIdentity	      varchar,
-  pName		      varchar,
-  pModel	      varchar,
-  pVendor	      varchar,
-  pVersion	      varchar,
-  pSerialNumber	      varchar,
-  pBoxSerialNumber    varchar,
-  pMeterSerialNumber  varchar,
-  piccid	      varchar,
-  pimsi	              varchar,
-  pDescription	      text default null
-) RETURNS 	      numeric
+  pParent               numeric,
+  pType                 numeric,
+  pIdentity             varchar,
+  pName                 varchar,
+  pModel                varchar,
+  pVendor               varchar,
+  pVersion              varchar,
+  pSerialNumber         varchar,
+  pBoxSerialNumber      varchar,
+  pMeterSerialNumber    varchar,
+  piccid                varchar,
+  pimsi                 varchar,
+  pDescription          text default null
+) RETURNS               numeric
 AS $$
 DECLARE
-  nReference	numeric;
-  nClass	numeric;
-  nMethod	numeric;
+  nReference            numeric;
+  nClass                numeric;
+  nMethod               numeric;
 BEGIN
   nReference := CreateReference(pParent, pType, pIdentity, pName, pDescription);
 
@@ -127,21 +127,21 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION EditChargePoint (
-  pId		      numeric,
-  pParent	      numeric default null,
-  pType		      numeric default null,
-  pIdentity	      varchar default null,
-  pName		      varchar default null,
-  pModel	      varchar default null,
-  pVendor	      varchar default null,
-  pVersion	      varchar default null,
-  pSerialNumber	      varchar default null,
-  pBoxSerialNumber    varchar default null,
-  pMeterSerialNumber  varchar default null,
-  piccid	      varchar default null,
-  pimsi	              varchar default null,
-  pDescription	      text default null
-) RETURNS 	      void
+  pId                   numeric,
+  pParent               numeric default null,
+  pType                 numeric default null,
+  pIdentity             varchar default null,
+  pName                 varchar default null,
+  pModel                varchar default null,
+  pVendor               varchar default null,
+  pVersion              varchar default null,
+  pSerialNumber         varchar default null,
+  pBoxSerialNumber      varchar default null,
+  pMeterSerialNumber    varchar default null,
+  piccid                varchar default null,
+  pimsi                 varchar default null,
+  pDescription          text default null
+) RETURNS               void
 AS $$
 DECLARE
   nClass	numeric;
@@ -194,12 +194,12 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.status_notification (
-    Id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_OCPP_STATUS'),
-    chargePoint		numeric(12) NOT NULL,
-    connectorId		integer NOT NULL,
-    status		varchar(50) NOT NULL,
-    errorCode		varchar(30) NOT NULL,
-    info		varchar(50),
+    Id              numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_OCPP_STATUS'),
+    chargePoint     numeric(12) NOT NULL,
+    connectorId     integer NOT NULL,
+    status          varchar(50) NOT NULL,
+    errorCode       varchar(30) NOT NULL,
+    info            varchar(50),
     vendorId		varchar(255),
     vendorErrorCode	varchar(50),
     ValidFromDate	timestamp DEFAULT NOW() NOT NULL,
@@ -237,19 +237,19 @@ CREATE UNIQUE INDEX ON db.status_notification (chargePoint, connectorId, ValidFr
 CREATE OR REPLACE FUNCTION AddStatusNotification (
   pChargePoint		numeric,
   pConnectorId		integer,
-  pStatus		varchar,
+  pStatus		    varchar,
   pErrorCode		varchar,
-  pInfo			varchar,
-  pVendorId		varchar,
+  pInfo			    varchar,
+  pVendorId		    varchar,
   pVendorErrorCode	varchar,
   pTimeStamp		timestamp
-) RETURNS 		numeric
+) RETURNS 		    numeric
 AS $$
 DECLARE
-  nId			numeric;
+  nId			    numeric;
 
   dtDateFrom 		timestamp;
-  dtDateTo 		timestamp;
+  dtDateTo 		    timestamp;
 BEGIN
   -- получим дату значения в текущем диапозоне дат
   SELECT max(ValidFromDate), max(ValidToDate) INTO dtDateFrom, dtDateTo
@@ -308,11 +308,11 @@ CREATE OR REPLACE FUNCTION GetJsonStatusNotification (
   pChargePoint  numeric,
   pConnectorId  integer default null,
   pDate         timestamptz default current_timestamp at time zone 'utc'
-) RETURNS	json
+) RETURNS	    json
 AS $$
 DECLARE
-  arResult	json[];
-  r		record;
+  arResult	    json[];
+  r		        record;
 BEGIN
   FOR r IN
   SELECT *
