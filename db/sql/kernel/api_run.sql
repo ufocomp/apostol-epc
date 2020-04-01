@@ -2931,21 +2931,21 @@ BEGIN
         PERFORM JsonIsEmpty();
       END IF;
 
-      arKeys := array_cat(arKeys, ARRAY['protocol', 'identity', 'name', 'model', 'vendor', 'version', 'serialnumber', 'boxserialnumber', 'meterserialnumber', 'iccid', 'imsi', 'description']);
+      arKeys := array_cat(arKeys, ARRAY['parent', 'protocol', 'identity', 'name', 'model', 'vendor', 'version', 'serialnumber', 'boxserialnumber', 'meterserialnumber', 'iccid', 'imsi', 'description']);
       PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
 
       IF jsonb_typeof(pJson) = 'array' THEN
 
-        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(protocol varchar, identity varchar, name varchar, model varchar, vendor varchar, version varchar, serialnumber varchar, boxserialnumber varchar, meterserialnumber varchar, iccid varchar, imsi varchar, description text)
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(parent numeric, protocol varchar, identity varchar, name varchar, model varchar, vendor varchar, version varchar, serialnumber varchar, boxserialnumber varchar, meterserialnumber varchar, iccid varchar, imsi varchar, description text)
         LOOP
-          RETURN NEXT row_to_json(api.add_charge_point(r.protocol, r.identity, r.name, r.model, r.vendor, r.version, r.serialnumber, r.boxserialnumber, r.meterserialnumber, r.iccid, r.imsi, r.description));
+          RETURN NEXT row_to_json(api.add_charge_point(r.parent, r.protocol, r.identity, r.name, r.model, r.vendor, r.version, r.serialnumber, r.boxserialnumber, r.meterserialnumber, r.iccid, r.imsi, r.description));
         END LOOP;
 
       ELSE
 
-        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(protocol varchar, identity varchar, name varchar, model varchar, vendor varchar, version varchar, serialnumber varchar, boxserialnumber varchar, meterserialnumber varchar, iccid varchar, imsi varchar, description text)
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(parent numeric, protocol varchar, identity varchar, name varchar, model varchar, vendor varchar, version varchar, serialnumber varchar, boxserialnumber varchar, meterserialnumber varchar, iccid varchar, imsi varchar, description text)
         LOOP
-          RETURN NEXT row_to_json(api.add_charge_point(r.protocol, r.identity, r.name, r.model, r.vendor, r.version, r.serialnumber, r.boxserialnumber, r.meterserialnumber, r.iccid, r.imsi, r.description));
+          RETURN NEXT row_to_json(api.add_charge_point(r.parent, r.protocol, r.identity, r.name, r.model, r.vendor, r.version, r.serialnumber, r.boxserialnumber, r.meterserialnumber, r.iccid, r.imsi, r.description));
         END LOOP;
 
       END IF;
@@ -2956,21 +2956,21 @@ BEGIN
         PERFORM JsonIsEmpty();
       END IF;
 
-      arKeys := array_cat(arKeys, ARRAY['id', 'protocol', 'identity', 'name', 'model', 'vendor', 'version', 'serialnumber', 'boxserialnumber', 'meterserialnumber', 'iccid', 'imsi', 'description']);
+      arKeys := array_cat(arKeys, ARRAY['id', 'parent', 'protocol', 'identity', 'name', 'model', 'vendor', 'version', 'serialnumber', 'boxserialnumber', 'meterserialnumber', 'iccid', 'imsi', 'description']);
       PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
 
       IF jsonb_typeof(pJson) = 'array' THEN
 
-        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, protocol varchar, identity varchar, name varchar, model varchar, vendor varchar, version varchar, serialnumber varchar, boxserialnumber varchar, meterserialnumber varchar, iccid varchar, imsi varchar, description text)
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, parent numeric, protocol varchar, identity varchar, name varchar, model varchar, vendor varchar, version varchar, serialnumber varchar, boxserialnumber varchar, meterserialnumber varchar, iccid varchar, imsi varchar, description text)
         LOOP
-          RETURN NEXT row_to_json(api.update_charge_point(r.id, r.protocol, r.identity, r.name, r.name, r.model, r.vendor, r.version, r.serialnumber, r.boxserialnumber, r.meterserialnumber, r.iccid, r.imsi, r.description));
+          RETURN NEXT row_to_json(api.update_charge_point(r.id, r.parent, r.protocol, r.identity, r.name, r.name, r.model, r.vendor, r.version, r.serialnumber, r.boxserialnumber, r.meterserialnumber, r.iccid, r.imsi, r.description));
         END LOOP;
 
       ELSE
 
-        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, protocol varchar, identity varchar, name varchar, model varchar, vendor varchar, version varchar, serialnumber varchar, boxserialnumber varchar, meterserialnumber varchar, iccid varchar, imsi varchar, description text)
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, parent numeric, protocol varchar, identity varchar, name varchar, model varchar, vendor varchar, version varchar, serialnumber varchar, boxserialnumber varchar, meterserialnumber varchar, iccid varchar, imsi varchar, description text)
         LOOP
-          RETURN NEXT row_to_json(api.update_charge_point(r.id, r.protocol, r.identity, r.name, r.name, r.model, r.vendor, r.version, r.serialnumber, r.boxserialnumber, r.meterserialnumber, r.iccid, r.imsi, r.description));
+          RETURN NEXT row_to_json(api.update_charge_point(r.id, r.parent, r.protocol, r.identity, r.name, r.name, r.model, r.vendor, r.version, r.serialnumber, r.boxserialnumber, r.meterserialnumber, r.iccid, r.imsi, r.description));
         END LOOP;
 
       END IF;

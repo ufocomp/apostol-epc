@@ -132,7 +132,7 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 /**
  * Возвращает информацию о виртуальном пользователе.
- * @out param {numeric} id - Идентификатор клиента
+ * @out param {numeric} id - Идентификатор
  * @out param {numeric} userid - Идентификатор виртуального пользователя (учётной записи)
  * @out param {varchar} username - Имя виртуального пользователя (login)
  * @out param {text} fullname - Ф.И.О. виртуального пользователя
@@ -4833,7 +4833,7 @@ GRANT SELECT ON api.client TO daemon;
  * @param {jsonb} pEmail - Электронные адреса
  * @param {jsonb} pInfo - Дополнительная информация
  * @param {text} pDescription - Информация о клиенте
- * @out param {numeric} id - Идентификатор клиента
+ * @out param {numeric} id - Идентификатор
  * @out param {boolean} result - Результат
  * @out param {text} message - Текст ошибки
  * @return {record}
@@ -4900,7 +4900,7 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 /**
  * Обновляет данные клиента.
- * @param {numeric} pId - Идентификатор клиента (api.get_client)
+ * @param {numeric} pId - Идентификатор (api.get_client)
  * @param {numeric} pParent - Идентификатор родителя | null
  * @param {varchar} pType - Tип клиента
  * @param {varchar} pCode - ИНН - для юридического лица | Имя пользователя (login) | null
@@ -4910,7 +4910,7 @@ $$ LANGUAGE plpgsql
  * @param {jsonb} pEmail - Электронные адреса
  * @param {jsonb} pInfo - Дополнительная информация
  * @param {text} pDescription - Информация о клиенте
- * @out param {numeric} id - Идентификатор клиента
+ * @out param {numeric} id - Идентификатор
  * @out param {boolean} result - Результат
  * @out param {text} message - Текст ошибки
  * @return {record}
@@ -4986,7 +4986,7 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 /**
  * Возвращает клиента
- * @param {numeric} pId - Идентификатор клиента
+ * @param {numeric} pId - Идентификатор
  * @return {api.client} - Клиент
  */
 CREATE OR REPLACE FUNCTION api.get_client (
@@ -5046,7 +5046,7 @@ GRANT SELECT ON api.card TO daemon;
  * Добавляет карту.
  * @param {numeric} pParent - Ссылка на родительский объект: api.document | null
  * @param {varchar} pType - Tип карты
- * @param {numeric} pClient - Идентификатор клиента
+ * @param {numeric} pClient - Идентификатор
  * @param {varchar} pCode - Код
  * @param {text} pName - Наименование
  * @param {date} pExpire - Дата окончания
@@ -5106,7 +5106,7 @@ $$ LANGUAGE plpgsql
  * @param {numeric} pId - Идентификатор карты (api.get_card)
  * @param {numeric} pParent - Ссылка на родительский объект: api.document | null
  * @param {varchar} pType - Tип карты
- * @param {numeric} pClient - Идентификатор клиента
+ * @param {numeric} pClient - Идентификатор
  * @param {varchar} pCode - Код
  * @param {text} pName - Наименование
  * @param {date} pExpire - Дата окончания
@@ -5175,7 +5175,7 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 /**
  * Возвращает клиента
- * @param {numeric} pId - Идентификатор клиента
+ * @param {numeric} pId - Идентификатор
  * @return {api.card} - Клиент
  */
 CREATE OR REPLACE FUNCTION api.get_card (
@@ -5233,7 +5233,29 @@ GRANT SELECT ON api.charge_point TO daemon;
 -- FUNCTION api.add_charge_point -----------------------------------------------
 --------------------------------------------------------------------------------
 
+/**
+ * Обновляет данные зарядной станции.
+ * @param {numeric} pId - Идентификатор зарядной станции (api.get_charge_point)
+ * @param {numeric} pParent - Идентификатор родителя | null
+ * @param {varchar} pProtocol - Tип клиента
+ * @param {varchar} pIdentity - Строковый идентификатор зарядной станции
+ * @param {varchar} pName - Наименование
+ * @param {varchar} pModel - Required. This contains a value that identifies the model of the ChargePoint.
+ * @param {varchar} pVendor - Required. This contains a value that identifies the vendor of the ChargePoint.
+ * @param {varchar} pVersion - Optional. This contains the firmware version of the Charge Point.
+ * @param {varchar} pSerialNumber - Optional. This contains a value that identifies the serial number of the Charge Point.
+ * @param {varchar} pBoxSerialNumber - Optional. This contains a value that identifies the serial number of the Charge Box inside the Charge Point. Deprecated, will be removed in future version.
+ * @param {varchar} pMeterSerialNumber - Optional. This contains the serial number of the main electrical meter of the Charge Point.
+ * @param {varchar} piccid - Optional. This contains the ICCID of the modem’s SIM card.
+ * @param {varchar} pimsi - Optional. This contains the IMSI of the modem’s SIM card.
+ * @param {varchar} pDescription - Описание
+ * @out param {numeric} id - Идентификатор
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
 CREATE OR REPLACE FUNCTION api.add_charge_point (
+  pParent               numeric,
   pProtocol             varchar,
   pIdentity             varchar,
   pName                 varchar,
@@ -5264,7 +5286,7 @@ BEGIN
     PERFORM IncorrectCode(pProtocol, arProtocols);
   END IF;
 
-  id := CreateChargePoint(null, GetType(pProtocol || '.charge_point'), pIdentity, pName, pModel, pVendor, pVersion,
+  id := CreateChargePoint(pParent, GetType(pProtocol || '.charge_point'), pIdentity, pName, pModel, pVendor, pVersion,
     pSerialNumber, pBoxSerialNumber, pMeterSerialNumber, piccid, pimsi, pDescription);
 
   SELECT * INTO result, message FROM result_success();
@@ -5282,8 +5304,29 @@ $$ LANGUAGE plpgsql
 -- FUNCTION api.update_charge_point --------------------------------------------
 --------------------------------------------------------------------------------
 
+/**
+ * Меняет зарядную станцию.
+ * @param {numeric} pParent - Идентификатор родителя | null
+ * @param {varchar} pProtocol - Tип клиента
+ * @param {varchar} pIdentity - Строковый идентификатор зарядной станции
+ * @param {varchar} pName - Наименование
+ * @param {varchar} pModel - Required. This contains a value that identifies the model of the ChargePoint.
+ * @param {varchar} pVendor - Required. This contains a value that identifies the vendor of the ChargePoint.
+ * @param {varchar} pVersion - Optional. This contains the firmware version of the Charge Point.
+ * @param {varchar} pSerialNumber - Optional. This contains a value that identifies the serial number of the Charge Point.
+ * @param {varchar} pBoxSerialNumber - Optional. This contains a value that identifies the serial number of the Charge Box inside the Charge Point. Deprecated, will be removed in future version.
+ * @param {varchar} pMeterSerialNumber - Optional. This contains the serial number of the main electrical meter of the Charge Point.
+ * @param {varchar} piccid - Optional. This contains the ICCID of the modem’s SIM card.
+ * @param {varchar} pimsi - Optional. This contains the IMSI of the modem’s SIM card.
+ * @param {varchar} pDescription - Описание
+ * @out param {numeric} id - Идентификатор
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
 CREATE OR REPLACE FUNCTION api.update_charge_point (
   pId                   numeric,
+  pParent               numeric default null,
   pProtocol             varchar default null,
   pIdentity             varchar default null,
   pName                 varchar default null,
@@ -5328,7 +5371,7 @@ BEGIN
     SELECT o.type INTO nType FROM db.object o WHERE o.id = pId;
   END IF;
 
-  id := EditChargePoint(pId, null, nType, pIdentity, pName, pModel, pVendor, pVersion,
+  id := EditChargePoint(pId, pParent, nType, pIdentity, pName, pModel, pVendor, pVersion,
     pSerialNumber, pBoxSerialNumber, pMeterSerialNumber, piccid, pimsi, pDescription);
 
   SELECT * INTO result, message FROM result_success();
