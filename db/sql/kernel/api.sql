@@ -5237,7 +5237,7 @@ GRANT SELECT ON api.charge_point TO daemon;
  * Обновляет данные зарядной станции.
  * @param {numeric} pId - Идентификатор зарядной станции (api.get_charge_point)
  * @param {numeric} pParent - Идентификатор родителя | null
- * @param {varchar} pProtocol - Tип клиента
+ * @param {varchar} pProtocol - Протокол (Tип зарядной станции)
  * @param {varchar} pIdentity - Строковый идентификатор зарядной станции
  * @param {varchar} pName - Наименование
  * @param {varchar} pModel - Required. This contains a value that identifies the model of the ChargePoint.
