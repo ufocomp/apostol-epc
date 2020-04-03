@@ -2606,7 +2606,7 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  arTables := array_cat(null, ARRAY['client', 'card', 'charge_point', 'address', 'calendar', 'address_tree', 'object_file', 'object_data', 'object_address', 'status_notification', 'transaction', 'meter_value']);
+  arTables := array_cat(null, ARRAY['client', 'card', 'charge_point', 'address', 'calendar', 'address_tree', 'object_file', 'object_data', 'object_address', 'object_coordinates', 'status_notification', 'transaction', 'meter_value']);
 
   IF array_position(arTables, pTable) IS NULL THEN
     PERFORM IncorrectValueInArray(pTable, 'sql/api/table', arTables);
@@ -4562,6 +4562,235 @@ CREATE OR REPLACE FUNCTION api.list_object_data (
 AS $$
 BEGIN
   RETURN QUERY EXECUTE CreateApiSql('api', 'object_data', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- OBJECT COORDINATES ----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- api.object_coordinates ------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.object_coordinates
+AS
+  SELECT * FROM ObjectCoordinates;
+
+GRANT SELECT ON api.object_coordinates TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.set_object_coordinates --------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Устанавливает координаты объекта
+ * @param {numeric} pObject - Идентификатор объекта
+ * @param {varchar} pCode - Код
+ * @param {varchar} pName - Наименование
+ * @param {numeric} pLatitude - Широта
+ * @param {numeric} pLongitude - Долгота
+ * @param {numeric} pAccuracy - Точность (высота над уровнем моря)
+ * @param {text} pDescription - Описание
+ * @out param {numeric} id - Идентификатор
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.set_object_coordinates (
+  pObject	    numeric,
+  pCode		    varchar,
+  pName		    varchar,
+  pLatitude     numeric,
+  pLongitude    numeric,
+  pAccuracy     numeric,
+  pDescription  text,
+  OUT id        numeric,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS       record
+AS $$
+DECLARE
+  nId           numeric;
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  SELECT d.id INTO nId FROM db.object_coordinates d WHERE d.object = pObject AND d.code = pCode;
+
+  IF pName IS NOT NULL THEN
+    IF nId IS NULL THEN
+      nId := AddObjectCoordinates(pObject, pCode, pName, pLatitude, pLongitude, pAccuracy, pDescription);
+    ELSE
+      PERFORM EditObjectCoordinates(nId, pObject, pCode, pName, pLatitude, pLongitude, pAccuracy, pDescription);
+    END IF;
+  ELSE
+    PERFORM DeleteObjectCoordinates(nId);
+  END IF;
+
+  id := nId;
+  SELECT * INTO result, message FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  id := null;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.set_object_coordinates_json ---------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.set_object_coordinates_json (
+  pObject	    numeric,
+  pCoordinates  json,
+  OUT id        numeric,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS 	    record
+AS $$
+DECLARE
+  nId		    numeric;
+  arKeys	    text[];
+  r		        record;
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  SELECT o.id INTO nId FROM db.object o WHERE o.id = pObject;
+  IF NOT FOUND THEN
+    PERFORM ObjectNotFound('объект', 'id', pObject);
+  END IF;
+
+  IF pCoordinates IS NOT NULL THEN
+    arKeys := array_cat(arKeys, ARRAY['id', 'code', 'name', 'latitude', 'longitude', 'accuracy', 'description']);
+    PERFORM CheckJsonKeys('/object/coordinates', arKeys, pCoordinates);
+
+    FOR r IN SELECT * FROM json_to_recordset(pCoordinates) AS coordinates(id numeric, code varchar, name varchar, latitude numeric, longitude numeric, accuracy numeric, description text)
+    LOOP
+      IF r.id IS NOT NULL THEN
+        SELECT o.id INTO nId FROM db.object_coordinates o WHERE o.id = r.id AND object = pObject;
+
+        IF NOT FOUND THEN
+          PERFORM ObjectNotFound('координаты', r.code, r.id);
+        END IF;
+
+        IF coalesce(r.name, true) THEN
+          PERFORM DeleteObjectCoordinates(r.id);
+        ELSE
+          PERFORM EditObjectCoordinates(r.id, pObject, r.code, r.name, r.latitude, r.longitude, r.accuracy, r.description);
+        END IF;
+      ELSE
+        nId := AddObjectCoordinates(pObject, r.code, r.name, r.latitude, r.longitude, r.accuracy, r.description);
+      END IF;
+    END LOOP;
+
+    id := nId;
+    SELECT * INTO result, message FROM result_success();
+  ELSE
+    PERFORM JsonIsEmpty();
+  END IF;
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.set_object_coordinates_jsonb --------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.set_object_coordinates_jsonb (
+  pObject	    numeric,
+  pCoordinates  jsonb,
+  OUT id        numeric,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS 	    record
+AS $$
+  SELECT * FROM api.set_object_coordinates_json(pObject, pCoordinates::json);
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_object_coordinates_json ---------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.get_object_coordinates_json (
+  pObject	numeric
+) RETURNS	json
+AS $$
+BEGIN
+  RETURN GetObjectCoordinatesJson(pObject);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_object_coordinates_jsonb --------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION api.get_object_coordinates_jsonb (
+  pObject	numeric
+) RETURNS	jsonb
+AS $$
+BEGIN
+  RETURN GetObjectCoordinatesJsonb(pObject);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_object_coordinates --------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает данные объекта
+ * @param {numeric} pId - Идентификатор объекта
+ * @return {api.object_coordinates}
+ */
+CREATE OR REPLACE FUNCTION api.get_object_coordinates (
+  pId		numeric
+) RETURNS	api.object_coordinates
+AS $$
+  SELECT * FROM api.object_coordinates WHERE id = pId
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.list_object_coordinates -------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает список данных объекта.
+ * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
+ * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
+ * @param {integer} pLimit - Лимит по количеству строк
+ * @param {integer} pOffSet - Пропустить указанное число строк
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
+ * @return {SETOF api.object_coordinates}
+ */
+CREATE OR REPLACE FUNCTION api.list_object_coordinates (
+  pSearch	jsonb default null,
+  pFilter	jsonb default null,
+  pLimit	integer default null,
+  pOffSet	integer default null,
+  pOrderBy	jsonb default null
+) RETURNS	SETOF api.object_coordinates
+AS $$
+BEGIN
+  RETURN QUERY EXECUTE CreateApiSql('api', 'object_coordinates', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER

@@ -1918,6 +1918,113 @@ BEGIN
         END LOOP;
       END LOOP;
 
+    WHEN '/object/geolocation' THEN
+
+      IF pJson IS NULL THEN
+        PERFORM JsonIsEmpty();
+      END IF;
+
+      arKeys := array_cat(arKeys, ARRAY['id', 'coordinates']);
+      PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+
+      IF jsonb_typeof(pJson) = 'array' THEN
+
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, coordinates json)
+        LOOP
+          IF r.coordinates IS NOT NULL THEN
+            RETURN NEXT row_to_json(api.set_object_coordinates_json(r.id, r.coordinates));
+          ELSE
+            RETURN NEXT api.get_object_coordinates_json(r.id);
+          END IF;
+        END LOOP;
+
+      ELSE
+
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, coordinates json)
+        LOOP
+          IF r.coordinates IS NOT NULL THEN
+            RETURN NEXT row_to_json(api.set_object_coordinates_json(r.id, r.coordinates));
+          ELSE
+            RETURN NEXT api.get_object_coordinates_json(r.id);
+          END IF;
+        END LOOP;
+
+      END IF;
+
+    WHEN '/object/geolocation/set' THEN
+
+      IF pJson IS NULL THEN
+        PERFORM JsonIsEmpty();
+      END IF;
+
+      arKeys := array_cat(arKeys, ARRAY['id', 'coordinates']);
+      PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+
+      IF jsonb_typeof(pJson) = 'array' THEN
+
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, coordinates json)
+        LOOP
+          RETURN NEXT row_to_json(api.set_object_coordinates_json(r.id, r.coordinates));
+        END LOOP;
+
+      ELSE
+
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, coordinates json)
+        LOOP
+          RETURN NEXT row_to_json(api.set_object_coordinates_json(r.id, r.coordinates));
+        END LOOP;
+
+      END IF;
+
+
+    WHEN '/object/geolocation/get' THEN
+
+      IF pJson IS NULL THEN
+        PERFORM JsonIsEmpty();
+      END IF;
+
+      arKeys := array_cat(arKeys, ARRAY['id', 'fields']);
+      PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+
+      IF jsonb_typeof(pJson) = 'array' THEN
+
+        FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, fields jsonb)
+        LOOP
+          FOR e IN EXECUTE format('SELECT %s FROM api.get_object_coordinates($1)', JsonbToFields(r.fields, GetColumns('object_coordinates', 'api'))) USING r.id
+          LOOP
+            RETURN NEXT row_to_json(e);
+          END LOOP;
+        END LOOP;
+
+      ELSE
+
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, fields jsonb)
+        LOOP
+          FOR e IN EXECUTE format('SELECT %s FROM api.get_object_coordinates($1)', JsonbToFields(r.fields, GetColumns('object_coordinates', 'api'))) USING r.id
+          LOOP
+            RETURN NEXT row_to_json(e);
+          END LOOP;
+        END LOOP;
+
+      END IF;
+
+    WHEN '/object/geolocation/list' THEN
+
+      IF pJson IS NOT NULL THEN
+        arKeys := array_cat(arKeys, ARRAY['fields', 'search', 'filter', 'reclimit', 'recoffset', 'orderby']);
+        PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+      ELSE
+        pJson := '{}';
+      END IF;
+
+      FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(fields jsonb, search jsonb, filter jsonb, reclimit integer, recoffset integer, orderby jsonb)
+      LOOP
+        FOR e IN EXECUTE format('SELECT %s FROM api.list_object_coordinates($1, $2, $3, $4, $5)', JsonbToFields(r.fields, GetColumns('object_coordinates', 'api'))) USING r.search, r.filter, r.reclimit, r.recoffset, r.orderby
+        LOOP
+          RETURN NEXT row_to_json(e);
+        END LOOP;
+      END LOOP;
+
     WHEN '/calendar/method' THEN
 
       IF pJson IS NULL THEN

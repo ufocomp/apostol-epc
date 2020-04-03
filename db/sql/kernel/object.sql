@@ -1610,33 +1610,6 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- GetObjectFiles --------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION GetObjectFiles (
-  pObject	numeric
-) RETURNS	text[]
-AS $$
-DECLARE
-  arResult	text[]; 
-  r		    ObjectFile%rowtype;
-BEGIN
-  FOR r IN
-    SELECT *
-      FROM ObjectFile
-     WHERE object = pObject
-     ORDER BY Loaded desc, Path, Name
-  LOOP
-    arResult := array_cat(arResult, ARRAY[r.id, r.hash, r.name, r.path, r.size, r.date, r.body, r.loaded]);
-  END LOOP;
-
-  RETURN arResult;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
 -- GetObjectFilesJson ----------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -1900,33 +1873,6 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- GetObjectData ---------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION GetObjectData (
-  pObject	numeric
-) RETURNS	text[]
-AS $$
-DECLARE
-  arResult	text[];
-  r		    ObjectData%rowtype;
-BEGIN
-  FOR r IN
-    SELECT *
-      FROM ObjectData
-     WHERE object = pObject
-     ORDER BY type, code
-  LOOP
-    arResult := array_cat(arResult, ARRAY[r.id, r.typecode, r.code, r.data]);
-  END LOOP;
-
-  RETURN arResult;
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
 -- GetObjectDataJson -----------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -1963,6 +1909,220 @@ CREATE OR REPLACE FUNCTION GetObjectDataJsonb (
 AS $$
 BEGIN
   RETURN GetObjectDataJson(pObject);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- db.object_coordinates -------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE TABLE db.object_coordinates (
+    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
+    object		numeric(12) NOT NULL,
+    code        varchar(30) NOT NULL,
+    name 		varchar(50) NOT NULL,
+    latitude    numeric NOT NULL,
+    longitude   numeric NOT NULL,
+    accuracy    numeric NOT NULL DEFAULT 0,
+    description	text,
+    CONSTRAINT fk_object_coordinates_object FOREIGN KEY (object) REFERENCES db.object(id)
+);
+
+COMMENT ON TABLE db.object_coordinates IS 'Произвольные данные объекта.';
+
+COMMENT ON COLUMN db.object_coordinates.object IS 'Объект';
+COMMENT ON COLUMN db.object_coordinates.code IS 'Код';
+COMMENT ON COLUMN db.object_coordinates.name IS 'Наименование';
+COMMENT ON COLUMN db.object_coordinates.latitude IS 'Широта';
+COMMENT ON COLUMN db.object_coordinates.longitude IS 'Долгота';
+COMMENT ON COLUMN db.object_coordinates.accuracy IS 'Точность (высота над уровнем моря)';
+COMMENT ON COLUMN db.object_coordinates.description IS 'Описание';
+
+CREATE INDEX ON db.object_coordinates (object);
+CREATE INDEX ON db.object_coordinates (code);
+
+CREATE UNIQUE INDEX ON db.object_coordinates (object, code);
+
+--------------------------------------------------------------------------------
+-- VIEW ObjectCoordinates ------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW ObjectCoordinates
+AS
+  SELECT * FROM db.object_coordinates;
+
+GRANT SELECT ON ObjectCoordinates TO administrator;
+
+--------------------------------------------------------------------------------
+-- AddObjectCoordinates --------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION AddObjectCoordinates (
+  pObject   	numeric,
+  pCode		    varchar,
+  pName		    varchar,
+  pLatitude     numeric,
+  pLongitude    numeric,
+  pAccuracy     numeric,
+  pDescription  text
+) RETURNS       numeric
+AS $$
+DECLARE
+  nId		numeric;
+BEGIN
+  INSERT INTO db.object_coordinates (object, code, name, latitude, longitude, accuracy, description)
+  VALUES (pObject, pCode, pName, pLatitude, pLongitude, pAccuracy, pDescription)
+  RETURNING id INTO nId;
+
+  RETURN nId;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- EditObjectCoordinates -------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EditObjectCoordinates (
+  pId           numeric,
+  pObject   	numeric,
+  pCode		    varchar,
+  pName		    varchar,
+  pLatitude     numeric,
+  pLongitude    numeric,
+  pAccuracy     numeric,
+  pDescription  text
+) RETURNS       void
+AS $$
+BEGIN
+  UPDATE db.object_coordinates
+     SET object = coalesce(pObject, object),
+         code = coalesce(pCode, code),
+         name = coalesce(pName, name),
+         latitude = coalesce(pLatitude, latitude),
+         longitude = coalesce(pLongitude, longitude),
+         accuracy = coalesce(pAccuracy, accuracy),
+         description = coalesce(pDescription, description)
+   WHERE id = pId;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- DeleteObjectCoordinates -----------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION DeleteObjectCoordinates (
+  pId		numeric
+) RETURNS	void
+AS $$
+BEGIN
+  DELETE FROM db.object_coordinates WHERE id = pId;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- DeleteObjectCoordinates -----------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION DeleteObjectCoordinates (
+  pObject	numeric,
+  pCode		varchar
+) RETURNS	void
+AS $$
+BEGIN
+  DELETE FROM db.object_coordinates WHERE object = pObject AND code = pCode;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- GetObjectCoordinates --------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetObjectCoordinates (
+  pObject       numeric,
+  pCode         varchar
+) RETURNS       ObjectCoordinates
+AS $$
+  SELECT * FROM ObjectCoordinates WHERE object = pObject AND code = pCode;
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- GetObjectCoordinates --------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetObjectCoordinates (
+  pObject	numeric
+) RETURNS	text[][]
+AS $$
+DECLARE
+  arResult	text[][];
+  i		    integer default 1;
+  r		    ObjectCoordinates%rowtype;
+BEGIN
+  FOR r IN
+    SELECT *
+      FROM ObjectCoordinates
+     WHERE object = pObject
+     ORDER BY code
+  LOOP
+    arResult[i] := ARRAY[r.id, r.code, r.name, r.latitude, r.longitude, r.accuracy, r.description];
+    i := i + 1;
+  END LOOP;
+
+  RETURN arResult;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- GetObjectCoordinatesJson ----------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetObjectCoordinatesJson (
+  pObject	numeric
+) RETURNS	json
+AS $$
+DECLARE
+  arResult	json[];
+  r		    record;
+BEGIN
+  FOR r IN
+    SELECT id, code, name, latitude, longitude, accuracy, description
+      FROM ObjectCoordinates
+     WHERE object = pObject
+     ORDER BY code
+  LOOP
+    arResult := array_append(arResult, row_to_json(r));
+  END LOOP;
+
+  RETURN array_to_json(arResult);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- GetObjectCoordinatesJsonb ---------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetObjectCoordinatesJsonb (
+  pObject	numeric
+) RETURNS	jsonb
+AS $$
+BEGIN
+  RETURN GetObjectCoordinatesJson(pObject);
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
