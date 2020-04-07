@@ -367,6 +367,20 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
+        void CConfig::SetJoinUser(LPCTSTR AValue) {
+            if (m_sJoinUser != AValue) {
+                m_sJoinUser = AValue;
+            }
+        }
+        //--------------------------------------------------------------------------------------------------------------
+
+        void CConfig::SetJoinPassword(LPCTSTR AValue) {
+            if (m_sJoinPassword != AValue) {
+                m_sJoinPassword = AValue;
+            }
+        }
+        //--------------------------------------------------------------------------------------------------------------
+
         void CConfig::SetDefault() {
             m_uErrorCount = 0;
 
@@ -438,6 +452,9 @@ namespace Apostol {
 
             Add(new CConfigCommand(_T("postgres/poll"), _T("min"), &m_nPostgresPollMin));
             Add(new CConfigCommand(_T("postgres/poll"), _T("max"), &m_nPostgresPollMax));
+
+            Add(new CConfigCommand(_T("join"), _T("user"), m_sJoinUser.c_str(), std::bind(&CConfig::SetJoinUser, this, _1)));
+            Add(new CConfigCommand(_T("join"), _T("password"), m_sJoinPassword.c_str(), std::bind(&CConfig::SetJoinPassword, this, _1)));
         }
         //--------------------------------------------------------------------------------------------------------------
 

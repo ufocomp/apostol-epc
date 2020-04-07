@@ -28,6 +28,7 @@ DECLARE
   tsBegin	timestamp;
 
   arKeys	text[];
+  vUserName varchar;
   vMessage	text;
 BEGIN
   IF pRoute IS NULL THEN
@@ -55,7 +56,7 @@ BEGIN
         PERFORM JsonIsEmpty();
       END IF;
 
-      arKeys := array_cat(arKeys, ARRAY['username', 'password', 'host', 'session']);
+      arKeys := array_cat(arKeys, ARRAY['username', 'phone', 'email', 'password', 'host', 'session']);
       PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
 
       IF pJson ? 'session' THEN
@@ -63,10 +64,22 @@ BEGIN
         LOOP
           RETURN NEXT row_to_json(api.slogin(r.session, r.host));
         END LOOP;
+      ELSIF pJson ? 'phone' THEN
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(phone text, password text, host inet)
+        LOOP
+          SELECT username INTO vUserName FROM db.user WHERE type = 'U' AND phone = r.phone;
+          RETURN NEXT row_to_json(api.login(coalesce(vUserName, ''), r.password, r.host));
+        END LOOP;
+      ELSIF pJson ? 'email' THEN
+        FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(email text, password text, host inet)
+        LOOP
+          SELECT username INTO vUserName FROM db.user WHERE type = 'U' AND email = r.email;
+          RETURN NEXT row_to_json(api.login(coalesce(vUserName, ''), r.password, r.host));
+        END LOOP;
       ELSE
         FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(username text, password text, host inet)
         LOOP
-          RETURN NEXT row_to_json(api.login(r.username, r.password, r.host));
+          RETURN NEXT row_to_json(api.login(coalesce(r.username, ''), r.password, r.host));
         END LOOP;
       END IF;
 
@@ -82,6 +95,20 @@ BEGIN
       FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(session text, logoutall boolean)
       LOOP
         RETURN NEXT row_to_json(api.logout(coalesce(r.session, current_session()), r.logoutall));
+      END LOOP;
+
+    WHEN '/join' THEN
+
+      IF pJson IS NULL THEN
+        PERFORM JsonIsEmpty();
+      END IF;
+
+      arKeys := array_cat(arKeys, ARRAY['type', 'username', 'password', 'name', 'phone', 'email', 'info', 'description']);
+      PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+
+      FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(type varchar, username varchar, password text, name jsonb, phone text, email text, info jsonb, description text)
+      LOOP
+        RETURN NEXT row_to_json(api.join(NULLIF(r.type, ''), NULLIF(r.username, ''), NULLIF(r.password, ''), r.name, NULLIF(r.phone, ''), NULLIF(r.email, ''), r.info, r.description));
       END LOOP;
 
     WHEN '/su' THEN
@@ -1403,6 +1430,31 @@ BEGIN
         RETURN NEXT row_to_json(r);
       END LOOP;
 
+    WHEN '/method' THEN
+
+      FOR r IN SELECT * FROM api.method
+      LOOP
+        RETURN NEXT row_to_json(r);
+      END LOOP;
+
+    WHEN '/method/get' THEN
+
+      IF pJson IS NULL THEN
+        PERFORM JsonIsEmpty();
+      END IF;
+
+      arKeys := array_cat(arKeys, ARRAY['object', 'class', 'classcode', 'state', 'statecode', 'action', 'actioncode']);
+      PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
+
+      FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(object numeric, class numeric, classcode varchar, state numeric, statecode varchar, action numeric, actioncode varchar)
+      LOOP
+        nId := coalesce(r.class, GetClass(r.classcode), GetObjectClass(r.object));
+        FOR e IN SELECT * FROM api.get_method(nId, coalesce(r.state, GetState(nId, r.statecode), GetObjectState(r.object)), coalesce(r.action, GetAction(r.actioncode)))
+        LOOP
+          RETURN NEXT row_to_json(e);
+        END LOOP;
+      END LOOP;
+
     WHEN '/action/run' THEN
 
       IF pJson IS NULL THEN
@@ -1433,24 +1485,6 @@ BEGIN
         END LOOP;
 
       END IF;
-
-    WHEN '/method/get' THEN
-
-      IF pJson IS NULL THEN
-        PERFORM JsonIsEmpty();
-      END IF;
-
-      arKeys := array_cat(arKeys, ARRAY['object', 'class', 'classcode', 'state', 'statecode', 'action', 'actioncode']);
-      PERFORM CheckJsonbKeys(pRoute, arKeys, pJson);
-
-      FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(object numeric, class numeric, classcode varchar, state numeric, statecode varchar, action numeric, actioncode varchar)
-      LOOP
-        nId := coalesce(r.class, GetClass(r.classcode), GetObjectClass(r.object));
-        FOR e IN SELECT * FROM api.get_method(nId, coalesce(r.state, GetState(nId, r.statecode), GetObjectState(r.object)), coalesce(r.action, GetAction(r.actioncode)))
-        LOOP
-          RETURN NEXT row_to_json(e);
-        END LOOP;
-      END LOOP;
 
     WHEN '/method/run' THEN
 

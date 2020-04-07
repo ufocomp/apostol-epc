@@ -31,7 +31,7 @@ Author:
 #include "WebService/WebService.hpp"
 //----------------------------------------------------------------------------------------------------------------------
 
-static void CreateModule(CModuleManager *AManager) {
+static void CreateModules(CModuleManager *AManager) {
     CWebService::CreateModule(AManager)->InitMethods();
 }
 

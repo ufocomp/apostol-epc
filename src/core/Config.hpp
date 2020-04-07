@@ -285,6 +285,9 @@ namespace Apostol {
             CString m_sAccessLog;
             CString m_sPostgresLog;
 
+            CString m_sJoinUser;
+            CString m_sJoinPassword;
+
             CStringList m_LogFiles;
             CStringList m_PostgresConnInfo;
 
@@ -314,6 +317,9 @@ namespace Apostol {
             void SetErrorLog(LPCTSTR AValue);
             void SetAccessLog(LPCTSTR AValue);
             void SetPostgresLog(LPCTSTR AValue);
+
+            void SetJoinUser(LPCTSTR AValue);
+            void SetJoinPassword(LPCTSTR AValue);
 
             bool CheckLogFiles();
 
@@ -422,6 +428,14 @@ namespace Apostol {
             const CString& DocRoot() const { return m_sDocRoot; };
             void DocRoot(const CString& AValue) { SetDocRoot(AValue.c_str()); };
             void DocRoot(LPCTSTR AValue) { SetDocRoot(AValue); };
+
+            const CString& JoinUser() const { return m_sJoinUser; };
+            void JoinUser(const CString& AValue) { SetJoinUser(AValue.c_str()); };
+            void JoinUser(LPCTSTR AValue) { SetJoinUser(AValue); };
+
+            const CString& JoinPassword() const { return m_sJoinPassword; };
+            void JoinPassword(const CString& AValue) { SetJoinPassword(AValue.c_str()); };
+            void JoinPassword(LPCTSTR AValue) { SetJoinPassword(AValue); };
 
             CStringList& LogFiles() { return m_LogFiles; };
             const CStringList& LogFiles() const { return m_LogFiles; };

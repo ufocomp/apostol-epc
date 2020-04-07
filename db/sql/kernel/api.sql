@@ -93,6 +93,91 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
+-- api.join --------------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Создаёт нового клиента и пользователя.
+ * @param {varchar} pType - Tип клиента
+ * @param {varchar} pUserName - Имя пользователя (login)
+ * @param {text} pPassword - Пароль
+ * @param {jsonb} pName - Полное наименование компании/Ф.И.О.
+ * @param {text} pPhone - Телефон
+ * @param {text} pEmail - Электронный адрес
+ * @param {jsonb} pInfo - Дополнительная информация
+ * @param {text} pDescription - Информация о клиенте
+ * @out param {numeric} id - Идентификатор
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.join (
+  pType         varchar,
+  pUserName     varchar,
+  pPassword     text,
+  pName         jsonb,
+  pPhone        text default null,
+  pEmail        text default null,
+  pInfo         jsonb default null,
+  pDescription  text default null,
+  OUT id        numeric,
+  OUT result    boolean,
+  OUT message   text
+) RETURNS       record
+AS $$
+DECLARE
+  cn            record;
+  nClient       numeric;
+  nUserId       numeric;
+
+  jPhone        jsonb;
+  jEmail        jsonb;
+
+  arTypes       text[];
+  arKeys        text[];
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  pType := lower(pType);
+  arTypes := array_cat(arTypes, ARRAY['entity', 'natural', 'sole']);
+  IF array_position(arTypes, pType::text) IS NULL THEN
+    PERFORM IncorrectCode(pType, arTypes);
+  END IF;
+
+  arKeys := array_cat(arKeys, ARRAY['name', 'short', 'first', 'last', 'middle']);
+  PERFORM CheckJsonbKeys('join', arKeys, pName);
+
+  SELECT * INTO cn FROM jsonb_to_record(pName) AS x(name varchar, short varchar, first varchar, last varchar, middle varchar);
+
+  nUserId := CreateUser(pUserName, pPassword, cn.short, pPhone, pEmail, cn.name);
+
+  IF pPhone IS NOT NULL THEN
+    jPhone := jsonb_build_object('mobile', pPhone);
+  END IF;
+
+  IF pEmail IS NOT NULL THEN
+    jEmail := jsonb_build_object('default', pEmail);
+  END IF;
+
+  nClient := CreateClient(null, GetType(pType || '.client'), pUserName, nUserId, jPhone, jEmail, pInfo, pDescription);
+
+  PERFORM NewClientName(nClient, cn.name, cn.short, cn.first, cn.last, cn.middle);
+
+  id := nClient;
+
+  SELECT * INTO result, message FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  id := null;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
 -- api.su ----------------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**

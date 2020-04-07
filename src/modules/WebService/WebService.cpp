@@ -319,7 +319,16 @@ namespace Apostol {
 
             if (Route == "/login") {
                 SQL.Last().Format("SELECT * FROM api.run('%s', '%s'::jsonb);",
-                                            Route.c_str(), jsonString.IsEmpty() ? "{}" : jsonString.c_str());
+                                  Route.c_str(), jsonString.IsEmpty() ? "{}" : jsonString.c_str());
+            } else if (Route == "/join") {
+                SQL.Last().Format("SELECT * FROM api.login('%s', '%s');",
+                                  Config()->JoinUser().c_str(), Config()->JoinPassword().c_str());
+
+                SQL.Add(CString());
+                SQL.Last().Format("SELECT * FROM api.run('%s', '%s'::jsonb);",
+                                  Route.c_str(), jsonString.IsEmpty() ? "{}" : jsonString.c_str());
+
+                SQL.Add("SELECT * FROM api.logout();");
             } else {
                 if (Authorization.Session.IsEmpty()) {
                     SQL.Last().Format("SELECT * FROM api.login('%s', '%s');",
@@ -556,7 +565,7 @@ namespace Apostol {
 
             if (LAuthorization.IsEmpty()) {
 
-                if (LRoute == "/login") {
+                if (LRoute == "/login" || LRoute == "/join") {
                     if (!APIRun(AConnection, LRoute, LRequest->Content, CAuthorization())) {
                         AConnection->SendStockReply(CReply::internal_server_error);
                     }
@@ -584,6 +593,11 @@ namespace Apostol {
                 AConnection->SendReply(CReply::bad_request);
                 Log()->Error(APP_LOG_EMERG, 0, E.what());
             }
+        }
+        //--------------------------------------------------------------------------------------------------------------
+
+        void CWebService::Heartbeat() {
+
         }
         //--------------------------------------------------------------------------------------------------------------
 

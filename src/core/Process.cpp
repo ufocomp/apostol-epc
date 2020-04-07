@@ -280,7 +280,7 @@ namespace Apostol {
         //--------------------------------------------------------------------------------------------------------------
 
         CSignalProcess::CSignalProcess(CProcessType AType, CCustomProcess *AParent):
-            CCustomProcess(AType, AParent), CSignals(), m_pSignalProcess(this) {
+                CCustomProcess(AType, AParent), CSignals(), m_pSignalProcess(this) {
 
             sig_reap = 0;
             sig_sigio = 0;
@@ -646,6 +646,35 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
+        bool CServerProcess::ExecSQL(CPollConnection *AConnection, const CStringList &SQL,
+                                     COnPQPollQueryExecutedEvent &&OnExecuted,
+                                     COnPQPollQueryExceptionEvent &&OnException) {
+
+            auto LQuery = GetQuery(AConnection);
+
+            if (LQuery == nullptr)
+                throw Delphi::Exception::Exception("ExecSQL: GetQuery() failed!");
+
+            if (OnExecuted != nullptr)
+                LQuery->OnPollExecuted(static_cast<COnPQPollQueryExecutedEvent &&>(OnExecuted));
+
+            if (OnException != nullptr)
+                LQuery->OnException(static_cast<COnPQPollQueryExceptionEvent &&>(OnException));
+
+            LQuery->SQL() = SQL;
+
+            if (LQuery->QueryStart() != POLL_QUERY_START_ERROR) {
+                return true;
+            } else {
+                delete LQuery;
+            }
+
+            Log()->Error(APP_LOG_ALERT, 0, "ExecSQL: QueryStart() failed!");
+
+            return false;
+        }
+        //--------------------------------------------------------------------------------------------------------------
+
         void CServerProcess::DoPQReceiver(CPQConnection *AConnection, const PGresult *AResult) {
             CPQConnInfo &Info = AConnection->ConnInfo();
             if (Info.ConnInfo().IsEmpty()) {
@@ -827,7 +856,7 @@ namespace Apostol {
         //--------------------------------------------------------------------------------------------------------------
 
         void CServerProcess::DoServerException(CTCPConnection *AConnection,
-                                             Delphi::Exception::Exception *AException) {
+                Delphi::Exception::Exception *AException) {
             Log()->Error(APP_LOG_EMERG, 0, AException->what());
         }
         //--------------------------------------------------------------------------------------------------------------
@@ -881,7 +910,7 @@ namespace Apostol {
         //--------------------------------------------------------------------------------------------------------------
 
         void CServerProcess::DoVerbose(CSocketEvent *Sender, CTCPConnection *AConnection, LPCTSTR AFormat,
-                                     va_list args) {
+                va_list args) {
             Log()->Debug(0, AFormat, args);
         }
         //--------------------------------------------------------------------------------------------------------------
@@ -985,6 +1014,20 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
+        void CModuleProcess::DoTimer(CPollEventHandler *AHandler) {
+            uint64_t exp;
+
+            auto LTimer = dynamic_cast<CEPollTimer *> (AHandler->Binding());
+            LTimer->Read(&exp, sizeof(uint64_t));
+
+            try {
+                HeartbeatModules();
+            } catch (Delphi::Exception::Exception &E) {
+                DoServerEventHandlerException(AHandler, &E);
+            }
+        }
+        //--------------------------------------------------------------------------------------------------------------
+
         bool CModuleProcess::DoExecute(CTCPConnection *AConnection) {
             bool Result = false;
             auto LConnection = dynamic_cast<CHTTPServerConnection *> (AConnection);
@@ -992,7 +1035,7 @@ namespace Apostol {
             try {
                 clock_t start = clock();
 
-                Result = ExecuteModule(LConnection);
+                Result = ExecuteModules(LConnection);
 
                 Log()->Debug(0, _T("[Module] Runtime: %.2f ms."), (double) ((clock() - start) / (double) CLOCKS_PER_SEC * 1000));
             } catch (Delphi::Exception::Exception &E) {
@@ -1006,4 +1049,3 @@ namespace Apostol {
     }
 }
 }
-
