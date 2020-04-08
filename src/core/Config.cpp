@@ -174,6 +174,8 @@ namespace Apostol {
             m_nTimeOut = INFINITE;
             m_nConnectTimeOut = 0;
 
+            m_nLimitNoFile = static_cast<uint32_t>(-1);
+
             m_fMaster = false;
             m_fDaemon = false;
 
@@ -428,6 +430,8 @@ namespace Apostol {
             Add(new CConfigCommand(_T("main"), _T("user"), m_sUser.c_str(), std::bind(&CConfig::SetUser, this, _1)));
             Add(new CConfigCommand(_T("main"), _T("group"), m_sGroup.c_str(), std::bind(&CConfig::SetGroup, this, _1)));
 
+            Add(new CConfigCommand(_T("main"), _T("limitnofile"), &m_nLimitNoFile));
+
             Add(new CConfigCommand(_T("main"), _T("workers"), &m_nWorkers));
             Add(new CConfigCommand(_T("main"), _T("master"), &m_fMaster));
             Add(new CConfigCommand(_T("main"), _T("locale"), m_sLocale.c_str(), std::bind(&CConfig::SetLocale, this, _1)));
@@ -482,6 +486,10 @@ namespace Apostol {
                     switch (C->Type()) {
                         case ctInteger:
                             V = F.ReadInteger(C->Section(), C->Ident(), C->Default().vasInteger);
+                            break;
+
+                        case ctUInteger:
+                            V = ((uint32_t) F.ReadInteger(C->Section(), C->Ident(), C->Default().vasUnsigned));
                             break;
 
                         case ctDouble:

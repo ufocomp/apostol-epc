@@ -152,12 +152,14 @@ BEGIN
 
   nUserId := CreateUser(pUserName, pPassword, cn.short, pPhone, pEmail, cn.name);
 
+  PERFORM AddMemberToGroup(nUserId, GetGroup('user'));
+
   IF pPhone IS NOT NULL THEN
     jPhone := jsonb_build_object('mobile', pPhone);
   END IF;
 
   IF pEmail IS NOT NULL THEN
-    jEmail := jsonb_build_object('default', pEmail);
+    jEmail := jsonb_build_array(pEmail);
   END IF;
 
   nClient := CreateClient(null, GetType(pType || '.client'), pUserName, nUserId, jPhone, jEmail, pInfo, pDescription);
