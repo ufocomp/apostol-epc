@@ -3,17 +3,19 @@
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.charge_point (
-    Id                  numeric(12) PRIMARY KEY,
-    Reference           numeric(12) NOT NULL,
-    Model               varchar(20) NOT NULL,
-    Vendor              varchar(20) NOT NULL,
-    Version             varchar(50),
-    SerialNumber        varchar(25),
-    BoxSerialNumber     varchar(25),
-    MeterSerialNumber   varchar(25),
+    id                  numeric(12) PRIMARY KEY,
+    reference           numeric(12) NOT NULL,
+    client              numeric(12),
+    model               varchar(20) NOT NULL,
+    vendor              varchar(20) NOT NULL,
+    version             varchar(50),
+    serialNumber        varchar(25),
+    boxSerialNumber     varchar(25),
+    meterSerialNumber   varchar(25),
     iccid               varchar(20),
     imsi                varchar(20),
-    CONSTRAINT fk_charge_point_reference FOREIGN KEY (reference) REFERENCES db.reference(id)
+    CONSTRAINT fk_charge_point_reference FOREIGN KEY (reference) REFERENCES db.reference(id),
+    CONSTRAINT fk_charge_point_client FOREIGN KEY (client) REFERENCES db.client(id)
 );
 
 --------------------------------------------------------------------------------
@@ -22,12 +24,13 @@ COMMENT ON TABLE db.charge_point IS 'Зарядная станция.';
 
 COMMENT ON COLUMN db.charge_point.id IS 'Идентификатор.';
 COMMENT ON COLUMN db.charge_point.reference IS 'Справочник.';
-COMMENT ON COLUMN db.charge_point.Model IS 'Required. This contains a value that identifies the model of the ChargePoint.';
-COMMENT ON COLUMN db.charge_point.Vendor IS 'Required. This contains a value that identifies the vendor of the ChargePoint.';
-COMMENT ON COLUMN db.charge_point.Version IS 'Optional. This contains the firmware version of the Charge Point.';
-COMMENT ON COLUMN db.charge_point.SerialNumber IS 'Optional. This contains a value that identifies the serial number of the Charge Point.';
-COMMENT ON COLUMN db.charge_point.BoxSerialNumber IS 'Optional. This contains a value that identifies the serial number of the Charge Box inside the Charge Point. Deprecated, will be removed in future version.';
-COMMENT ON COLUMN db.charge_point.MeterSerialNumber IS 'Optional. This contains the serial number of the main electrical meter of the Charge Point.';
+COMMENT ON COLUMN db.charge_point.client IS 'Клиент.';
+COMMENT ON COLUMN db.charge_point.model IS 'Required. This contains a value that identifies the model of the ChargePoint.';
+COMMENT ON COLUMN db.charge_point.vendor IS 'Required. This contains a value that identifies the vendor of the ChargePoint.';
+COMMENT ON COLUMN db.charge_point.version IS 'Optional. This contains the firmware version of the Charge Point.';
+COMMENT ON COLUMN db.charge_point.serialNumber IS 'Optional. This contains a value that identifies the serial number of the Charge Point.';
+COMMENT ON COLUMN db.charge_point.boxSerialNumber IS 'Optional. This contains a value that identifies the serial number of the Charge Box inside the Charge Point. Deprecated, will be removed in future version.';
+COMMENT ON COLUMN db.charge_point.meterSerialNumber IS 'Optional. This contains the serial number of the main electrical meter of the Charge Point.';
 COMMENT ON COLUMN db.charge_point.iccid IS 'Optional. This contains the ICCID of the modem’s SIM card.';
 COMMENT ON COLUMN db.charge_point.imsi IS 'Optional. This contains the IMSI of the modem’s SIM card.';
 
@@ -37,12 +40,35 @@ CREATE INDEX ON db.charge_point (reference);
 
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION ft_charge_point_insert()
+CREATE OR REPLACE FUNCTION ft_charge_point_before_insert()
 RETURNS trigger AS $$
 DECLARE
 BEGIN
   IF NEW.ID IS NULL OR NEW.ID = 0 THEN
     SELECT NEW.REFERENCE INTO NEW.ID;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+
+CREATE TRIGGER t_charge_point_before_insert
+  BEFORE INSERT ON db.charge_point
+  FOR EACH ROW
+  EXECUTE PROCEDURE ft_charge_point_before_insert();
+
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION ft_charge_point_after_insert()
+RETURNS trigger AS $$
+BEGIN
+  IF NEW.client IS NOT NULL THEN
+    INSERT INTO db.aou SELECT NEW.reference, GetClientUserId(NEW.client), B'000', B'110';
+    DELETE FROM db.aou WHERE object = NEW.reference AND userid = 1002;
   END IF;
 
   RAISE DEBUG 'Создана зарядная станция Id: %', NEW.ID;
@@ -55,17 +81,29 @@ $$ LANGUAGE plpgsql
 
 --------------------------------------------------------------------------------
 
-CREATE TRIGGER t_charge_point_insert
-  BEFORE INSERT ON db.charge_point
+CREATE TRIGGER t_charge_point_after_insert
+  AFTER INSERT ON db.charge_point
   FOR EACH ROW
-  EXECUTE PROCEDURE ft_charge_point_insert();
+  EXECUTE PROCEDURE ft_charge_point_after_insert();
 
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION ft_charge_point_update()
+CREATE OR REPLACE FUNCTION ft_charge_point_after_update()
 RETURNS trigger AS $$
-DECLARE
 BEGIN
+  IF coalesce(OLD.client, 0) <> coalesce(NEW.client, 0) THEN
+    IF NEW.client IS NULL THEN
+      INSERT INTO db.aou SELECT NEW.ID, 1002, B'000', B'100';
+    ELSE
+      INSERT INTO db.aou SELECT NEW.reference, GetClientUserId(NEW.client), B'000', B'110';
+      DELETE FROM db.aou WHERE object = NEW.reference AND userid = 1002;
+    END IF;
+
+    IF OLD.client IS NOT NULL THEN
+      DELETE FROM db.aou WHERE object = OLD.reference AND userid = GetClientUserId(OLD.client);
+    END IF;
+  END IF;
+
   RAISE DEBUG 'Изменёна зарядная станция Id: %', NEW.ID;
 
   RETURN NEW;
@@ -76,10 +114,10 @@ $$ LANGUAGE plpgsql
 
 --------------------------------------------------------------------------------
 
-CREATE TRIGGER t_charge_point_update
-  BEFORE UPDATE ON db.charge_point
+CREATE TRIGGER t_charge_point_after_update
+  AFTER UPDATE ON db.charge_point
   FOR EACH ROW
-  EXECUTE PROCEDURE ft_charge_point_update();
+  EXECUTE PROCEDURE ft_charge_point_after_update();
 
 --------------------------------------------------------------------------------
 -- CreateChargePoint -----------------------------------------------------------
@@ -88,6 +126,7 @@ CREATE TRIGGER t_charge_point_update
 CREATE OR REPLACE FUNCTION CreateChargePoint (
   pParent               numeric,
   pType                 numeric,
+  pClient               numeric,
   pIdentity             varchar,
   pName                 varchar,
   pModel                varchar,
@@ -108,8 +147,8 @@ DECLARE
 BEGIN
   nReference := CreateReference(pParent, pType, pIdentity, pName, pDescription);
 
-  INSERT INTO db.charge_point (id, reference, model, vendor, version, serialnumber, boxserialnumber, meterserialnumber, iccid, imsi)
-  VALUES (nReference, nReference, pModel, pVendor, pVersion, pSerialNumber, pBoxSerialNumber, pMeterSerialNumber, piccid, pimsi);
+  INSERT INTO db.charge_point (id, reference, client, model, vendor, version, serialnumber, boxserialnumber, meterserialnumber, iccid, imsi)
+  VALUES (nReference, nReference, pClient, pModel, pVendor, pVersion, pSerialNumber, pBoxSerialNumber, pMeterSerialNumber, piccid, pimsi);
 
   SELECT class INTO nClass FROM db.type WHERE id = pType;
 
@@ -130,6 +169,7 @@ CREATE OR REPLACE FUNCTION EditChargePoint (
   pId                   numeric,
   pParent               numeric default null,
   pType                 numeric default null,
+  pClient               numeric default null,
   pIdentity             varchar default null,
   pName                 varchar default null,
   pModel                varchar default null,
@@ -150,14 +190,15 @@ BEGIN
   PERFORM EditReference(pId, pParent, pType, pIdentity, pName, pDescription);
 
   UPDATE db.charge_point
-     SET Model = coalesce(pModel, Model),
-         Vendor = coalesce(pVendor, Vendor),
-         Version = coalesce(pVersion, Version),
-         SerialNumber = coalesce(pSerialNumber, SerialNumber),
-         BoxSerialNumber = coalesce(pBoxSerialNumber, BoxSerialNumber),
-         MeterSerialNumber = coalesce(pMeterSerialNumber, MeterSerialNumber),
-         iccid = coalesce(piccid, iccid),
-         imsi = coalesce(pimsi, imsi)
+     SET client = CheckNull(coalesce(pClient, client), 0),
+         model = coalesce(pModel, model),
+         vendor = coalesce(pVendor, vendor),
+         version = CheckNull(coalesce(pVersion, version), '<null>'),
+         serialNumber = CheckNull(coalesce(pSerialNumber, serialNumber), '<null>'),
+         boxSerialNumber = CheckNull(coalesce(pBoxSerialNumber, boxSerialNumber), '<null>'),
+         meterSerialNumber = CheckNull(coalesce(pMeterSerialNumber, meterSerialNumber), '<null>'),
+         iccid = CheckNull(coalesce(piccid, iccid), '<null>'),
+         imsi = CheckNull(coalesce(pimsi, imsi), '<null>')
    WHERE id = pId;
 
   SELECT class INTO nClass FROM db.type WHERE id = pType;
@@ -194,7 +235,7 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.status_notification (
-    Id              numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_OCPP_STATUS'),
+    id              numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_OCPP_STATUS'),
     chargePoint     numeric(12) NOT NULL,
     connectorId     integer NOT NULL,
     status          varchar(50) NOT NULL,
@@ -202,8 +243,8 @@ CREATE TABLE db.status_notification (
     info            varchar(50),
     vendorId		varchar(255),
     vendorErrorCode	varchar(50),
-    ValidFromDate	timestamp DEFAULT NOW() NOT NULL,
-    ValidToDate		timestamp DEFAULT TO_DATE('4433-12-31', 'YYYY-MM-DD') NOT NULL,
+    validFromDate	timestamp DEFAULT NOW() NOT NULL,
+    validToDate		timestamp DEFAULT TO_DATE('4433-12-31', 'YYYY-MM-DD') NOT NULL,
     CONSTRAINT fk_status_notification_chargePoint FOREIGN KEY (chargePoint) REFERENCES db.charge_point(id)
 );
 
@@ -211,7 +252,7 @@ CREATE TABLE db.status_notification (
 
 COMMENT ON TABLE db.status_notification IS 'Уведомление о статусе.';
 
-COMMENT ON COLUMN db.status_notification.Id IS 'Идентификатор.';
+COMMENT ON COLUMN db.status_notification.id IS 'Идентификатор.';
 COMMENT ON COLUMN db.status_notification.chargePoint IS 'Зарядная станция.';
 COMMENT ON COLUMN db.status_notification.connectorId IS 'Required. The id of the connector for which the status is reported. Id "0" (zero) is used if the status is for the Charge Point main controller.';
 COMMENT ON COLUMN db.status_notification.status IS 'Required. This contains the current status of the Charge Point.';
@@ -219,16 +260,16 @@ COMMENT ON COLUMN db.status_notification.errorCode IS 'Required. This contains t
 COMMENT ON COLUMN db.status_notification.info IS 'Optional. Additional free format information related to the error.';
 COMMENT ON COLUMN db.status_notification.vendorId IS 'Optional. This identifies the vendor-specific implementation.';
 COMMENT ON COLUMN db.status_notification.vendorErrorCode IS 'Optional. This contains the vendor-specific error code.';
-COMMENT ON COLUMN db.status_notification.ValidFromDate IS 'Дата начала периода действия';
-COMMENT ON COLUMN db.status_notification.ValidToDate IS 'Дата окончания периода действия.';
+COMMENT ON COLUMN db.status_notification.validFromDate IS 'Дата начала периода действия';
+COMMENT ON COLUMN db.status_notification.validToDate IS 'Дата окончания периода действия.';
 
 --------------------------------------------------------------------------------
 
 CREATE INDEX ON db.status_notification (chargePoint);
 CREATE INDEX ON db.status_notification (connectorId);
-CREATE INDEX ON db.status_notification (chargePoint, ValidFromDate, ValidToDate);
+CREATE INDEX ON db.status_notification (chargePoint, validFromDate, validToDate);
 
-CREATE UNIQUE INDEX ON db.status_notification (chargePoint, connectorId, ValidFromDate, ValidToDate);
+CREATE UNIQUE INDEX ON db.status_notification (chargePoint, connectorId, validFromDate, validToDate);
 
 --------------------------------------------------------------------------------
 -- FUNCTION AddStatusNotification ----------------------------------------------
@@ -252,12 +293,12 @@ DECLARE
   dtDateTo 		    timestamp;
 BEGIN
   -- получим дату значения в текущем диапозоне дат
-  SELECT max(ValidFromDate), max(ValidToDate) INTO dtDateFrom, dtDateTo
+  SELECT max(validFromDate), max(validToDate) INTO dtDateFrom, dtDateTo
     FROM db.status_notification
    WHERE chargePoint = pChargePoint
      AND connectorId = pConnectorId
-     AND ValidFromDate <= pTimeStamp
-     AND ValidToDate > pTimeStamp;
+     AND validFromDate <= pTimeStamp
+     AND validToDate > pTimeStamp;
 
   IF dtDateFrom = pTimeStamp THEN
     -- обновим значение в текущем диапозоне дат
@@ -269,15 +310,15 @@ BEGIN
            vendorErrorCode = pVendorErrorCode
      WHERE chargePoint = pChargePoint
        AND connectorId = pConnectorId
-       AND ValidFromDate <= pTimeStamp
-       AND ValidToDate > pTimeStamp;
+       AND validFromDate <= pTimeStamp
+       AND validToDate > pTimeStamp;
   ELSE
     -- обновим дату значения в текущем диапозоне дат
-    UPDATE db.status_notification SET ValidToDate = pTimeStamp
+    UPDATE db.status_notification SET validToDate = pTimeStamp
      WHERE chargePoint = pChargePoint
        AND connectorId = pConnectorId
-       AND ValidFromDate <= pTimeStamp
-       AND ValidToDate > pTimeStamp;
+       AND validFromDate <= pTimeStamp
+       AND validToDate > pTimeStamp;
 
     INSERT INTO db.status_notification (chargePoint, connectorId, status, errorCode, info, vendorId, vendorErrorCode, validfromdate, validtodate)
     VALUES (pChargePoint, pConnectorId, pStatus, pErrorCode, pInfo, pVendorId, pVendorErrorCode, pTimeStamp, coalesce(dtDateTo, MAXDATE()))
@@ -315,11 +356,11 @@ DECLARE
   r		        record;
 BEGIN
   FOR r IN
-  SELECT *
-    FROM StatusNotification
-   WHERE chargepoint = pChargePoint
-     AND connectorid = coalesce(pConnectorId, connectorid)
-     AND pDate BETWEEN validfromdate AND validtodate
+    SELECT *
+      FROM StatusNotification
+     WHERE chargepoint = pChargePoint
+       AND connectorid = coalesce(pConnectorId, connectorid)
+       AND pDate BETWEEN validfromdate AND validtodate
   LOOP
     arResult := array_append(arResult, row_to_json(r));
   END LOOP;
@@ -335,15 +376,15 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.transaction (
-    Id			    numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_OCPP_TRANSACTION'),
-    Card		    numeric(12) NOT NULL,
+    id			    numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_OCPP_TRANSACTION'),
+    card		    numeric(12) NOT NULL,
     chargePoint		numeric(12) NOT NULL,
     connectorId		integer NOT NULL,
     meterStart		integer NOT NULL,
     meterStop		integer,
     reservationId	integer,
     reason		    text,
-    Data		    json,
+    data		    json,
     dateStart		timestamp NOT NULL,
     dateStop		timestamp DEFAULT TO_DATE('4433-12-31', 'YYYY-MM-DD') NOT NULL,
     CONSTRAINT fk_transaction_Card FOREIGN KEY (Card) REFERENCES db.card(id),
@@ -354,24 +395,24 @@ CREATE TABLE db.transaction (
 
 COMMENT ON TABLE db.transaction IS 'Уведомление о статусе.';
 
-COMMENT ON COLUMN db.transaction.Id IS 'Идентификатор.';
-COMMENT ON COLUMN db.transaction.Card IS 'Пластиковая карта.';
+COMMENT ON COLUMN db.transaction.id IS 'Идентификатор.';
+COMMENT ON COLUMN db.transaction.card IS 'Пластиковая карта.';
 COMMENT ON COLUMN db.transaction.chargePoint IS 'Зарядная станция.';
 COMMENT ON COLUMN db.transaction.connectorId IS 'Required. This identifies which connector of the Charge Point is used.';
 COMMENT ON COLUMN db.transaction.meterStart IS 'Required. This contains the meter value in Wh for the connector at start of the transaction.';
 COMMENT ON COLUMN db.transaction.meterStop IS 'Required. This contains the meter value in Wh for the connector at end of the transaction.';
 COMMENT ON COLUMN db.transaction.reservationId IS 'Optional. This contains the id of the reservation that terminates as a result of this transaction.';
 COMMENT ON COLUMN db.transaction.reason IS 'Optional. This contains the reason why the transaction was stopped. MAY only be omitted when the Reason is "Local".';
-COMMENT ON COLUMN db.transaction.Data IS 'Optional. This contains transaction usage details relevant for billing purposes.';
+COMMENT ON COLUMN db.transaction.data IS 'Optional. This contains transaction usage details relevant for billing purposes.';
 COMMENT ON COLUMN db.transaction.dateStart IS 'Required. This contains the date and time on which the transaction is started.';
 COMMENT ON COLUMN db.transaction.dateStop IS 'Required. This contains the date and time on which the transaction is stopped.';
 
 --------------------------------------------------------------------------------
 
-CREATE INDEX ON db.transaction (Card);
+CREATE INDEX ON db.transaction (card);
 CREATE INDEX ON db.transaction (chargePoint);
 CREATE INDEX ON db.transaction (connectorId);
-CREATE INDEX ON db.transaction (Card, chargePoint, connectorId);
+CREATE INDEX ON db.transaction (card, chargePoint, connectorId);
 
 --------------------------------------------------------------------------------
 -- FUNCTION StartTransaction ---------------------------------------------------
@@ -389,7 +430,7 @@ AS $$
 DECLARE
   nId			    numeric;
 BEGIN
-  INSERT INTO db.transaction (Card, chargePoint, connectorId, meterStart, reservationId, dateStart)
+  INSERT INTO db.transaction (card, chargePoint, connectorId, meterStart, reservationId, dateStart)
   VALUES (pCard, pChargePoint, pConnectorId, pMeterStart, pReservationId, pTimeStamp)
   RETURNING id INTO nId;
 
@@ -423,9 +464,9 @@ BEGIN
   UPDATE db.transaction
      SET meterStop = pMeterStop,
          reason = pReason,
-         Data = pData,
+         data = pData,
          dateStop = pTimeStamp
-   WHERE Id = pId;
+   WHERE id = pId;
 
   RETURN pMeterStop - nMeterStart;
 END;
@@ -448,13 +489,13 @@ GRANT SELECT ON Transaction TO administrator;
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.meter_value (
-    Id			    numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_OCPP_STATUS'),
+    id			    numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_OCPP_STATUS'),
     chargePoint		numeric(12) NOT NULL,
     connectorId		integer NOT NULL,
     transactionId	numeric(12),
     meterValue		json NOT NULL,
-    ValidFromDate	timestamp DEFAULT NOW() NOT NULL,
-    ValidToDate		timestamp DEFAULT TO_DATE('4433-12-31', 'YYYY-MM-DD') NOT NULL,
+    validFromDate	timestamp DEFAULT NOW() NOT NULL,
+    validToDate		timestamp DEFAULT TO_DATE('4433-12-31', 'YYYY-MM-DD') NOT NULL,
     CONSTRAINT fk_meter_value_chargePoint FOREIGN KEY (chargePoint) REFERENCES db.charge_point(id),
     CONSTRAINT fk_meter_value_transactionId FOREIGN KEY (transactionId) REFERENCES db.transaction(id)
 );
@@ -468,17 +509,17 @@ COMMENT ON COLUMN db.meter_value.chargePoint IS 'Зарядная станция
 COMMENT ON COLUMN db.meter_value.connectorId IS 'Required. The id of the connector for which the status is reported. Id "0" (zero) is used if the status is for the Charge Point main controller.';
 COMMENT ON COLUMN db.meter_value.transactionId IS 'Optional. The transaction to which these meter samples are related.';
 COMMENT ON COLUMN db.meter_value.meterValue IS 'Required. The sampled meter values with timestamps.';
-COMMENT ON COLUMN db.meter_value.ValidFromDate IS 'Дата начала периода действия';
-COMMENT ON COLUMN db.meter_value.ValidToDate IS 'Дата окончания периода действия.';
+COMMENT ON COLUMN db.meter_value.validFromDate IS 'Дата начала периода действия';
+COMMENT ON COLUMN db.meter_value.validToDate IS 'Дата окончания периода действия.';
 
 --------------------------------------------------------------------------------
 
 CREATE INDEX ON db.meter_value (chargePoint);
 CREATE INDEX ON db.meter_value (connectorId);
 CREATE INDEX ON db.meter_value (transactionId);
-CREATE INDEX ON db.meter_value (chargePoint, ValidFromDate, ValidToDate);
+CREATE INDEX ON db.meter_value (chargePoint, validFromDate, validToDate);
 
-CREATE UNIQUE INDEX ON db.meter_value (chargePoint, connectorId, ValidFromDate, ValidToDate);
+CREATE UNIQUE INDEX ON db.meter_value (chargePoint, connectorId, validFromDate, validToDate);
 
 --------------------------------------------------------------------------------
 -- FUNCTION AddMeterValue ------------------------------------------------------
@@ -499,12 +540,12 @@ DECLARE
   dtDateTo 		    timestamp;
 BEGIN
   -- получим дату значения в текущем диапозоне дат
-  SELECT max(ValidFromDate), max(ValidToDate) INTO dtDateFrom, dtDateTo
+  SELECT max(validFromDate), max(validToDate) INTO dtDateFrom, dtDateTo
     FROM db.meter_value
    WHERE chargePoint = pChargePoint
      AND connectorId = pConnectorId
-     AND ValidFromDate <= pTimeStamp
-     AND ValidToDate > pTimeStamp;
+     AND validFromDate <= pTimeStamp
+     AND validToDate > pTimeStamp;
 
   IF dtDateFrom = pTimeStamp THEN
     -- обновим значение в текущем диапозоне дат
@@ -513,15 +554,15 @@ BEGIN
            meterValue = pMeterValue
      WHERE chargePoint = pChargePoint
        AND connectorId = pConnectorId
-       AND ValidFromDate <= pTimeStamp
-       AND ValidToDate > pTimeStamp;
+       AND validFromDate <= pTimeStamp
+       AND validToDate > pTimeStamp;
   ELSE
     -- обновим дату значения в текущем диапозоне дат
-    UPDATE db.meter_value SET ValidToDate = pTimeStamp
+    UPDATE db.meter_value SET validToDate = pTimeStamp
      WHERE chargePoint = pChargePoint
        AND connectorId = pConnectorId
-       AND ValidFromDate <= pTimeStamp
-       AND ValidToDate > pTimeStamp;
+       AND validFromDate <= pTimeStamp
+       AND validToDate > pTimeStamp;
 
     INSERT INTO db.meter_value (chargePoint, connectorId, transactionId, meterValue, validfromdate, validtodate)
     VALUES (pChargePoint, pConnectorId, pTransactionId, pMeterValue, pTimeStamp, coalesce(dtDateTo, MAXDATE()))
@@ -548,15 +589,16 @@ GRANT SELECT ON MeterValue TO administrator;
 -- ChargePoint -----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW ChargePoint (Id, Reference, Identity, Name, Description,
-  Model, Vendor, Version, SerialNumber, BoxSerialNumber, MeterSerialNumber,
-  iccid, imsi
+CREATE OR REPLACE VIEW ChargePoint (Id, Reference, Client, ClientCode, Identity,
+  Name, Description, Model, Vendor, Version, SerialNumber, BoxSerialNumber,
+  MeterSerialNumber, iccid, imsi
 )
 AS
-  SELECT p.id, p.reference, r.code, r.name, r.description,
-         p.model, p.vendor, p.version, p.serialnumber, p.boxserialnumber, p.meterserialnumber,
-         p.iccid, p.imsi
-    FROM db.charge_point p INNER JOIN db.reference r ON r.id = p.reference;
+  SELECT p.id, p.reference, p.client, c.code, r.code,
+         r.name, r.description, p.model, p.vendor, p.version, p.serialnumber,
+         p.boxserialnumber, p.meterserialnumber, p.iccid, p.imsi
+    FROM db.charge_point p INNER JOIN db.reference r ON r.id = p.reference
+                            LEFT JOIN db.client c ON c.id = p.client;
 
 GRANT SELECT ON ChargePoint TO administrator;
 
@@ -568,6 +610,7 @@ CREATE OR REPLACE VIEW ObjectChargePoint (Id, Object, Parent,
   Essence, EssenceCode, EssenceName,
   Class, ClassCode, ClassLabel,
   Type, TypeCode, TypeName, TypeDescription,
+  Client, ClientCode,
   Identity, Name, Label, Description,
   Model, Vendor, Version, SerialNumber, BoxSerialNumber, MeterSerialNumber,
   iccid, imsi,
@@ -581,6 +624,7 @@ AS
          r.essence, r.essencecode, r.essencename,
          r.class, r.classcode, r.classlabel,
          r.type, r.typecode, r.typename, r.typedescription,
+         p.client, p.clientcode,
          r.code, r.name, r.label, r.description,
          p.model, p.vendor, p.version, p.serialnumber, p.boxserialnumber, p.meterserialnumber,
          p.iccid, p.imsi,
@@ -588,6 +632,6 @@ AS
          r.state, r.statecode, r.statelabel, r.lastupdate,
          r.owner, r.ownercode, r.ownername, r.created,
          r.oper, r.opercode, r.opername, r.operdate
-    FROM db.charge_point p INNER JOIN ObjectReference r ON r.id = p.reference;
+    FROM ChargePoint p INNER JOIN ObjectReference r ON r.id = p.reference;
 
 GRANT SELECT ON ObjectChargePoint TO administrator;

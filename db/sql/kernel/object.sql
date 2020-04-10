@@ -243,7 +243,7 @@ CREATE TABLE db.aou (
     userid		numeric(12) NOT NULL,
     deny		bit(3) NOT NULL,
     allow		bit(3) NOT NULL,
-    mask		bit(3) NOT NULL,
+    mask		bit(3) DEFAULT B'000' NOT NULL,
     CONSTRAINT fk_aou_object FOREIGN KEY (object) REFERENCES db.object(id),
     CONSTRAINT fk_aou_userid FOREIGN KEY (userid) REFERENCES db.user(id)
 );
@@ -339,7 +339,7 @@ $$ LANGUAGE SQL
 CREATE OR REPLACE FUNCTION chmodo (
   pObject	numeric,
   pMask		bit,
-  pUserId	numeric default session_userid()
+  pUserId	numeric default current_userid()
 ) RETURNS	void
 AS $$
 DECLARE
@@ -358,7 +358,7 @@ BEGIN
 
     UPDATE db.aou SET deny = bDeny, allow = bAllow WHERE object = pObject AND userid = pUserId;
     IF NOT FOUND THEN
-      INSERT INTO db.aou SELECT pObject, pUserId, bDeny, bAllow, 0;
+      INSERT INTO db.aou SELECT pObject, pUserId, bDeny, bAllow;
     END IF;
   ELSE
     DELETE FROM db.aou WHERE object = pObject AND userid = pUserId;
@@ -374,7 +374,7 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION GetObjectMask (
   pObject	numeric,
-  pUserId	numeric default current_userid()
+  pUserId	numeric default session_userid()
 ) RETURNS	bit
 AS $$
   SELECT CASE
@@ -409,19 +409,10 @@ $$ LANGUAGE SQL
 CREATE OR REPLACE FUNCTION CheckObjectAccess (
   pObject	numeric,
   pMask		bit,
-  pUserId	numeric default current_userid()
+  pUserId	numeric default session_userid()
 ) RETURNS	boolean
 AS $$
 BEGIN
-/*
-  IF session_user = 'ocpp' THEN
-    RETURN true;
-  END IF;
-
-  IF IsUserRole(1000, pUserId) THEN
-    RETURN true;
-  END IF;
-*/
   RETURN coalesce(coalesce(GetObjectAccessMask(pObject, pUserId), GetObjectMask(pObject, pUserId)) & pMask = pMask, false);
 END;
 $$ LANGUAGE plpgsql
@@ -764,7 +755,7 @@ CREATE TRIGGER t_object_state_change
 
 CREATE OR REPLACE VIEW ObjectState (Id, Object, Class,
   State, StateTypeCode, StateTypeName, StateCode, StateLabel,
-  ValidFromDate, ValidToDate
+  validFromDate, ValidToDate
 )
 AS
   SELECT o.id, o.object, s.class, o.state, s.typecode, s.typename, s.code, s.label,
@@ -790,23 +781,23 @@ DECLARE
   dtDateTo      timestamp;
 BEGIN
   -- получим дату значения в текущем диапозоне дат
-  SELECT max(ValidFromDate), max(ValidToDate) INTO dtDateFrom, dtDateTo
+  SELECT max(validFromDate), max(ValidToDate) INTO dtDateFrom, dtDateTo
     FROM db.object_state
    WHERE object = pObject
-     AND ValidFromDate <= pDateFrom
+     AND validFromDate <= pDateFrom
      AND ValidToDate > pDateFrom;
 
   IF dtDateFrom = pDateFrom THEN
     -- обновим значение в текущем диапозоне дат
     UPDATE db.object_state SET State = pState
      WHERE object = pObject
-       AND ValidFromDate <= pDateFrom
+       AND validFromDate <= pDateFrom
        AND ValidToDate > pDateFrom;
   ELSE
     -- обновим дату значения в текущем диапозоне дат
     UPDATE db.object_state SET ValidToDate = pDateFrom
      WHERE object = pObject
-       AND ValidFromDate <= pDateFrom
+       AND validFromDate <= pDateFrom
        AND ValidToDate > pDateFrom;
 
     INSERT INTO db.object_state (object, state, validfromdate, validtodate)
@@ -837,7 +828,7 @@ BEGIN
   SELECT state INTO nState
     FROM db.object_state
    WHERE object = pObject
-     AND ValidFromDate <= pDate
+     AND validFromDate <= pDate
      AND ValidToDate > pDate;
 
   RETURN nState;
@@ -890,7 +881,7 @@ BEGIN
   SELECT state INTO nState
     FROM db.object_state
    WHERE object = pObject
-     AND ValidFromDate <= pDate
+     AND validFromDate <= pDate
      AND ValidToDate > pDate;
 
   RETURN GetStateTypeByState(nState);
@@ -914,7 +905,7 @@ BEGIN
   SELECT state INTO nState
     FROM db.object_state
    WHERE object = pObject
-     AND ValidFromDate <= pDate
+     AND validFromDate <= pDate
      AND ValidToDate > pDate;
 
   RETURN GetStateTypeCodeByState(nState);
@@ -1345,7 +1336,7 @@ CREATE TABLE db.object_link (
     Object		    numeric(12) NOT NULL,
     Type		    numeric(12) NOT NULL,
     Linked		    numeric(12),
-    ValidFromDate	timestamp DEFAULT NOW() NOT NULL,
+    validFromDate	timestamp DEFAULT NOW() NOT NULL,
     ValidToDate		timestamp DEFAULT TO_DATE('4433-12-31', 'YYYY-MM-DD') NOT NULL,
     CONSTRAINT fk_object_link_object FOREIGN KEY (object) REFERENCES db.object(id),
     CONSTRAINT fk_object_link_type FOREIGN KEY (type) REFERENCES db.type(id),
@@ -1398,11 +1389,11 @@ BEGIN
   SELECT type INTO nType FROM db.object WHERE id = pLinked;
 
   -- получим дату значения в текущем диапозоне дат
-  SELECT max(ValidFromDate), max(ValidToDate) INTO dtDateFrom, dtDateTo
+  SELECT max(validFromDate), max(ValidToDate) INTO dtDateFrom, dtDateTo
     FROM db.object_link
    WHERE Object = pObject
      AND Type = nType
-     AND ValidFromDate <= pDateFrom
+     AND validFromDate <= pDateFrom
      AND ValidToDate > pDateFrom;
 
   IF dtDateFrom = pDateFrom THEN
@@ -1410,14 +1401,14 @@ BEGIN
     UPDATE db.object_link SET linked = pLinked
      WHERE Object = pObject
        AND Type = nType
-       AND ValidFromDate <= pDateFrom
+       AND validFromDate <= pDateFrom
        AND ValidToDate > pDateFrom;
   ELSE
     -- обновим дату значения в текущем диапозоне дат
     UPDATE db.object_link SET ValidToDate = pDateFrom
      WHERE Object = pObject
        AND Type = nType
-       AND ValidFromDate <= pDateFrom
+       AND validFromDate <= pDateFrom
        AND ValidToDate > pDateFrom;
 
     INSERT INTO db.object_link (object, type, linked, validfromdate, validtodate)
@@ -1454,7 +1445,7 @@ BEGIN
     FROM db.object_link
    WHERE Object = pObject
      AND Type = pType
-     AND ValidFromDate <= pDate
+     AND validFromDate <= pDate
      AND ValidToDate > pDate;
 
   RETURN nLinked;

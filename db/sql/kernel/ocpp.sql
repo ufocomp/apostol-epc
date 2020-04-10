@@ -249,6 +249,7 @@ DECLARE
   vStatus           text;
 
   vSerialNumber     text;
+  vChargePointCode  text;
   vStateCode        text;
 
   chargeBoxSerialNumber		text;
@@ -276,22 +277,18 @@ BEGIN
   iccid := pRequest->>'iccid';
   imsi := pRequest->>'imsi';
 
+  vChargePointCode = coalesce(chargePointSerialNumber, chargePointModel);
   nChargePoint := GetChargePoint(pIdentity);
 
   IF nChargePoint IS NULL THEN
-    IF chargePointModel IN ('PROD') THEN
-      nType := GetType('soap.charge_point');
-    ELSE
-      nType := GetType('json.charge_point');
-    END IF;
-
-    nChargePoint := CreateChargePoint(null, nType, pIdentity, 'Charge Point', chargePointModel, chargePointVendor, firmwareVersion, chargePointSerialNumber, chargeBoxSerialNumber, meterSerialNumber, iccid, imsi);
+    nType := GetType('public.charge_point');
+    nChargePoint := CreateChargePoint(null, nType, null, pIdentity, 'Charge Point ' || vChargePointCode, chargePointModel, chargePointVendor, firmwareVersion, chargePointSerialNumber, chargeBoxSerialNumber, meterSerialNumber, iccid, imsi);
   END IF;
 
-  SELECT SerialNumber INTO vSerialNumber FROM db.charge_point WHERE id = nChargePoint;
+  SELECT coalesce(SerialNumber, Model) INTO vSerialNumber FROM db.charge_point WHERE id = nChargePoint;
 
   vStatus := 'Rejected';
-  IF vSerialNumber = chargePointSerialNumber THEN
+  IF vSerialNumber = vChargePointCode THEN
     vStateCode := GetObjectStateTypeCode(nChargePoint);
     IF coalesce(vStateCode, 'null') = 'enabled' THEN
       vStatus := 'Accepted';

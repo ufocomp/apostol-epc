@@ -152,7 +152,7 @@ BEGIN
 
   nUserId := CreateUser(pUserName, pPassword, cn.short, pPhone, pEmail, cn.name);
 
-  PERFORM AddMemberToGroup(nUserId, GetGroup('user'));
+  PERFORM AddMemberToGroup(nUserId, 1002);
 
   IF pPhone IS NOT NULL THEN
     jPhone := jsonb_build_object('mobile', pPhone);
@@ -809,8 +809,10 @@ BEGIN
   END IF;
 
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
-      PERFORM AccessDenied();
+    IF NOT IsUserRole(1000) THEN
+      IF coalesce(pId, current_userid()) <> current_userid() THEN
+        PERFORM AccessDenied();
+      END IF;
     END IF;
   END IF;
 
@@ -837,15 +839,17 @@ CREATE OR REPLACE FUNCTION api.list_user (
 ) RETURNS	SETOF users
 AS $$
 DECLARE
-  r		users%rowtype;
+  r		    users%rowtype;
 BEGIN
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
-      PERFORM AccessDenied();
+    IF NOT IsUserRole(1000) THEN
+      IF coalesce(pId, current_userid()) <> current_userid() THEN
+        PERFORM AccessDenied();
+      END IF;
     END IF;
   END IF;
 
@@ -876,8 +880,8 @@ CREATE OR REPLACE FUNCTION api.change_password (
   pId			numeric,
   pOldPass		text,
   pNewPass		text,
-  OUT result		boolean,
-  OUT message		text
+  OUT result	boolean,
+  OUT message	text
 ) RETURNS 		record
 AS $$
 BEGIN
@@ -1409,7 +1413,7 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION api.is_user_role (
   pRole         numeric,
-  pUser         numeric default current_userid(),
+  pUser         numeric default session_userid(),
   OUT result    boolean,
   OUT message   text
 ) RETURNS       record
@@ -2667,9 +2671,6 @@ AS $$
 DECLARE
   r             record;
 
-  nUserId       numeric;
-
-  vMethod       text;
   vWith         text;
   vSelect       text;
   vWhere        text;
@@ -2681,9 +2682,6 @@ DECLARE
   vValue        text;
   vLStr         text;
   vRStr         text;
-
-  IsSecurity	boolean;
-  IsExternal	boolean;
 
   arTables      text[];
   arValues      text[];
@@ -2698,11 +2696,6 @@ BEGIN
   IF array_position(arTables, pTable) IS NULL THEN
     PERFORM IncorrectValueInArray(pTable, 'sql/api/table', arTables);
   END IF;
-
-  IsSecurity := false;
-  nUserId := current_userid();
-
-  IsExternal := false;
 
   vSelect := coalesce(vWith, '') || 'SELECT ' || coalesce(array_to_string(arColumns, ', '), 't.*') || E'\n  FROM ' || pScheme || '.' || pTable || ' t ' || coalesce(vJoin, '');
 
@@ -5541,7 +5534,6 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE VIEW api.charge_point
 AS
   SELECT * FROM ObjectChargePoint;
---  SELECT *, GetJsonStatusNotification(id) as StatusNotification FROM ObjectChargePoint;
 
 GRANT SELECT ON api.charge_point TO daemon;
 
@@ -5553,7 +5545,8 @@ GRANT SELECT ON api.charge_point TO daemon;
  * Обновляет данные зарядной станции.
  * @param {numeric} pId - Идентификатор зарядной станции (api.get_charge_point)
  * @param {numeric} pParent - Идентификатор родителя | null
- * @param {varchar} pProtocol - Протокол (Tип зарядной станции)
+ * @param {varchar} pType - Tип зарядной станции
+ * @param {numeric} pClient - Идентификатор клиента | null
  * @param {varchar} pIdentity - Строковый идентификатор зарядной станции
  * @param {varchar} pName - Наименование
  * @param {varchar} pModel - Required. This contains a value that identifies the model of the ChargePoint.
@@ -5572,7 +5565,8 @@ GRANT SELECT ON api.charge_point TO daemon;
  */
 CREATE OR REPLACE FUNCTION api.add_charge_point (
   pParent               numeric,
-  pProtocol             varchar,
+  pType                 varchar,
+  pClient               numeric,
   pIdentity             varchar,
   pName                 varchar,
   pModel                varchar,
@@ -5590,21 +5584,23 @@ CREATE OR REPLACE FUNCTION api.add_charge_point (
 ) RETURNS               record
 AS $$
 DECLARE
-  arProtocols           text[];
+  nId                   numeric;
+  arTypes               text[];
 BEGIN
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
-  pProtocol := lower(pProtocol);
-  arProtocols := array_cat(arProtocols, ARRAY['soap', 'json']);
-  IF array_position(arProtocols, pProtocol::text) IS NULL THEN
-    PERFORM IncorrectCode(pProtocol, arProtocols);
+  pType := lower(pType);
+  arTypes := array_cat(arTypes, ARRAY['public', 'private']);
+  IF array_position(arTypes, pType::text) IS NULL THEN
+    PERFORM IncorrectCode(pType, arTypes);
   END IF;
 
-  id := CreateChargePoint(pParent, GetType(pProtocol || '.charge_point'), pIdentity, pName, pModel, pVendor, pVersion,
+  nId := CreateChargePoint(pParent, GetType(pType || '.charge_point'), pClient, pIdentity, pName, pModel, pVendor, pVersion,
     pSerialNumber, pBoxSerialNumber, pMeterSerialNumber, piccid, pimsi, pDescription);
 
+  id := nId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -5621,9 +5617,11 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 /**
- * Меняет зарядную станцию.
+ * Меняет данные зарядной станции.
+ * @param {numeric} pId - Идентификатор зарядной станции
  * @param {numeric} pParent - Идентификатор родителя | null
- * @param {varchar} pProtocol - Tип клиента
+ * @param {varchar} pType - Tип зарядной станции
+ * @param {numeric} pClient - Идентификатор клиента | null
  * @param {varchar} pIdentity - Строковый идентификатор зарядной станции
  * @param {varchar} pName - Наименование
  * @param {varchar} pModel - Required. This contains a value that identifies the model of the ChargePoint.
@@ -5643,7 +5641,8 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION api.update_charge_point (
   pId                   numeric,
   pParent               numeric default null,
-  pProtocol             varchar default null,
+  pType                 varchar default null,
+  pClient               numeric default null,
   pIdentity             varchar default null,
   pName                 varchar default null,
   pModel                varchar default null,
@@ -5661,12 +5660,10 @@ CREATE OR REPLACE FUNCTION api.update_charge_point (
 ) RETURNS               record
 AS $$
 DECLARE
-  nId                 numeric;
-  nType               numeric;
-  arProtocols         text[];
+  nId                   numeric;
+  nType                 numeric;
+  arTypes               text[];
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
@@ -5676,20 +5673,22 @@ BEGIN
     PERFORM ObjectNotFound('зарядная станция', 'id', pId);
   END IF;
 
-  IF pProtocol IS NOT NULL THEN
-    pProtocol := lower(pProtocol);
-    arProtocols := array_cat(arProtocols, ARRAY['soap', 'json']);
-    IF array_position(arProtocols, pProtocol::text) IS NULL THEN
-      PERFORM IncorrectCode(pProtocol, arProtocols);
+  IF pType IS NOT NULL THEN
+    pType := lower(pType);
+    arTypes := array_cat(arTypes, ARRAY['public', 'private']);
+    IF array_position(arTypes, pType::text) IS NULL THEN
+      PERFORM IncorrectCode(pType, arTypes);
     END IF;
-    nType := GetType(pProtocol || '.charge_point');
+
+    nType := GetType(pType || '.charge_point');
   ELSE
-    SELECT o.type INTO nType FROM db.object o WHERE o.id = pId;
+    SELECT o.type INTO nType FROM db.object o WHERE o.id = nId;
   END IF;
 
-  id := EditChargePoint(pId, pParent, nType, pIdentity, pName, pModel, pVendor, pVersion,
+  PERFORM EditChargePoint(nId, pParent, nType, pClient, pIdentity, pName, pModel, pVendor, pVersion,
     pSerialNumber, pBoxSerialNumber, pMeterSerialNumber, piccid, pimsi, pDescription);
 
+  id := nId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -6124,8 +6123,6 @@ DECLARE
   aHoliday	    integer[][2];
   r		        record;
 BEGIN
-  id := pId;
-
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
@@ -6157,6 +6154,7 @@ BEGIN
 
   PERFORM EditCalendar(nCalendar, null, null, pCode, pName, pWeek, JsonbToIntArray(pDayOff), aHoliday[2:], pWorkStart, pWorkCount, pRestStart, pRestCount, pDescription);
 
+  id := pId;
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -6656,7 +6654,6 @@ BEGIN
   nAddress := CreateAddress(pParent, GetType(pType || '.address'), pCode, pIndex, pCountry, pRegion, pDistrict, pCity, pSettlement, pStreet, pHouse, pBuilding, pStructure, pApartment, pAddress);
 
   id := nAddress;
-
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -6744,7 +6741,6 @@ BEGIN
   PERFORM EditAddress(nAddress, pParent, nType, pCode, pIndex, pCountry, pRegion, pDistrict, pCity, pSettlement, pStreet, pHouse, pBuilding, pStructure, pApartment, pAddress);
 
   id := nAddress;
-
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN

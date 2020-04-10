@@ -842,7 +842,7 @@ CREATE OR REPLACE VIEW ObjectAddresses (Id, Object, Address,
     Type, TypeCode, TypeName, TypeDescription,
     Code, Index, Country, Region, District, City, Settlement, Street, House,
     Building, Structure, Apartment, SortNum,
-    ValidFromDate, ValidToDate
+    validFromDate, ValidToDate
 )
 AS
   SELECT ol.id, ol.object, ol.linked, ol.type, t.code, t.name, t.description,
@@ -877,7 +877,7 @@ BEGIN
     FROM db.object_link
    WHERE Object = pObject
      AND Type = pType
-     AND ValidFromDate <= pDate
+     AND validFromDate <= pDate
      AND ValidToDate > pDate;
 
   RETURN GetAddressString(nAddress);
@@ -904,7 +904,7 @@ BEGIN
     SELECT Address, TypeCode, TypeName, Code
       FROM ObjectAddresses
      WHERE Object = pObject
-       AND ValidFromDate <= pDate
+       AND validFromDate <= pDate
        AND ValidToDate > pDate
      ORDER BY Type, SortNum
   LOOP
@@ -935,7 +935,7 @@ BEGIN
     SELECT Address, TypeCode, TypeName, Code
       FROM ObjectAddresses
      WHERE Object = pObject
-       AND ValidFromDate <= pDate
+       AND validFromDate <= pDate
        AND ValidToDate > pDate
      ORDER BY Type, SortNum
   LOOP
@@ -965,7 +965,7 @@ BEGIN
     SELECT Address AS Id, TypeCode, TypeName, Code, GetAddressString(Address) AS Address
       FROM ObjectAddresses
      WHERE Object = pObject
-       AND ValidFromDate <= pDate
+       AND validFromDate <= pDate
        AND ValidToDate > pDate
      ORDER BY Type, SortNum
   LOOP

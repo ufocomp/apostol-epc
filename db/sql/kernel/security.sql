@@ -602,7 +602,7 @@ CREATE TRIGGER t_area_before_insert
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE VIEW Area (Id, Parent, Type, TypeCode, TypeName,
-  Code, Name, Description, ValidFromDate, ValidToDate
+  Code, Name, Description, validFromDate, ValidToDate
 )
 as
   SELECT d.id, d.parent, d.type, t.code, t.name, d.code, d.name,
@@ -1259,7 +1259,7 @@ CREATE OR REPLACE FUNCTION SetCurrentUserId (
 AS $$
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -1321,7 +1321,7 @@ CREATE OR REPLACE FUNCTION GetSessionArea (
 RETURNS 	numeric
 AS $$
 DECLARE
-  nArea	numeric;
+  nArea	    numeric;
 BEGIN
   SELECT area INTO nArea FROM db.session WHERE key = pSession;
   RETURN nArea;
@@ -1616,7 +1616,7 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION IsUserRole (
   pRole		numeric,
-  pUser		numeric default current_userid()
+  pUser		numeric default session_userid()
 ) RETURNS	boolean
 AS $$
 DECLARE
@@ -1641,7 +1641,7 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION IsUserRole (
   pRole		text,
-  pUser		text default current_username()
+  pUser		text default session_username()
 ) RETURNS	boolean
 AS $$
 DECLARE
@@ -1689,7 +1689,7 @@ DECLARE
   nUserId		        numeric;
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -1706,7 +1706,7 @@ BEGIN
 
   INSERT INTO db.user_ex (id, userid) VALUES (nUserId, nUserId);
 
-  IF pPassword IS NOT NULL AND pPassword <> '' THEN
+  IF NULLIF(pPassword, '') IS NOT NULL THEN
     PERFORM SetPassword(nUserId, pPassword);
   END IF;
 
@@ -1742,7 +1742,7 @@ DECLARE
   nGroupId	    numeric;
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -1795,7 +1795,7 @@ DECLARE
 BEGIN
   IF session_user <> 'kernel' THEN
     IF pId <> current_userid() THEN
-      IF NOT IsUserRole('administrator')  THEN
+      IF NOT IsUserRole(1000)  THEN
         PERFORM AccessDenied();
       END IF;
     END IF;
@@ -1803,7 +1803,7 @@ BEGIN
 
   SELECT * INTO r FROM users WHERE id = pId;
 
-  IF r.username IN ('admin', 'daemon', 'apibot') THEN
+  IF r.username IN ('admin', 'daemon', 'apibot', 'mailbot', 'ocpp') THEN
     IF r.username <> lower(pUserName) THEN
       PERFORM SystemRoleError();
     END IF;
@@ -1859,14 +1859,14 @@ DECLARE
   vGroupName    varchar;
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
 
   SELECT username INTO vGroupName FROM db.user WHERE id = pId;
 
-  IF vGroupName IN ('administrator', 'manager', 'operator', 'external') THEN
+  IF vGroupName IN ('administrator', 'operator', 'user') THEN
     IF vGroupName <> lower(pGroupName) THEN
       PERFORM SystemRoleError();
     END IF;
@@ -1898,7 +1898,7 @@ DECLARE
   vUserName	varchar;
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -1909,7 +1909,7 @@ BEGIN
 
   SELECT username INTO vUserName FROM db.user WHERE id = pId;
 
-  IF vUserName IN ('admin', 'daemon', 'ocpp', 'mailbot', 'apibot') THEN
+  IF vUserName IN ('admin', 'daemon', 'apibot', 'mailbot', 'ocpp') THEN
     PERFORM SystemRoleError();
   END IF;
 
@@ -1974,7 +1974,7 @@ DECLARE
   vGroupName    varchar;
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -2091,7 +2091,7 @@ BEGIN
 
   IF session_user <> 'kernel' THEN
     IF pId <> nUserId THEN
-      IF NOT IsUserRole('administrator') THEN
+      IF NOT IsUserRole(1000) THEN
         PERFORM AccessDenied();
       END IF;
     END IF;
@@ -2181,7 +2181,7 @@ DECLARE
 BEGIN
   IF session_user <> 'kernel' THEN
     IF pId <> current_userid() THEN
-      IF NOT IsUserRole('administrator') THEN
+      IF NOT IsUserRole(1000) THEN
         PERFORM AccessDenied();
       END IF;
     END IF;
@@ -2215,7 +2215,7 @@ DECLARE
   nId		numeric;
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -2248,7 +2248,7 @@ CREATE OR REPLACE FUNCTION AddMemberToGroup (
 AS $$
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -2275,7 +2275,7 @@ CREATE OR REPLACE FUNCTION DeleteGroupForMember (
 AS $$
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -2302,7 +2302,7 @@ CREATE OR REPLACE FUNCTION DeleteMemberFromGroup (
 AS $$
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -2365,7 +2365,7 @@ DECLARE
   nId		    numeric;
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -2395,7 +2395,7 @@ CREATE OR REPLACE FUNCTION EditArea (
 AS $$
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -2431,7 +2431,7 @@ CREATE OR REPLACE FUNCTION DeleteArea (
 AS $$
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -2507,7 +2507,7 @@ CREATE OR REPLACE FUNCTION AddMemberToArea (
 AS $$
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -2537,7 +2537,7 @@ CREATE OR REPLACE FUNCTION DeleteAreaForMember (
 AS $$
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -2564,7 +2564,7 @@ CREATE OR REPLACE FUNCTION DeleteMemberFromArea (
 AS $$
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -2680,15 +2680,15 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION CreateInterface (
-  pName		varchar,
+  pName		    varchar,
   pDescription	text
-) RETURNS 	numeric
+) RETURNS 	    numeric
 AS $$
 DECLARE
-  nId		numeric;
+  nId		    numeric;
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -2707,14 +2707,14 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION UpdateInterface (
-  pId		numeric,
-  pName		varchar,
+  pId		    numeric,
+  pName		    varchar,
   pDescription	text
-) RETURNS 	void
+) RETURNS 	    void
 AS $$
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -2735,7 +2735,7 @@ CREATE OR REPLACE FUNCTION DeleteInterface (
 AS $$
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -2757,7 +2757,7 @@ CREATE OR REPLACE FUNCTION AddMemberToInterface (
 AS $$
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -2779,7 +2779,7 @@ CREATE OR REPLACE FUNCTION DeleteInterfaceForMember (
 AS $$
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -2801,7 +2801,7 @@ CREATE OR REPLACE FUNCTION DeleteMemberFromInterface (
 AS $$
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -2824,7 +2824,7 @@ DECLARE
   vSID		text;
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -3437,6 +3437,6 @@ SELECT CreateUser('mailbot', 'mailbot', 'Почтовый клиент', null, n
 SELECT CreateUser('ocpp', 'ocpp', 'Системная служба OCPP', null, null, 'OCPP клиент');
 
 SELECT AddMemberToArea(GetUser('admin'), GetArea('default'));
-SELECT AddMemberToArea(GetUser('mailbot'), GetArea('default'));
 SELECT AddMemberToArea(GetUser('apibot'), GetArea('default'));
+SELECT AddMemberToArea(GetUser('mailbot'), GetArea('default'));
 SELECT AddMemberToArea(GetUser('ocpp'), GetArea('default'));

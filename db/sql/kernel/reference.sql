@@ -22,7 +22,9 @@ COMMENT ON COLUMN db.reference.description IS 'Описание';
 CREATE INDEX ON db.reference (object);
 CREATE INDEX ON db.reference (code);
 
-CREATE OR REPLACE FUNCTION db.ft_reference_insert()
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION db.ft_reference_before_insert()
 RETURNS trigger AS $$
 DECLARE
 BEGIN
@@ -42,10 +44,31 @@ $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
-CREATE TRIGGER t_reference_insert
+CREATE TRIGGER t_reference_before_insert
   BEFORE INSERT ON db.reference
   FOR EACH ROW
-  EXECUTE PROCEDURE db.ft_reference_insert();
+  EXECUTE PROCEDURE db.ft_reference_before_insert();
+
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION db.ft_reference_after_insert()
+RETURNS trigger AS $$
+DECLARE
+BEGIN
+  INSERT INTO db.aou SELECT NEW.ID, 1001, B'000', B'110';
+  INSERT INTO db.aou SELECT NEW.ID, 1002, B'000', B'100';
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+CREATE TRIGGER t_reference_after_insert
+  AFTER INSERT ON db.reference
+  FOR EACH ROW
+  EXECUTE PROCEDURE db.ft_reference_after_insert();
+
+--------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION db.ft_reference_update()
 RETURNS trigger AS $$

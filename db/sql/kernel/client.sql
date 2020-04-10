@@ -110,7 +110,7 @@ CREATE TABLE db.client_name (
     First		    text,
     Last		    text,
     Middle		    text,
-    ValidFromDate	timestamp DEFAULT NOW() NOT NULL,
+    validFromDate	timestamp DEFAULT NOW() NOT NULL,
     ValidToDate		timestamp DEFAULT TO_DATE('4433-12-31', 'YYYY-MM-DD') NOT NULL,
     CONSTRAINT fk_client_name_client FOREIGN KEY (client) REFERENCES db.client(id),
     CONSTRAINT fk_client_name_lang FOREIGN KEY (lang) REFERENCES db.language(id)
@@ -249,11 +249,11 @@ BEGIN
   END IF;
 
   -- получим дату значения в текущем диапозоне дат
-  SELECT max(ValidFromDate), max(ValidToDate) INTO dtDateFrom, dtDateTo 
+  SELECT max(validFromDate), max(ValidToDate) INTO dtDateFrom, dtDateTo
     FROM db.client_name
    WHERE Client = pClient
      AND Lang = nLang
-     AND ValidFromDate <= pDateFrom
+     AND validFromDate <= pDateFrom
      AND ValidToDate > pDateFrom;
 
   IF dtDateFrom = pDateFrom THEN
@@ -261,14 +261,14 @@ BEGIN
     UPDATE db.client_name SET name = pName, short = pShort, first = pFirst, last = pLast, middle = pMiddle
      WHERE Client = pClient
        AND Lang = nLang
-       AND ValidFromDate <= pDateFrom
+       AND validFromDate <= pDateFrom
        AND ValidToDate > pDateFrom;
   ELSE
     -- обновим дату значения в текущем диапозоне дат
     UPDATE db.client_name SET ValidToDate = pDateFrom
      WHERE Client = pClient
        AND Lang = nLang
-       AND ValidFromDate <= pDateFrom
+       AND validFromDate <= pDateFrom
        AND ValidToDate > pDateFrom;
 
     INSERT INTO db.client_name (client, lang, name, short, first, last, middle, validfromdate, validtodate)
@@ -369,7 +369,7 @@ BEGIN
     FROM db.client_name n
    WHERE n.client = pClient
      AND n.lang = nLang
-     AND n.ValidFromDate <= pDate
+     AND n.validFromDate <= pDate
      AND n.ValidToDate > pDate;
 
   RETURN result;
@@ -620,7 +620,7 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE VIEW ClientName (Id, Client, Lang, LangCode, LangName, LangDesc,
-  FullName, ShortName, LastName, FirstName, MiddleName, ValidFromDate, ValidToDate
+  FullName, ShortName, LastName, FirstName, MiddleName, validFromDate, ValidToDate
 )
 AS
   SELECT n.id, n.client, n.lang, l.code, l.name, l.description,

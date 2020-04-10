@@ -10,7 +10,7 @@ DECLARE
   nEssence		numeric;
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -145,7 +145,7 @@ DECLARE
   rec_class	record;
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole('administrator') THEN
+    IF NOT IsUserRole(1000) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -179,8 +179,8 @@ BEGIN
     END IF;
 
     IF rec_class.code = 'charge_point' THEN
-      PERFORM AddType(rec_class.id, 'soap.charge_point', 'SOAP', 'SOAP');
-      PERFORM AddType(rec_class.id, 'json.charge_point', 'JSON', 'JSON');
+      PERFORM AddType(rec_class.id, 'public.charge_point', 'Публичная', 'Публичная зарядная станция');
+      PERFORM AddType(rec_class.id, 'private.charge_point', 'Приватная', 'Приватная зарядная станция');
     END IF;
 
   END LOOP;
