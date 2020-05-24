@@ -4458,17 +4458,7 @@ BEGIN
 
   nType := GetObjectDataType(pType);
 
-  SELECT d.id INTO nId FROM db.object_data d WHERE d.object = pObject AND d.type = nType AND d.code = pCode;
-
-  IF pData IS NOT NULL THEN
-    IF nId IS NULL THEN
-      nId := AddObjectData(pObject, nType, pCode, pData);
-    ELSE
-      PERFORM EditObjectData(nId, pObject, nType, pCode, pData);
-    END IF;
-  ELSE
-    PERFORM DeleteObjectData(nId);
-  END IF;
+  nId := SetObjectData(pObject, nType, pCode, pData);
 
   id := nId;
   SELECT * INTO result, message FROM result_success();
@@ -4693,12 +4683,17 @@ CREATE OR REPLACE FUNCTION api.set_object_coordinates (
 AS $$
 DECLARE
   nId           numeric;
+  nDataId       numeric;
+  nType         numeric;
 BEGIN
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
+  pCode := coalesce(pCode, 'geo');
+
   SELECT d.id INTO nId FROM db.object_coordinates d WHERE d.object = pObject AND d.code = pCode;
+  SELECT d.id INTO nDataId FROM db.object_data d WHERE d.object = pObject AND d.code = 'geo';
 
   IF pName IS NOT NULL THEN
     IF nId IS NULL THEN
@@ -4706,7 +4701,15 @@ BEGIN
     ELSE
       PERFORM EditObjectCoordinates(nId, pObject, pCode, pName, pLatitude, pLongitude, pAccuracy, pDescription);
     END IF;
+
+    nType := GetObjectDataType('json');
+    IF nDataId IS NULL THEN
+      nDataId := AddObjectData(pObject, nType, 'geo',GetObjectCoordinatesJson(pObject)::text);
+    ELSE
+      PERFORM EditObjectData(nDataId, pObject, nType, 'geo',GetObjectCoordinatesJson(pObject)::text);
+    END IF;
   ELSE
+    PERFORM DeleteObjectData(nDataId);
     PERFORM DeleteObjectCoordinates(nId);
   END IF;
 
@@ -4736,6 +4739,8 @@ CREATE OR REPLACE FUNCTION api.set_object_coordinates_json (
 AS $$
 DECLARE
   nId		    numeric;
+  nDataId       numeric;
+  nType		    numeric;
   arKeys	    text[];
   r		        record;
 BEGIN
@@ -4755,19 +4760,29 @@ BEGIN
     FOR r IN SELECT * FROM json_to_recordset(pCoordinates) AS coordinates(id numeric, code varchar, name varchar, latitude numeric, longitude numeric, accuracy numeric, description text)
     LOOP
       IF r.id IS NOT NULL THEN
-        SELECT o.id INTO nId FROM db.object_coordinates o WHERE o.id = r.id AND object = pObject;
+
+        r.code := coalesce(NULLIF(r.code, ''), 'geo');
+
+        SELECT o.id INTO nId FROM db.object_coordinates o WHERE o.id = r.id AND o.object = pObject;
 
         IF NOT FOUND THEN
           PERFORM ObjectNotFound('координаты', r.code, r.id);
         END IF;
 
+        SELECT o.id INTO nDataId FROM db.object_data o WHERE o.object = pObject AND o.code = 'geo';
+
+        nType := GetObjectDataType('json');
+
         IF coalesce(r.name, true) THEN
+          PERFORM DeleteObjectData(nDataId);
           PERFORM DeleteObjectCoordinates(r.id);
         ELSE
           PERFORM EditObjectCoordinates(r.id, pObject, r.code, r.name, r.latitude, r.longitude, r.accuracy, r.description);
+          PERFORM EditObjectData(nDataId, pObject, nType, 'geo',pCoordinates::text);
         END IF;
       ELSE
         nId := AddObjectCoordinates(pObject, r.code, r.name, r.latitude, r.longitude, r.accuracy, r.description);
+        nDataId := AddObjectData(pObject, nType, 'geo',pCoordinates::text);
       END IF;
     END LOOP;
 
@@ -5528,12 +5543,48 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
+-- CONNECTORS ------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- VIEW api.connectors ---------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.connectors
+AS
+  SELECT * FROM Connectors;
+
+GRANT SELECT ON api.connectors TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.connectors --------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает разъёмы зарядной станций
+ * @param {numeric} pChargePoint - Идентификатор зарядной станции
+ * @return {SETOF api.connectors}
+ */
+CREATE OR REPLACE FUNCTION api.connectors (
+  pChargePoint  numeric
+) RETURNS	    SETOF api.connectors
+AS $$
+  SELECT *
+    FROM api.connectors
+   WHERE chargepoint = pChargePoint
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
 -- VIEW api.charge_point -------------------------------------------------------
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE VIEW api.charge_point
 AS
-  SELECT * FROM ObjectChargePoint;
+--  SELECT o.*, GetJsonConnectors(id) as connectors, g.data AS geo
+  SELECT o.*, c.data::json as connectors, g.data::json AS geo
+    FROM ObjectChargePoint o LEFT JOIN db.object_data c ON c.object = o.object AND c.code = 'connectors'
+                             LEFT JOIN db.object_data g ON g.object = o.object AND g.code = 'geo';
 
 GRANT SELECT ON api.charge_point TO daemon;
 

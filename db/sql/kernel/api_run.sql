@@ -122,7 +122,7 @@ BEGIN
 
       FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(username varchar, password text)
       LOOP
-        RETURN NEXT row_to_json(api.su(coalesce(r.username, r.password)));
+        RETURN NEXT row_to_json(api.su(NULLIF(r.username, ''), NULLIF(r.password, '')));
       END LOOP;
 
     WHEN '/whoami' THEN
@@ -3104,14 +3104,14 @@ BEGIN
 
         FOR r IN SELECT * FROM jsonb_to_recordset(pJson) AS x(id numeric, parent numeric, type varchar, client numeric, identity varchar, name varchar, model varchar, vendor varchar, version varchar, serialnumber varchar, boxserialnumber varchar, meterserialnumber varchar, iccid varchar, imsi varchar, description text)
         LOOP
-          RETURN NEXT row_to_json(api.update_charge_point(r.id, r.parent, r.type, r.client, r.identity, r.name, r.name, r.model, r.vendor, r.version, r.serialnumber, r.boxserialnumber, r.meterserialnumber, r.iccid, r.imsi, r.description));
+          RETURN NEXT row_to_json(api.update_charge_point(r.id, r.parent, r.type, r.client, r.identity, r.name, r.model, r.vendor, r.version, r.serialnumber, r.boxserialnumber, r.meterserialnumber, r.iccid, r.imsi, r.description));
         END LOOP;
 
       ELSE
 
         FOR r IN SELECT * FROM jsonb_to_record(pJson) AS x(id numeric, parent numeric, type varchar, client numeric, identity varchar, name varchar, model varchar, vendor varchar, version varchar, serialnumber varchar, boxserialnumber varchar, meterserialnumber varchar, iccid varchar, imsi varchar, description text)
         LOOP
-          RETURN NEXT row_to_json(api.update_charge_point(r.id, r.parent, r.type, r.client, r.identity, r.name, r.name, r.model, r.vendor, r.version, r.serialnumber, r.boxserialnumber, r.meterserialnumber, r.iccid, r.imsi, r.description));
+          RETURN NEXT row_to_json(api.update_charge_point(r.id, r.parent, r.type, r.client, r.identity, r.name, r.model, r.vendor, r.version, r.serialnumber, r.boxserialnumber, r.meterserialnumber, r.iccid, r.imsi, r.description));
         END LOOP;
 
       END IF;

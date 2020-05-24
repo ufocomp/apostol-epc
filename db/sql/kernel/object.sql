@@ -170,6 +170,11 @@ BEGIN
     END IF;
   END IF;
 
+  IF OLD.owner <> NEW.owner THEN
+    DELETE FROM db.aou WHERE object = NEW.id AND userid = OLD.owner AND mask = B'111';
+    INSERT INTO db.aou SELECT NEW.id, NEW.owner, B'000', B'111';
+  END IF;
+
   NEW.OPER := current_userid();
 
   NEW.LDATE := now();
@@ -187,6 +192,36 @@ CREATE TRIGGER t_object_before_update
   BEFORE UPDATE ON db.object
   FOR EACH ROW
   EXECUTE PROCEDURE db.ft_object_before_update();
+
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION db.ft_object_after_update()
+RETURNS trigger AS $$
+DECLARE
+  vCode     varchar;
+BEGIN
+  IF OLD.type <> NEW.type THEN
+    SELECT code INTO vCode FROM db.type WHERE id = NEW.type;
+    IF vCode = 'public.charge_point' THEN
+      UPDATE db.aou SET allow = allow | B'100' WHERE object = NEW.id AND userid = 1002;
+      IF NOT found THEN
+        INSERT INTO db.aou SELECT NEW.id, 1002, B'000', B'100';
+      END IF;
+    ELSIF vCode = 'private.charge_point' THEN
+      DELETE FROM db.aou WHERE object = NEW.id AND userid = 1002;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+CREATE TRIGGER t_object_after_update
+  AFTER UPDATE ON db.object
+  FOR EACH ROW
+  EXECUTE PROCEDURE db.ft_object_after_update();
 
 --------------------------------------------------------------------------------
 
@@ -1809,6 +1844,38 @@ CREATE OR REPLACE FUNCTION DeleteObjectData (
 AS $$
 BEGIN
   DELETE FROM db.object_data WHERE object = pObject AND type = pType AND code = pCode;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- SetObjectData ---------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION SetObjectData (
+  pObject	numeric,
+  pType		numeric,
+  pCode		varchar,
+  pData		text
+) RETURNS	numeric
+AS $$
+DECLARE
+  nId		numeric;
+BEGIN
+  SELECT d.id INTO nId FROM db.object_data d WHERE d.object = pObject AND d.type = pType AND d.code = pCode;
+
+  IF pData IS NOT NULL THEN
+    IF nId IS NULL THEN
+      nId := AddObjectData(pObject, pType, pCode, pData);
+    ELSE
+      PERFORM EditObjectData(nId, pObject, pType, pCode, pData);
+    END IF;
+  ELSE
+    PERFORM DeleteObjectData(nId);
+  END IF;
+
+  RETURN nId;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER

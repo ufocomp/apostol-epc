@@ -50,6 +50,9 @@ namespace Apostol {
             }
 
             void Parse(const CString& String) {
+                if (String.IsEmpty())
+                    throw Delphi::Exception::Exception("Authorization error: Data not found.");
+
                 if (String.SubString(0, 5).Lower() == "basic") {
                     const CString LPassphrase(base64_decode(String.SubString(6)));
 
@@ -89,29 +92,20 @@ namespace Apostol {
         class CWebService: public CApostolModule {
         private:
 
-            int m_Version;
+            void InitMethods() override;
 
-            CJobManager *m_Jobs;
-
-            static void DebugRequest(CRequest *ARequest);
-            static void DebugReply(CReply *AReply);
-            static void DebugConnection(CHTTPServerConnection *AConnection);
-
-            static CString QuoteJsonString(const CString &String);
-            static void ExceptionToJson(int ErrorCode, const std::exception &AException, CString& Json);
-
-            static void PQResultToJson(CPQResult *Result, CString& Json);
             static void QueryToJson(CPQPollQuery *Query, CString& Json);
 
-            bool QueryStart(CHTTPServerConnection *AConnection, const CStringList& SQL);
-            bool APIRun(CHTTPServerConnection *AConnection, const CString &Route, const CString &jsonString, const CAuthorization &Authorization);
+            void APIRun(CHTTPServerConnection *AConnection, const CString &Route, const CString &jsonString, const CAuthorization &Authorization);
 
         protected:
 
-            void DoGet(CHTTPServerConnection *AConnection);
-            void DoPost(CHTTPServerConnection *AConnection);
+            void DoObject(CHTTPServerConnection *AConnection, const CStringList& Routs);
 
-            static void DoWWW(CHTTPServerConnection *AConnection);
+            void DoAPI(CHTTPServerConnection *AConnection);
+
+            void DoGet(CHTTPServerConnection *AConnection) override;
+            void DoPost(CHTTPServerConnection *AConnection);
 
             void DoPostgresQueryExecuted(CPQPollQuery *APollQuery) override;
             void DoPostgresQueryException(CPQPollQuery *APollQuery, Delphi::Exception::Exception *AException) override;
@@ -120,24 +114,15 @@ namespace Apostol {
 
             explicit CWebService(CModuleManager *AManager);
 
-            ~CWebService() override;
+            ~CWebService() override = default;
 
             static class CWebService *CreateModule(CModuleManager *AManager) {
                 return new CWebService(AManager);
             }
 
-            void InitMethods() override;
-
-            void BeforeExecute(Pointer Data) override;
-            void AfterExecute(Pointer Data) override;
-
-            void Heartbeat() override;
-            void Execute(CHTTPServerConnection *AConnection) override;
-
             bool CheckUserAgent(const CString& Value) override;
 
         };
-
     }
 }
 

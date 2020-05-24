@@ -50,86 +50,34 @@ namespace Apostol {
         //--------------------------------------------------------------------------------------------------------------
 
         CWebService::CWebService(CModuleManager *AManager) : CApostolModule(AManager) {
-            m_Version = -1;
-            m_Jobs = new CJobManager();
             m_Headers.Add("Authorization");
-        }
-        //--------------------------------------------------------------------------------------------------------------
 
-        CWebService::~CWebService() {
-            delete m_Jobs;
+            CWebService::InitMethods();
         }
         //--------------------------------------------------------------------------------------------------------------
 
         void CWebService::InitMethods() {
-            m_Methods.AddObject(_T("GET"), (CObject *) new CMethodHandler(true, std::bind(&CWebService::DoGet, this, _1)));
-            m_Methods.AddObject(_T("POST"), (CObject *) new CMethodHandler(true, std::bind(&CWebService::DoPost, this, _1)));
-            m_Methods.AddObject(_T("OPTIONS"), (CObject *) new CMethodHandler(true, std::bind(&CWebService::DoOptions, this, _1)));
-            m_Methods.AddObject(_T("PUT"), (CObject *) new CMethodHandler(false, std::bind(&CWebService::MethodNotAllowed, this, _1)));
-            m_Methods.AddObject(_T("DELETE"), (CObject *) new CMethodHandler(false, std::bind(&CWebService::MethodNotAllowed, this, _1)));
-            m_Methods.AddObject(_T("TRACE"), (CObject *) new CMethodHandler(false, std::bind(&CWebService::MethodNotAllowed, this, _1)));
-            m_Methods.AddObject(_T("HEAD"), (CObject *) new CMethodHandler(false, std::bind(&CWebService::MethodNotAllowed, this, _1)));
-            m_Methods.AddObject(_T("PATCH"), (CObject *) new CMethodHandler(false, std::bind(&CWebService::MethodNotAllowed, this, _1)));
-            m_Methods.AddObject(_T("CONNECT"), (CObject *) new CMethodHandler(false, std::bind(&CWebService::MethodNotAllowed, this, _1)));
-        }
-        //--------------------------------------------------------------------------------------------------------------
-
-        void CWebService::DebugRequest(CRequest *ARequest) {
-            DebugMessage("[%p] Request:\n%s %s HTTP/%d.%d\n", ARequest, ARequest->Method.c_str(), ARequest->Uri.c_str(), ARequest->VMajor, ARequest->VMinor);
-
-            for (int i = 0; i < ARequest->Headers.Count(); i++)
-                DebugMessage("%s: %s\n", ARequest->Headers[i].Name.c_str(), ARequest->Headers[i].Value.c_str());
-
-            if (!ARequest->Content.IsEmpty())
-                DebugMessage("\n%s\n", ARequest->Content.c_str());
-        }
-        //--------------------------------------------------------------------------------------------------------------
-
-        void CWebService::DebugReply(CReply *AReply) {
-            DebugMessage("[%p] Reply:\nHTTP/%d.%d %d %s\n", AReply, AReply->VMajor, AReply->VMinor, AReply->Status, AReply->StatusText.c_str());
-
-            for (int i = 0; i < AReply->Headers.Count(); i++)
-                DebugMessage("%s: %s\n", AReply->Headers[i].Name.c_str(), AReply->Headers[i].Value.c_str());
-
-            if (!AReply->Content.IsEmpty())
-                DebugMessage("\n%s\n", AReply->Content.c_str());
-        }
-        //--------------------------------------------------------------------------------------------------------------
-
-        void CWebService::DebugConnection(CHTTPServerConnection *AConnection) {
-            DebugMessage("\n[%p] [%s:%d] [%d] ", AConnection, AConnection->Socket()->Binding()->PeerIP(),
-                         AConnection->Socket()->Binding()->PeerPort(), AConnection->Socket()->Binding()->Handle());
-
-            DebugRequest(AConnection->Request());
-
-            static auto OnReply = [](CObject *Sender) {
-                auto LConnection = dynamic_cast<CHTTPServerConnection *> (Sender);
-
-                DebugMessage("\n[%p] [%s:%d] [%d] ", LConnection, LConnection->Socket()->Binding()->PeerIP(),
-                             LConnection->Socket()->Binding()->PeerPort(), LConnection->Socket()->Binding()->Handle());
-
-                DebugReply(LConnection->Reply());
-            };
-
-            AConnection->OnReply(OnReply);
-        }
-        //--------------------------------------------------------------------------------------------------------------
-
-        CString CWebService::QuoteJsonString(const CString &String) {
-            CString Result;
-            TCHAR ch;
-            for (size_t Index = 0; Index < String.Size(); Index++) {
-                ch = String.at(Index);
-                if ((ch == '"') || (ch == '\\'))
-                    Result.Append('\\');
-                Result.Append(ch);
-            }
-            return Result;
-        }
-        //--------------------------------------------------------------------------------------------------------------
-
-        void CWebService::ExceptionToJson(int ErrorCode, const std::exception &AException, CString& Json) {
-            Json.Format(R"({"error": {"code": %u, "message": "%s"}})", ErrorCode, QuoteJsonString(AException.what()).c_str());
+#if defined(_GLIBCXX_RELEASE) && (_GLIBCXX_RELEASE >= 9)
+            m_pMethods->AddObject(_T("GET")    , (CObject *) new CMethodHandler(true , [this](auto && Connection) { DoGet(Connection); }));
+            m_pMethods->AddObject(_T("POST")   , (CObject *) new CMethodHandler(true , [this](auto && Connection) { DoPost(Connection); }));
+            m_pMethods->AddObject(_T("OPTIONS"), (CObject *) new CMethodHandler(true , [this](auto && Connection) { DoOptions(Connection); }));
+            m_pMethods->AddObject(_T("HEAD")   , (CObject *) new CMethodHandler(true , [this](auto && Connection) { DoHead(Connection); }));
+            m_pMethods->AddObject(_T("PUT")    , (CObject *) new CMethodHandler(false, [this](auto && Connection) { MethodNotAllowed(Connection); }));
+            m_pMethods->AddObject(_T("DELETE") , (CObject *) new CMethodHandler(false, [this](auto && Connection) { MethodNotAllowed(Connection); }));
+            m_pMethods->AddObject(_T("TRACE")  , (CObject *) new CMethodHandler(false, [this](auto && Connection) { MethodNotAllowed(Connection); }));
+            m_pMethods->AddObject(_T("PATCH")  , (CObject *) new CMethodHandler(false, [this](auto && Connection) { MethodNotAllowed(Connection); }));
+            m_pMethods->AddObject(_T("CONNECT"), (CObject *) new CMethodHandler(false, [this](auto && Connection) { MethodNotAllowed(Connection); }));
+#else
+            m_pMethods->AddObject(_T("GET"), (CObject *) new CMethodHandler(true, std::bind(&CWebService::DoGet, this, _1)));
+            m_pMethods->AddObject(_T("POST"), (CObject *) new CMethodHandler(true, std::bind(&CWebService::DoPost, this, _1)));
+            m_pMethods->AddObject(_T("OPTIONS"), (CObject *) new CMethodHandler(true, std::bind(&CWebService::DoOptions, this, _1)));
+            m_pMethods->AddObject(_T("HEAD"), (CObject *) new CMethodHandler(true, std::bind(&CWebService::DoHead, this, _1)));
+            m_pMethods->AddObject(_T("PUT"), (CObject *) new CMethodHandler(false, std::bind(&CWebService::MethodNotAllowed, this, _1)));
+            m_pMethods->AddObject(_T("DELETE"), (CObject *) new CMethodHandler(false, std::bind(&CWebService::MethodNotAllowed, this, _1)));
+            m_pMethods->AddObject(_T("TRACE"), (CObject *) new CMethodHandler(false, std::bind(&CWebService::MethodNotAllowed, this, _1)));
+            m_pMethods->AddObject(_T("PATCH"), (CObject *) new CMethodHandler(false, std::bind(&CWebService::MethodNotAllowed, this, _1)));
+            m_pMethods->AddObject(_T("CONNECT"), (CObject *) new CMethodHandler(false, std::bind(&CWebService::MethodNotAllowed, this, _1)));
+#endif
         }
         //--------------------------------------------------------------------------------------------------------------
 
@@ -150,49 +98,8 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        void CWebService::PQResultToJson(CPQResult *Result, CString &Json) {
-            Json = "{";
-
-            for (int I = 0; I < Result->nFields(); ++I) {
-                if (I > 0) {
-                    Json += ", ";
-                }
-
-                Json += "\"";
-                Json += Result->fName(I);
-                Json += "\"";
-
-                if (SameText(Result->fName(I),_T("session"))) {
-                    Json += ": ";
-                    if (Result->GetIsNull(0, I)) {
-                        Json += _T("null");
-                    } else {
-                        Json += "\"";
-                        Json += Result->GetValue(0, I);
-                        Json += "\"";
-                    }
-                } else if (SameText(Result->fName(I),_T("result"))) {
-                    Json += ": ";
-                    if (SameText(Result->GetValue(0, I), _T("t"))) {
-                        Json += _T("true");
-                    } else {
-                        Json += _T("false");
-                    }
-                } else {
-                    Json += ": \"";
-                    Json += Result->GetValue(0, I);
-                    Json += "\"";
-                }
-            }
-
-            Json += "}";
-        }
-        //--------------------------------------------------------------------------------------------------------------
-
         void CWebService::QueryToJson(CPQPollQuery *Query, CString& Json) {
 
-            CPQResult *Run;
-            CPQResult *Login;
             CPQResult *Result;
 
             for (int I = 0; I < Query->Count(); I++) {
@@ -202,32 +109,32 @@ namespace Apostol {
             }
 
             if (Query->Count() == 3) {
-                Login = Query->Results(0);
+                Result = Query->Results(0);
 
-                if (SameText(Login->GetValue(0, 1), "f")) {
-                    Log()->Error(APP_LOG_EMERG, 0, Login->GetValue(0, 2));
-                    PQResultToJson(Login, Json);
+                if (SameText(Result->GetValue(0, 1), "f")) {
+                    Log()->Error(APP_LOG_EMERG, 0, Result->GetValue(0, 2));
+                    PQResultToJson(Result, Json);
                     return;
                 }
 
-                Run = Query->Results(1);
+                Result = Query->Results(1);
             } else {
-                Run = Query->Results(0);
+                Result = Query->Results(0);
             }
 
             Json = "{\"result\": ";
 
-            if (Run->nTuples() > 0) {
+            if (Result->nTuples() > 0) {
 
                 Json += "[";
-                for (int Row = 0; Row < Run->nTuples(); ++Row) {
-                    for (int Col = 0; Col < Run->nFields(); ++Col) {
+                for (int Row = 0; Row < Result->nTuples(); ++Row) {
+                    for (int Col = 0; Col < Result->nFields(); ++Col) {
                         if (Row != 0)
                             Json += ", ";
-                        if (Run->GetIsNull(Row, Col)) {
+                        if (Result->GetIsNull(Row, Col)) {
                             Json += "null";
                         } else {
-                            Json += Run->GetValue(Row, Col);
+                            Json += Result->GetValue(Row, Col);
                         }
                     }
                 }
@@ -264,15 +171,20 @@ namespace Apostol {
 
             } else {
 
-                auto LJob = m_Jobs->FindJobByQuery(APollQuery);
+                auto LJob = m_pJobs->FindJobByQuery(APollQuery);
+                if (LJob == nullptr) {
+                    Log()->Error(APP_LOG_EMERG, 0, _T("Job not found by Query."));
+                    return;
+                }
 
-                if (LJob != nullptr) {
-                    try {
-                        QueryToJson(APollQuery, LJob->Result());
-                    } catch (Delphi::Exception::Exception &E) {
-                        ExceptionToJson(0, E, LJob->Result());
-                        Log()->Error(APP_LOG_EMERG, 0, E.what());
-                    }
+                auto LReply = &LJob->Reply();
+
+                try {
+                    QueryToJson(APollQuery, LReply->Content);
+                } catch (Delphi::Exception::Exception &E) {
+                    LReply->Content.Clear();
+                    ExceptionToJson(0, E, LReply->Content);
+                    Log()->Error(APP_LOG_EMERG, 0, E.what());
                 }
             }
 
@@ -280,37 +192,7 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        bool CWebService::QueryStart(CHTTPServerConnection *AConnection, const CStringList& SQL) {
-            auto LQuery = GetQuery(AConnection);
-
-            if (LQuery == nullptr)
-                throw Delphi::Exception::Exception("QueryStart: GetQuery() failed!");
-
-            LQuery->SQL() = SQL;
-
-            if (LQuery->QueryStart() != POLL_QUERY_START_ERROR) {
-                if (m_Version == 2) {
-                    auto LJob = m_Jobs->Add(LQuery);
-                    auto LReply = AConnection->Reply();
-
-                    LReply->Content = "{\"jobid\":" "\"" + LJob->JobId() + "\"}";
-
-                    AConnection->SendReply(CReply::accepted);
-                } else {
-                    // Wait query result...
-                    AConnection->CloseConnection(false);
-                }
-
-                return true;
-            } else {
-                delete LQuery;
-            }
-
-            return false;
-        }
-        //--------------------------------------------------------------------------------------------------------------
-
-        bool CWebService::APIRun(CHTTPServerConnection *AConnection, const CString &Route, const CString &jsonString,
+        void CWebService::APIRun(CHTTPServerConnection *AConnection, const CString &Route, const CString &jsonString,
                 const CAuthorization &Authorization) {
 
             CStringList SQL;
@@ -330,7 +212,7 @@ namespace Apostol {
 
                 SQL.Add("SELECT * FROM api.logout();");
             } else {
-                if (Authorization.Session.IsEmpty()) {
+                if (Authorization.Schema == asBasic) {
                     SQL.Last().Format("SELECT * FROM api.login('%s', '%s');",
                                       Authorization.Username.c_str(), Authorization.Password.c_str());
 
@@ -346,66 +228,134 @@ namespace Apostol {
                 }
             }
 
-            return QueryStart(AConnection, SQL);
+            if (!StartQuery(AConnection, SQL)) {
+                AConnection->SendStockReply(CReply::service_unavailable);
+            }
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        void CWebService::DoWWW(CHTTPServerConnection *AConnection) {
-            auto LServer = dynamic_cast<CHTTPServer *> (AConnection->Server());
+        void CWebService::DoObject(CHTTPServerConnection *AConnection, const CStringList &Routs) {
+
+            auto CheckParams = [this] (const CStringList &Params, const CString &Action, CString &Route, CJSON &Json) {
+
+                const auto& Id = Params["id"];
+                if (!Id.IsEmpty())
+                    Json.Object().AddPair("id", Id);
+
+                if (Action == "method") {
+                    Route << "/method";
+                } else if (Action == "count") {
+                    Route << "/count";
+                } else {
+                    if (Id.IsEmpty()) {
+                        Route << "/list";
+                    } else {
+                        Route << "/get";
+                    }
+                }
+            };
+
             auto LRequest = AConnection->Request();
             auto LReply = AConnection->Reply();
 
-            TCHAR szExt[PATH_MAX] = {0};
+            const auto& LCommand = Routs[2].Lower();
+            const auto& LAction = Routs.Count() == 4 ? Routs[3].Lower() : "";
 
-            LReply->ContentType = CReply::html;
+            CString LPath;
+            CJSON Json;
 
-            // Decode url to path.
-            CString LRequestPath;
-            if (!LServer->URLDecode(LRequest->Uri, LRequestPath)) {
-                AConnection->SendStockReply(CReply::bad_request);
-                return;
-            }
+            if (LCommand == "whoami") {
 
-            // Request path must be absolute and not contain "..".
-            if (LRequestPath.empty() || LRequestPath.front() != '/' || LRequestPath.find("..") != CString::npos) {
-                AConnection->SendStockReply(CReply::bad_request);
-                return;
-            }
+                LPath = "/";
+                LPath += LCommand;
 
-            // If path ends in slash (i.e. is a directory) then add "index.html".
-            if (LRequestPath.back() == '/') {
-                LRequestPath += "index.html";
-            }
+            } else if (LCommand == "current" && !LAction.IsEmpty()) {
 
-            // Open the file to send back.
-            const CString LFullPath = LServer->DocRoot() + LRequestPath;
-            if (!FileExists(LFullPath.c_str())) {
+                LPath = "/";
+                LPath += LCommand;
+                LPath += "/";
+                LPath += LAction;
+
+            } else if (LCommand == "method") {
+
+                LPath = "/";
+                LPath += LCommand;
+
+                if (LAction == "get") {
+
+                    LPath += "/get";
+
+                    const auto& Object = LRequest->Params["object"];
+                    const auto& Class = LRequest->Params["class"];
+                    const auto& State = LRequest->Params["state"];
+                    const auto& ClassCode = LRequest->Params["classcode"];
+                    const auto& StateCode = LRequest->Params["statecode"];
+
+                    auto& jsonObject = Json.Object();
+
+                    if (!Object.IsEmpty())
+                        jsonObject.AddPair("object", Object);
+
+                    if (!State.IsEmpty())
+                        jsonObject.AddPair("state", State);
+
+                    if (!Class.IsEmpty())
+                        jsonObject.AddPair("class", Class);
+
+                    if (!ClassCode.IsEmpty())
+                        jsonObject.AddPair("classcode", ClassCode);
+
+                    if (!StateCode.IsEmpty())
+                        jsonObject.AddPair("statecode", StateCode);
+                } else if (!LAction.IsEmpty()) {
+                    AConnection->SendStockReply(CReply::not_found);
+                    return;
+                }
+
+            } else if (LCommand == "client" || LCommand == "card" || LCommand == "charge_point" || LCommand == "contract" || LCommand == "address") {
+                LPath = "/";
+                LPath += LCommand;
+                CheckParams(LRequest->Params, LAction, LPath, Json);
+            } else {
                 AConnection->SendStockReply(CReply::not_found);
                 return;
             }
 
-            LReply->Content.LoadFromFile(LFullPath.c_str());
+            try {
+                const auto& LAuthorization = LRequest->Headers.Values(_T("authorization"));
+                CAuthorization Authorization(LAuthorization);
 
-            // Fill out the CReply to be sent to the client.
-            AConnection->SendReply(CReply::ok, Mapping::ExtToType(ExtractFileExt(szExt, LRequestPath.c_str())));
+                if (Authorization.Schema != asUnknown) {
+                    APIRun(AConnection, LPath, Json.ToString(), Authorization);
+                } else {
+                    AConnection->SendStockReply(CReply::unauthorized);
+                }
+            } catch (Delphi::Exception::Exception &E) {
+                ExceptionToJson(0, E, LReply->Content);
+                AConnection->CloseConnection(true);
+                AConnection->SendReply(CReply::bad_request);
+                Log()->Error(APP_LOG_EMERG, 0, E.what());
+            }
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        void CWebService::DoGet(CHTTPServerConnection *AConnection) {
+        void CWebService::DoAPI(CHTTPServerConnection *AConnection) {
             auto LRequest = AConnection->Request();
             auto LReply = AConnection->Reply();
 
-            CStringList LUri;
-            SplitColumns(LRequest->Uri.c_str(), LRequest->Uri.Size(), &LUri, '/');
+            LReply->ContentType = CReply::json;
 
-            if (LUri.Count() < 3) {
-                DoWWW(AConnection);
+            CStringList LRouts;
+            SplitColumns(LRequest->Location.pathname, LRouts, '/');
+
+            if (LRouts.Count() < 3) {
+                AConnection->SendStockReply(CReply::not_found);
                 return;
             }
 
-            const auto& LService = LUri[0];
-            const auto& LVersion = LUri[1];
-            const auto& LCommand = LUri[2];
+            const auto& LService = LRouts[0].Lower();
+            const auto& LVersion = LRouts[1].Lower();
+            const auto& LCommand = LRouts[2].Lower();
 
             if (LVersion == "v1") {
                 m_Version = 1;
@@ -414,7 +364,7 @@ namespace Apostol {
             }
 
             if (LService != "api" || (m_Version == -1)) {
-                DoWWW(AConnection);
+                AConnection->SendStockReply(CReply::not_found);
                 return;
             }
 
@@ -429,92 +379,46 @@ namespace Apostol {
 
                     AConnection->SendReply(CReply::ok);
 
-                } else {
+                } else if (m_Version == 2) {
 
-                    const auto& LAction = LUri.Count() == 4 ? LUri[3] : "";
-
-                    const CString &LAuthorization = LRequest->Headers.Values(_T("authorization"));
-
-                    if (LAuthorization.IsEmpty()) {
-                        AConnection->SendStockReply(CReply::unauthorized);
+                    if (LRouts.Count() != 3) {
+                        AConnection->SendStockReply(CReply::bad_request);
                         return;
                     }
 
-                    CAuthorization Authorization(LAuthorization);
+                    const auto& Identity = LRouts[2];
 
-                    if (Authorization.Schema == asSession) {
-                        LReply->AddHeader(_T("Authorization"), _T("Session "));
-                        LReply->Headers.Last().Value += Authorization.Session;
+                    if (Identity.Length() != APOSTOL_MODULE_UID_LENGTH) {
+                        AConnection->SendStockReply(CReply::bad_request);
+                        return;
                     }
 
-                    auto CheckParam = [LRequest, &LAction] (CString& Route, CJSON& Content) {
+                    auto LJob = m_pJobs->FindJobById(Identity);
 
-                        const CString &Id = LRequest->Params["id"];
-                        if (!Id.IsEmpty())
-                            Content.Object().AddPair("id", Id);
-
-                        if (LAction == "Method") {
-                            Route << "/method";
-                        } else if (LAction == "Count") {
-                            Route << "/count";
-                        } else {
-                            if (Id.IsEmpty()) {
-                                Route << "/list";
-                            } else {
-                                Route << "/get";
-                            }
-                        }
-                    };
-
-                    CJSON Content;
-                    CString Route;
-
-                    if (LCommand == "Method") {
-
-                        const CString& Object = LRequest->Params["object"];
-                        const CString& Class = LRequest->Params["class"];
-                        const CString& State = LRequest->Params["state"];
-                        const CString& ClassCode = LRequest->Params["classcode"];
-                        const CString& StateCode = LRequest->Params["statecode"];
-
-                        Route = "/method/get";
-
-                        if (!Object.IsEmpty())
-                            Content.Object().AddPair("object", Object);
-
-                        if (!State.IsEmpty())
-                            Content.Object().AddPair("state", State);
-
-                        if (!Class.IsEmpty())
-                            Content.Object().AddPair("class", Class);
-
-                        if (!ClassCode.IsEmpty())
-                            Content.Object().AddPair("classcode", ClassCode);
-
-                        if (!StateCode.IsEmpty())
-                            Content.Object().AddPair("statecode", StateCode);
-
-                    } else if (LCommand == "Client") {
-                        Route = "/client";
-                        CheckParam(Route, Content);
-                    } else if (LCommand == "ChargePoint") {
-                        Route = "/charge_point";
-                        CheckParam(Route, Content);
-                    } else if (LCommand == "Card") {
-                        Route = "/card";
-                        CheckParam(Route, Content);
-                    } else if (LCommand == "Address") {
-                        Route = "/address";
-                        CheckParam(Route, Content);
-                    }
-
-                    if (!Route.IsEmpty()) {
-                        if (!APIRun(AConnection, Route, Content.ToString(), Authorization)) {
-                            AConnection->SendStockReply(CReply::internal_server_error);
-                        }
-                    } else {
+                    if (LJob == nullptr) {
                         AConnection->SendStockReply(CReply::not_found);
+                        return;
                     }
+
+                    if (LJob->Reply().Content.IsEmpty()) {
+                        AConnection->SendStockReply(CReply::no_content);
+                        return;
+                    }
+
+                    LReply->Content = LJob->Reply().Content;
+
+                    CReply::GetReply(LReply, CReply::ok);
+
+                    LReply->Headers << LJob->Reply().Headers;
+
+                    AConnection->SendReply();
+
+                    delete LJob;
+
+                } else {
+
+                    DoObject(AConnection, LRouts);
+
                 }
             } catch (std::exception &e) {
                 ExceptionToJson(0, e, LReply->Content);
@@ -527,65 +431,70 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
+        void CWebService::DoGet(CHTTPServerConnection *AConnection) {
+            auto LRequest = AConnection->Request();
+
+            CString LPath(LRequest->Location.pathname);
+
+            // Request path must be absolute and not contain "..".
+            if (LPath.empty() || LPath.front() != '/' || LPath.find("..") != CString::npos) {
+                AConnection->SendStockReply(CReply::bad_request);
+                return;
+            }
+
+            if (LPath.SubString(0, 5) == "/api/") {
+                DoAPI(AConnection);
+                return;
+            }
+
+            SendResource(AConnection, LPath);
+        }
+        //--------------------------------------------------------------------------------------------------------------
+
         void CWebService::DoPost(CHTTPServerConnection *AConnection) {
             auto LRequest = AConnection->Request();
             auto LReply = AConnection->Reply();
 
-            CStringList LUri;
-            SplitColumns(LRequest->Uri.c_str(), LRequest->Uri.Size(), &LUri, '/');
-            if (LUri.Count() < 2) {
+            LReply->ContentType = CReply::json;
+
+            CStringList LRouts;
+            SplitColumns(LRequest->Location.pathname, LRouts, '/');
+            if (LRouts.Count() < 2) {
                 AConnection->SendStockReply(CReply::not_found);
                 return;
             }
 
-            if (LUri[1] == _T("v1")) {
+            if (LRouts[1] == _T("v1")) {
                 m_Version = 1;
-            } else if (LUri[1] == _T("v2")) {
+            } else if (LRouts[1] == _T("v2")) {
                 m_Version = 2;
             }
 
-            if (LUri[0] != _T("api") || (m_Version == -1)) {
+            if (LRouts[0] != _T("api") || (m_Version == -1)) {
                 AConnection->SendStockReply(CReply::not_found);
                 return;
             }
 
-            const CString &LContentType = LRequest->Headers.Values(_T("content-type"));
-            if (!LContentType.IsEmpty() && LRequest->ContentLength == 0) {
-                AConnection->SendStockReply(CReply::no_content);
-                return;
+            CString LPath;
+            for (int I = 2; I < LRouts.Count(); ++I) {
+                LPath.Append('/');
+                LPath.Append(LRouts[I].Lower());
             }
 
-            CString LRoute;
-            for (int I = 2; I < LUri.Count(); ++I) {
-                LRoute.Append('/');
-                LRoute.Append(LUri[I].Lower());
-            }
-
-            const CString &LAuthorization = LRequest->Headers.Values(_T("authorization"));
-
-            if (LAuthorization.IsEmpty()) {
-
-                if (LRoute == "/login" || LRoute == "/join") {
-                    if (!APIRun(AConnection, LRoute, LRequest->Content, CAuthorization())) {
-                        AConnection->SendStockReply(CReply::internal_server_error);
-                    }
-                } else {
-                    AConnection->SendStockReply(CReply::unauthorized);
-                }
-
+            if (LPath.IsEmpty()) {
+                AConnection->SendStockReply(CReply::not_found);
                 return;
             }
 
             try {
-                CAuthorization Authorization(LAuthorization);
-
-                if (Authorization.Schema == asSession) {
-                    LReply->AddHeader(_T("Authorization"), _T("Session "));
-                    LReply->Headers.Last().Value += Authorization.Session;
-                }
-
-                if (!APIRun(AConnection, LRoute, LRequest->Content, Authorization)) {
-                    AConnection->SendStockReply(CReply::internal_server_error);
+                const auto& LAuthorization = LRequest->Headers.Values(_T("authorization"));
+                const auto& Authorization = LAuthorization.IsEmpty() ? CAuthorization() : CAuthorization(LAuthorization);
+                if (Authorization.Schema != asUnknown) {
+                    APIRun(AConnection, LPath, LRequest->Content, Authorization);
+                } else if (LPath == "/login" || LPath == "/join") {
+                    APIRun(AConnection, LPath, LRequest->Content, Authorization);
+                } else {
+                    AConnection->SendStockReply(CReply::unauthorized);
                 }
             } catch (Delphi::Exception::Exception &E) {
                 ExceptionToJson(0, E, LReply->Content);
@@ -593,51 +502,6 @@ namespace Apostol {
                 AConnection->SendReply(CReply::bad_request);
                 Log()->Error(APP_LOG_EMERG, 0, E.what());
             }
-        }
-        //--------------------------------------------------------------------------------------------------------------
-
-        void CWebService::Heartbeat() {
-
-        }
-        //--------------------------------------------------------------------------------------------------------------
-
-        void CWebService::Execute(CHTTPServerConnection *AConnection) {
-            int i = 0;
-
-            auto LRequest = AConnection->Request();
-            auto LReply = AConnection->Reply();
-#ifdef _DEBUG
-            DebugConnection(AConnection);
-#endif
-            LReply->Clear();
-            LReply->ContentType = CReply::json;
-
-            CMethodHandler *Handler;
-            for (i = 0; i < m_Methods.Count(); ++i) {
-                Handler = (CMethodHandler *) m_Methods.Objects(i);
-                if (Handler->Allow()) {
-                    const CString& Method = m_Methods.Strings(i);
-                    if (Method == LRequest->Method) {
-                        CORS(AConnection);
-                        Handler->Handler(AConnection);
-                        break;
-                    }
-                }
-            }
-
-            if (i == m_Methods.Count()) {
-                AConnection->SendStockReply(CReply::not_implemented);
-            }
-        }
-        //--------------------------------------------------------------------------------------------------------------
-
-        void CWebService::BeforeExecute(Pointer Data) {
-
-        }
-        //--------------------------------------------------------------------------------------------------------------
-
-        void CWebService::AfterExecute(Pointer Data) {
-
         }
         //--------------------------------------------------------------------------------------------------------------
 

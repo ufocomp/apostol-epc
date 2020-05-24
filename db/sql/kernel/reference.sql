@@ -54,9 +54,15 @@ CREATE TRIGGER t_reference_before_insert
 CREATE OR REPLACE FUNCTION db.ft_reference_after_insert()
 RETURNS trigger AS $$
 DECLARE
+  nType     numeric;
 BEGIN
-  INSERT INTO db.aou SELECT NEW.ID, 1001, B'000', B'110';
-  INSERT INTO db.aou SELECT NEW.ID, 1002, B'000', B'100';
+  SELECT type INTO nType FROM db.object WHERE id = NEW.id;
+
+  INSERT INTO db.aou SELECT NEW.id, 1001, B'000', B'110';
+  IF GetTypeCode(nType) <> 'private.charge_point' THEN
+    INSERT INTO db.aou SELECT NEW.id, 1002, B'000', B'100';
+  END IF;
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql

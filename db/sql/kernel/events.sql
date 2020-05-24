@@ -1004,6 +1004,7 @@ CREATE OR REPLACE FUNCTION EventChargePointEnable (
 ) RETURNS	void
 AS $$
 BEGIN
+  PERFORM SetObjectData(pObject, GetObjectDataType('json'), 'connectors', GetJsonConnectors(pObject)::text);
   PERFORM WriteToEventLog('M', 1014, 'Зарядная станция включена.', pObject);
 END;
 $$ LANGUAGE plpgsql;
@@ -1017,6 +1018,7 @@ CREATE OR REPLACE FUNCTION EventChargePointHeartbeat (
 ) RETURNS	void
 AS $$
 BEGIN
+  PERFORM SetObjectData(pObject, GetObjectDataType('json'), 'connectors', GetJsonConnectors(pObject)::text);
   PERFORM WriteToEventLog('M', 1020, 'Зарядная станция на связи.', pObject);
 END;
 $$ LANGUAGE plpgsql;
@@ -1030,6 +1032,7 @@ CREATE OR REPLACE FUNCTION EventChargePointAvailable (
 ) RETURNS	void
 AS $$
 BEGIN
+  PERFORM SetObjectData(pObject, GetObjectDataType('json'), 'connectors', GetJsonConnectors(pObject)::text);
   PERFORM WriteToEventLog('M', 1021, 'Зарядная станция отправила статус: Available.', pObject);
 END;
 $$ LANGUAGE plpgsql;
@@ -1043,6 +1046,7 @@ CREATE OR REPLACE FUNCTION EventChargePointPreparing (
 ) RETURNS	void
 AS $$
 BEGIN
+  PERFORM SetObjectData(pObject, GetObjectDataType('json'), 'connectors', GetJsonConnectors(pObject)::text);
   PERFORM WriteToEventLog('M', 1022, 'Зарядная станция отправила статус: Preparing.', pObject);
 END;
 $$ LANGUAGE plpgsql;
@@ -1056,6 +1060,7 @@ CREATE OR REPLACE FUNCTION EventChargePointCharging (
 ) RETURNS	void
 AS $$
 BEGIN
+  PERFORM SetObjectData(pObject, GetObjectDataType('json'), 'connectors', GetJsonConnectors(pObject)::text);
   PERFORM WriteToEventLog('M', 1023, 'Зарядная станция отправила статус: Charging.', pObject);
 END;
 $$ LANGUAGE plpgsql;
@@ -1069,6 +1074,7 @@ CREATE OR REPLACE FUNCTION EventChargePointSuspendedEV (
 ) RETURNS	void
 AS $$
 BEGIN
+  PERFORM SetObjectData(pObject, GetObjectDataType('json'), 'connectors', GetJsonConnectors(pObject)::text);
   PERFORM WriteToEventLog('M', 1024, 'Зарядная станция отправила статус: SuspendedEV.', pObject);
 END;
 $$ LANGUAGE plpgsql;
@@ -1082,6 +1088,7 @@ CREATE OR REPLACE FUNCTION EventChargePointSuspendedEVSE (
 ) RETURNS	void
 AS $$
 BEGIN
+  PERFORM SetObjectData(pObject, GetObjectDataType('json'), 'connectors', GetJsonConnectors(pObject)::text);
   PERFORM WriteToEventLog('M', 1025, 'Зарядная станция отправила статус: SuspendedEVSE.', pObject);
 END;
 $$ LANGUAGE plpgsql;
@@ -1095,6 +1102,7 @@ CREATE OR REPLACE FUNCTION EventChargePointFinishing (
 ) RETURNS	void
 AS $$
 BEGIN
+  PERFORM SetObjectData(pObject, GetObjectDataType('json'), 'connectors', GetJsonConnectors(pObject)::text);
   PERFORM WriteToEventLog('M', 1026, 'Зарядная станция отправила статус: Finishing.', pObject);
 END;
 $$ LANGUAGE plpgsql;
@@ -1108,6 +1116,7 @@ CREATE OR REPLACE FUNCTION EventChargePointReserved (
 ) RETURNS	void
 AS $$
 BEGIN
+  PERFORM SetObjectData(pObject, GetObjectDataType('json'), 'connectors', GetJsonConnectors(pObject)::text);
   PERFORM WriteToEventLog('M', 1027, 'Зарядная станция отправила статус: Reserved.', pObject);
 END;
 $$ LANGUAGE plpgsql;
@@ -1121,6 +1130,7 @@ CREATE OR REPLACE FUNCTION EventChargePointUnavailable (
 ) RETURNS	void
 AS $$
 BEGIN
+  PERFORM SetObjectData(pObject, GetObjectDataType('json'), 'connectors', GetJsonConnectors(pObject)::text);
   PERFORM WriteToEventLog('M', 1028, 'Зарядная станция отправила статус: Unavailable.', pObject);
 END;
 $$ LANGUAGE plpgsql;
@@ -1134,6 +1144,7 @@ CREATE OR REPLACE FUNCTION EventChargePointFaulted (
 ) RETURNS	void
 AS $$
 BEGIN
+  PERFORM SetObjectData(pObject, GetObjectDataType('json'), 'connectors', GetJsonConnectors(pObject)::text);
   PERFORM WriteToEventLog('M', 1029, 'Зарядная станция отправила статус: Faulted.', pObject);
 END;
 $$ LANGUAGE plpgsql;
@@ -1173,6 +1184,7 @@ CREATE OR REPLACE FUNCTION EventChargePointRestore (
 ) RETURNS	void
 AS $$
 BEGIN
+  PERFORM SetObjectData(pObject, GetObjectDataType('json'), 'connectors', GetJsonConnectors(pObject)::text);
   PERFORM WriteToEventLog('M', 1017, 'Зарядная станция восстановлена.', pObject);
 END;
 $$ LANGUAGE plpgsql;
@@ -1188,6 +1200,7 @@ AS $$
 DECLARE
   r		    record;
   nCount    integer;
+  nType     numeric;
 BEGIN
   SELECT label INTO r FROM db.object WHERE id = pObject;
 
@@ -1195,6 +1208,11 @@ BEGIN
   IF nCount > 0 THEN
     RAISE EXCEPTION 'Обнаружены транзакции: (%). Операция прервана.', nCount;
   END IF;
+
+  nType := GetObjectDataType('json');
+
+  PERFORM SetObjectData(pObject, nType, 'geo', null);
+  PERFORM SetObjectData(pObject, nType, 'connectors', null);
 
   DELETE FROM db.charge_point WHERE id = pObject;
 

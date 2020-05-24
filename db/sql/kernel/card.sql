@@ -33,9 +33,8 @@ CREATE INDEX ON db.card (client);
 
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION ft_card_insert()
+CREATE OR REPLACE FUNCTION ft_card_before_insert()
 RETURNS trigger AS $$
-DECLARE
 BEGIN
   IF NEW.id IS NULL OR NEW.id = 0 THEN
     SELECT NEW.DOCUMENT INTO NEW.id;
@@ -49,27 +48,87 @@ $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
---------------------------------------------------------------------------------
-
-CREATE TRIGGER t_card_insert
+CREATE TRIGGER t_card_before_insert
   BEFORE INSERT ON db.card
   FOR EACH ROW
-  EXECUTE PROCEDURE ft_card_insert();
+  EXECUTE PROCEDURE ft_card_before_insert();
 
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION ft_card_update()
+CREATE OR REPLACE FUNCTION db.ft_card_after_insert()
+RETURNS trigger AS $$
+DECLARE
+  nUserId	numeric;
+BEGIN
+  IF NEW.client IS NOT NULL THEN
+    nUserId := GetClientUserId(NEW.client);
+    IF nUserId IS NOT NULL THEN
+      UPDATE db.aou SET allow = allow | B'100' WHERE object = NEW.document AND userid = nUserId;
+      IF NOT FOUND THEN
+        INSERT INTO db.aou SELECT NEW.document, nUserId, B'000', B'100';
+      END IF;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+CREATE TRIGGER t_card_after_insert
+  AFTER INSERT ON db.card
+  FOR EACH ROW
+  EXECUTE PROCEDURE db.ft_card_after_insert();
+
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION ft_card_before_update()
 RETURNS trigger AS $$
 DECLARE
   nParent	numeric;
   nUserId	numeric;
 BEGIN
-  IF OLD.Client IS NULL AND NEW.Client IS NOT NULL THEN
-    nUserId := GetClientUserId(NEW.Client);
-    PERFORM CheckObjectAccess(NEW.id, B'010', nUserId);
-    SELECT parent INTO nParent FROM db.object WHERE id = NEW.DOCUMENT;
+  IF OLD.client IS NULL AND NEW.client IS NOT NULL THEN
+    nUserId := GetClientUserId(NEW.client);
+    PERFORM CheckObjectAccess(NEW.document, B'010', nUserId);
+    SELECT parent INTO nParent FROM db.object WHERE id = NEW.document;
     IF nParent IS NOT NULL THEN
       PERFORM CheckObjectAccess(nParent, B'010', nUserId);
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+CREATE TRIGGER t_card_before_update
+  BEFORE UPDATE ON db.card
+  FOR EACH ROW
+  EXECUTE PROCEDURE ft_card_before_update();
+
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION ft_card_after_update()
+RETURNS trigger AS $$
+DECLARE
+  nUserId	numeric;
+BEGIN
+  IF coalesce(OLD.client, 0) <> coalesce(NEW.client, 0) THEN
+    IF NEW.client IS NOT NULL THEN
+      nUserId := GetClientUserId(NEW.client);
+      IF nUserId IS NOT NULL THEN
+        INSERT INTO db.aou SELECT NEW.document, nUserId, B'000', B'100';
+      END IF;
+    END IF;
+
+    IF OLD.client IS NOT NULL THEN
+      nUserId := GetClientUserId(OLD.client);
+      IF nUserId IS NOT NULL THEN
+        DELETE FROM db.aou WHERE object = OLD.document AND userid = nUserId;
+      END IF;
     END IF;
   END IF;
 
@@ -81,12 +140,10 @@ $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
---------------------------------------------------------------------------------
-
-CREATE TRIGGER t_card_update
-  BEFORE UPDATE ON db.card
+CREATE TRIGGER t_card_after_update
+  AFTER UPDATE ON db.card
   FOR EACH ROW
-  EXECUTE PROCEDURE ft_card_update();
+  EXECUTE PROCEDURE ft_card_after_update();
 
 --------------------------------------------------------------------------------
 -- CreateCard ------------------------------------------------------------------

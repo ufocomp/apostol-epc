@@ -723,6 +723,10 @@ BEGIN
             PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'available'));
           END IF;
 
+          IF rec_method.actioncode = 'Finishing' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'available'));
+          END IF;
+
           IF rec_method.actioncode = 'Unavailable' THEN
             PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'unavailable'));
           END IF;
@@ -767,6 +771,10 @@ BEGIN
 
           IF rec_method.actioncode = 'Charging' THEN
             PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'charging'));
+          END IF;
+
+          IF rec_method.actioncode = 'Finishing' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'available'));
           END IF;
 
           IF rec_method.actioncode = 'Reserved' THEN
@@ -1331,6 +1339,7 @@ BEGIN
 
           IF rec_action.code = 'Finishing' THEN
             PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Зарядная станция отправила статус: Finishing', 'EventChargePointFinishing();');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Смена состояния', 'ChangeObjectState();');
           END IF;
 
           IF rec_action.code = 'Reserved' THEN

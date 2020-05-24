@@ -21,7 +21,7 @@ Author:
 
 --*/
 
-#include "Epc.hpp"
+#include "epc.hpp"
 //----------------------------------------------------------------------------------------------------------------------
 
 #define exit_failure(msg) {                                 \
@@ -199,19 +199,19 @@ int main(int argc, char *argv[]) {
     int exitcode;
 
     DefaultLocale.SetLocale("");
+    
+    CEPC epc(argc, argv);
 
     try
     {
-        Application = CEPC::Create(argc, argv);
+        epc.Name() = APP_NAME;
+        epc.Description() = APP_DESCRIPTION;
+        epc.Version() = APP_VERSION;
+        epc.Title() = APP_VER;
 
-        Application->Name() = APP_NAME;
-        Application->Description() = APP_DESCRIPTION;
-        Application->Version() = APP_VERSION;
-        Application->Title() = APP_VER;
+        epc.Run();
 
-        Application->Run();
-
-        exitcode = Application->ExitCode();
+        exitcode = epc.ExitCode();
     }
     catch (std::exception& e)
     {
@@ -221,8 +221,6 @@ int main(int argc, char *argv[]) {
     {
         exit_failure("Unknown error...");
     }
-
-    Application->Destroy();
 
     exit(exitcode);
 }

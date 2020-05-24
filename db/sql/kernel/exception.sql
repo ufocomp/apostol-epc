@@ -236,6 +236,15 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
+CREATE OR REPLACE FUNCTION ChargePointExists (
+  pCode		varchar
+) RETURNS	void
+AS $$
+BEGIN
+  RAISE EXCEPTION 'Зарядная станция с идентификатором "%" уже существует.', pCode;
+END;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE;
+
 CREATE OR REPLACE FUNCTION AlreadyExists (
   pWho		varchar
 ) RETURNS	void

@@ -3,13 +3,13 @@
 --------------------------------------------------------------------------------
 
 CREATE TABLE db.client (
-    Id			numeric(12) PRIMARY KEY,
-    Document	numeric(12) NOT NULL,
-    Code		varchar(30) NOT NULL,
-    UserId		numeric(12),
-    Phone		jsonb,
-    Email		jsonb,
-    Info		jsonb,
+    id			numeric(12) PRIMARY KEY,
+    document	numeric(12) NOT NULL,
+    code		varchar(30) NOT NULL,
+    userId		numeric(12),
+    phone		jsonb,
+    email		jsonb,
+    info		jsonb,
     CONSTRAINT fk_client_document FOREIGN KEY (document) REFERENCES db.document(id),
     CONSTRAINT fk_client_user FOREIGN KEY (userid) REFERENCES db.user(id)
 );

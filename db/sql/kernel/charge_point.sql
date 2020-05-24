@@ -65,10 +65,20 @@ CREATE TRIGGER t_charge_point_before_insert
 
 CREATE OR REPLACE FUNCTION ft_charge_point_after_insert()
 RETURNS trigger AS $$
+DECLARE
+  nOwner    numeric;
+  nUserId   numeric;
 BEGIN
   IF NEW.client IS NOT NULL THEN
-    INSERT INTO db.aou SELECT NEW.reference, GetClientUserId(NEW.client), B'000', B'110';
-    DELETE FROM db.aou WHERE object = NEW.reference AND userid = 1002;
+    SELECT owner INTO nOwner FROM db.object WHERE id = NEW.reference;
+
+    nUserId := GetClientUserId(NEW.client);
+    IF nOwner <> nUserId THEN
+      UPDATE db.aou SET allow = allow | B'110' WHERE object = NEW.reference AND userid = nUserId;
+      IF NOT FOUND THEN
+        INSERT INTO db.aou SELECT NEW.reference, nUserId, B'000', B'110';
+      END IF;
+    END IF;
   END IF;
 
   RAISE DEBUG 'Создана зарядная станция Id: %', NEW.ID;
@@ -90,17 +100,28 @@ CREATE TRIGGER t_charge_point_after_insert
 
 CREATE OR REPLACE FUNCTION ft_charge_point_after_update()
 RETURNS trigger AS $$
+DECLARE
+  nOwner    numeric;
+  nUserId   numeric;
 BEGIN
   IF coalesce(OLD.client, 0) <> coalesce(NEW.client, 0) THEN
-    IF NEW.client IS NULL THEN
-      INSERT INTO db.aou SELECT NEW.ID, 1002, B'000', B'100';
-    ELSE
-      INSERT INTO db.aou SELECT NEW.reference, GetClientUserId(NEW.client), B'000', B'110';
-      DELETE FROM db.aou WHERE object = NEW.reference AND userid = 1002;
+    SELECT owner INTO nOwner FROM db.object WHERE id = NEW.reference;
+
+    IF NEW.client IS NOT NULL THEN
+      nUserId := GetClientUserId(NEW.client);
+      IF nOwner <> nUserId THEN
+        UPDATE db.aou SET allow = allow | B'110' WHERE object = NEW.reference AND userid = nUserId;
+        IF NOT found THEN
+          INSERT INTO db.aou SELECT NEW.reference, nUserId, B'000', B'110';
+        END IF;
+      END IF;
     END IF;
 
     IF OLD.client IS NOT NULL THEN
-      DELETE FROM db.aou WHERE object = OLD.reference AND userid = GetClientUserId(OLD.client);
+      nUserId := GetClientUserId(OLD.client);
+      IF nOwner <> nUserId THEN
+        DELETE FROM db.aou WHERE object = OLD.reference AND userid = nUserId;
+      END IF;
     END IF;
   END IF;
 
@@ -145,6 +166,12 @@ DECLARE
   nClass                numeric;
   nMethod               numeric;
 BEGIN
+  SELECT id INTO nReference FROM db.reference WHERE code = pIdentity;
+
+  IF found THEN
+    PERFORM ChargePointExists(pIdentity);
+  END IF;
+
   nReference := CreateReference(pParent, pType, pIdentity, pName, pDescription);
 
   INSERT INTO db.charge_point (id, reference, client, model, vendor, version, serialnumber, boxserialnumber, meterserialnumber, iccid, imsi)
@@ -184,21 +211,32 @@ CREATE OR REPLACE FUNCTION EditChargePoint (
 ) RETURNS               void
 AS $$
 DECLARE
-  nClass	numeric;
-  nMethod	numeric;
+  nReference	        numeric;
+  vIdentity             varchar;
+
+  nClass	            numeric;
+  nMethod	            numeric;
 BEGIN
+  SELECT code INTO vIdentity FROM db.reference WHERE id = pId;
+  IF vIdentity <> coalesce(pIdentity, vIdentity) THEN
+    SELECT id INTO nReference FROM db.reference WHERE code = pIdentity;
+    IF found THEN
+      PERFORM ChargePointExists(pIdentity);
+    END IF;
+  END IF;
+
   PERFORM EditReference(pId, pParent, pType, pIdentity, pName, pDescription);
 
   UPDATE db.charge_point
-     SET client = CheckNull(coalesce(pClient, client), 0),
+     SET client = CheckNull(coalesce(pClient, client, 0)),
          model = coalesce(pModel, model),
          vendor = coalesce(pVendor, vendor),
-         version = CheckNull(coalesce(pVersion, version), '<null>'),
-         serialNumber = CheckNull(coalesce(pSerialNumber, serialNumber), '<null>'),
-         boxSerialNumber = CheckNull(coalesce(pBoxSerialNumber, boxSerialNumber), '<null>'),
-         meterSerialNumber = CheckNull(coalesce(pMeterSerialNumber, meterSerialNumber), '<null>'),
-         iccid = CheckNull(coalesce(piccid, iccid), '<null>'),
-         imsi = CheckNull(coalesce(pimsi, imsi), '<null>')
+         version = CheckNull(coalesce(pVersion, version, '<null>')),
+         serialNumber = CheckNull(coalesce(pSerialNumber, serialNumber, '<null>')),
+         boxSerialNumber = CheckNull(coalesce(pBoxSerialNumber, boxSerialNumber, '<null>')),
+         meterSerialNumber = CheckNull(coalesce(pMeterSerialNumber, meterSerialNumber, '<null>')),
+         iccid = CheckNull(coalesce(piccid, iccid, '<null>')),
+         imsi = CheckNull(coalesce(pimsi, imsi, '<null>'))
    WHERE id = pId;
 
   SELECT class INTO nClass FROM db.type WHERE id = pType;
@@ -360,7 +398,55 @@ BEGIN
       FROM StatusNotification
      WHERE chargepoint = pChargePoint
        AND connectorid = coalesce(pConnectorId, connectorid)
-       AND pDate BETWEEN validfromdate AND validtodate
+       AND validFromDate <= pDate
+       AND validToDate > pDate
+  LOOP
+    arResult := array_append(arResult, row_to_json(r));
+  END LOOP;
+
+  RETURN array_to_json(arResult);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- VIEW Connectors -------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW Connectors
+AS
+  SELECT chargepoint, connectorid, status, errorcode, info, vendorid, vendorerrorcode, validfromdate as lastupdate
+    FROM db.status_notification
+   WHERE validfromdate <= current_timestamp at time zone 'utc'
+     AND validtodate > current_timestamp at time zone 'utc';
+
+GRANT SELECT ON Connectors TO administrator;
+
+--------------------------------------------------------------------------------
+-- GetJsonConnectors -----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetJsonConnectors (
+  pChargePoint  numeric
+) RETURNS	    json
+AS $$
+DECLARE
+  arResult	    json[];
+  r		        record;
+BEGIN
+  FOR r IN
+    WITH Clients AS (
+      SELECT c.client, t.card, t.connectorid
+        FROM db.transaction t INNER JOIN db.card c ON c.id = t.card
+       WHERE t.chargepoint = pChargePoint
+         AND t.datestart <= current_timestamp at time zone 'utc'
+         AND t.datestop > current_timestamp at time zone 'utc'
+       GROUP BY client, card, connectorid
+    )
+    SELECT cl.client, cn.chargepoint, cn.connectorid, cn.status, cn.errorcode, cn.info, cn.vendorid, cn.vendorerrorcode, cn.lastupdate
+      FROM Connectors cn LEFT JOIN Clients cl ON cn.connectorid = cl.connectorid
+     WHERE cn.chargepoint = pChargePoint
   LOOP
     arResult := array_append(arResult, row_to_json(r));
   END LOOP;
