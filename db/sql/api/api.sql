@@ -2691,7 +2691,7 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  arTables := array_cat(null, ARRAY['charge_point', 'card', 'client', 'order', 'calendar', 'tariff', 'client_tariff',
+  arTables := array_cat(null, ARRAY['charge_point', 'card', 'client', 'invoice', 'order', 'calendar', 'tariff', 'client_tariff',
       'address', 'address_tree',
       'object_file', 'object_data', 'object_address', 'object_coordinates',
       'status_notification', 'transaction', 'meter_value']);
@@ -4525,7 +4525,7 @@ BEGIN
           PERFORM ObjectNotFound('данные', r.code, r.id);
         END IF;
 
-        IF coalesce(r.data, true) THEN
+        IF NULLIF(r.data, '') IS NULL THEN
           PERFORM DeleteObjectData(r.id);
         ELSE
           PERFORM EditObjectData(r.id, pObject, nType, r.code, r.data);
@@ -4760,6 +4760,8 @@ BEGIN
     arKeys := array_cat(arKeys, ARRAY['id', 'code', 'name', 'latitude', 'longitude', 'accuracy', 'description']);
     PERFORM CheckJsonKeys('/object/coordinates', arKeys, pCoordinates);
 
+    nType := GetObjectDataType('json');
+
     FOR r IN SELECT * FROM json_to_recordset(pCoordinates) AS coordinates(id numeric, code varchar, name varchar, latitude numeric, longitude numeric, accuracy numeric, description text)
     LOOP
       IF r.id IS NOT NULL THEN
@@ -4773,8 +4775,6 @@ BEGIN
         END IF;
 
         SELECT o.id INTO nDataId FROM db.object_data o WHERE o.object = pObject AND o.code = 'geo';
-
-        nType := GetObjectDataType('json');
 
         IF coalesce(r.name, true) THEN
           PERFORM DeleteObjectData(nDataId);
@@ -6605,6 +6605,184 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
+-- INVOICE ---------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- api.invoice -----------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW api.invoice
+AS
+  SELECT * FROM ObjectInvoice;
+
+GRANT SELECT ON api.invoice TO daemon;
+
+--------------------------------------------------------------------------------
+-- api.add_invoice -------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Добавляет счёт на оплату.
+ * @param {numeric} pParent - Ссылка на родительский объект: api.document | null
+ * @param {varchar} pType - Tип
+ * @param {varchar} pCode - Код
+ * @param {numeric} pTransaction - Транзакция
+ * @param {text} pDescription - Описание
+ * @out param {numeric} id - Идентификатор счёта
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.add_invoice (
+  pParent       numeric,
+  pType         varchar,
+  pCode         varchar,
+  pTransaction  numeric,
+  pDescription  text default null,
+  OUT id        numeric,
+  OUT result    boolean,
+  OUT message   text
+) RETURNS       record
+AS $$
+DECLARE
+  nInvoice      numeric;
+  arTypes       text[];
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  pType := lower(pType);
+  arTypes := array_cat(arTypes, ARRAY['meter']);
+  IF array_position(arTypes, pType::text) IS NULL THEN
+    PERFORM IncorrectCode(pType, arTypes);
+  END IF;
+
+  nInvoice := CreateInvoice(pParent, GetType(pType || '.invoice'), pCode, pTransaction, pDescription);
+
+  id := nInvoice;
+
+  SELECT * INTO result, message FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  id := null;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.update_invoice ----------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Меняет параметры счёта на оплату (но не сам счёт).
+ * @param {numeric} pParent - Ссылка на родительский объект: Object.Parent | null
+ * @param {varchar} pType - Тип
+ * @param {varchar} pCode - Код
+ * @param {text} pDescription - Описание
+ * @out param {numeric} id - Идентификатор счёта
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.update_invoice (
+  pId		    numeric,
+  pParent	    numeric default null,
+  pType		    varchar default null,
+  pCode		    varchar default null,
+  pDescription	text default null,
+  OUT id        numeric,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS       record
+AS $$
+DECLARE
+  nType         numeric;
+  nInvoice      numeric;
+  arTypes       text[];
+BEGIN
+  IF current_session() IS NULL THEN
+    PERFORM LoginFailed();
+  END IF;
+
+  SELECT c.id INTO nInvoice FROM db.invoice c WHERE c.id = pId;
+  IF NOT FOUND THEN
+    PERFORM ObjectNotFound('заказ', 'id', pId);
+  END IF;
+
+  IF pType IS NOT NULL THEN
+    pType := lower(pType);
+    arTypes := array_cat(arTypes, ARRAY['meter']);
+    IF array_position(arTypes, pType::text) IS NULL THEN
+      PERFORM IncorrectCode(pType, arTypes);
+    END IF;
+    nType := GetType(pType || '.invoice');
+  ELSE
+    SELECT o.type INTO nType FROM db.object o WHERE o.id = pId;
+  END IF;
+
+  PERFORM EditInvoice(nInvoice, pParent, nType,pCode, pDescription);
+
+  id := nInvoice;
+
+  SELECT * INTO result, message FROM result_success();
+EXCEPTION
+WHEN others THEN
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT;
+  id := null;
+  result := false;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.get_invoice -------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает счёт
+ * @param {numeric} pId - Идентификатор
+ * @return {api.invoice} - Счёт
+ */
+CREATE OR REPLACE FUNCTION api.get_invoice (
+  pId		numeric
+) RETURNS	api.invoice
+AS $$
+  SELECT * FROM api.invoice WHERE id = pId
+$$ LANGUAGE SQL
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.list_invoice ------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает список счетов.
+ * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
+ * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
+ * @param {integer} pLimit - Лимит по количеству строк
+ * @param {integer} pOffSet - Пропустить указанное число строк
+ * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
+ * @return {SETOF api.invoice} - Счета
+ */
+CREATE OR REPLACE FUNCTION api.list_invoice (
+  pSearch	jsonb default null,
+  pFilter	jsonb default null,
+  pLimit	integer default null,
+  pOffSet	integer default null,
+  pOrderBy	jsonb default null
+) RETURNS	SETOF api.invoice
+AS $$
+BEGIN
+  RETURN QUERY EXECUTE CreateApiSql('api', 'invoice', pSearch, pFilter, pLimit, pOffSet, pOrderBy);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
 -- ORDER -----------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -6622,13 +6800,15 @@ GRANT SELECT ON api.order TO daemon;
 -- api.add_order ---------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Добавляет заказ.
+ * Добавляет ордер.
  * @param {numeric} pParent - Ссылка на родительский объект: api.document | null
  * @param {varchar} pType - Tип
  * @param {varchar} pCode - Код
- * @param {numeric} pTransaction - Транзакция
+ * @param {numeric} pClient - Клиент
+ * @param {numeric} pAmount - Сумма
+ * @param {numeric} pUuid - Универсальный уникальный идентификатор
  * @param {text} pDescription - Описание
- * @out param {numeric} id - Идентификатор карты
+ * @out param {numeric} id - Идентификатор ордера
  * @out param {boolean} result - Результат
  * @out param {text} message - Текст ошибки
  * @return {record}
@@ -6637,7 +6817,9 @@ CREATE OR REPLACE FUNCTION api.add_order (
   pParent       numeric,
   pType         varchar,
   pCode         varchar,
-  pTransaction  numeric,
+  pClient       numeric,
+  pAmount       numeric,
+  pUuid         uuid,
   pDescription  text default null,
   OUT id        numeric,
   OUT result    boolean,
@@ -6645,7 +6827,7 @@ CREATE OR REPLACE FUNCTION api.add_order (
 ) RETURNS       record
 AS $$
 DECLARE
-  nOrder         numeric;
+  nOrder      numeric;
   arTypes       text[];
 BEGIN
   IF current_session() IS NULL THEN
@@ -6653,12 +6835,12 @@ BEGIN
   END IF;
 
   pType := lower(pType);
-  arTypes := array_cat(arTypes, ARRAY['memorial']);
+  arTypes := array_cat(arTypes, ARRAY['payment']);
   IF array_position(arTypes, pType::text) IS NULL THEN
     PERFORM IncorrectCode(pType, arTypes);
   END IF;
 
-  nOrder := CreateOrder(pParent, GetType(pType || '.order'), pCode, pTransaction, pDescription);
+  nOrder := CreateOrder(pParent, GetType(pType || '.order'), pCode, pClient, pAmount, pUuid, pDescription);
 
   id := nOrder;
 
@@ -6677,12 +6859,15 @@ $$ LANGUAGE plpgsql
 -- api.update_order ------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Меняет параметры заказа (но не сам заказ).
+ * Меняет ордер.
  * @param {numeric} pParent - Ссылка на родительский объект: Object.Parent | null
  * @param {numeric} pType - Тип: Type.Id
  * @param {varchar} pCode - Код
+ * @param {numeric} pClient - Клиент
+ * @param {numeric} pAmount - Сумма
+ * @param {numeric} pUuid - Универсальный уникальный идентификатор
  * @param {text} pDescription - Описание
- * @out param {numeric} id - Идентификатор карты
+ * @out param {numeric} id - Идентификатор ордера
  * @out param {boolean} result - Результат
  * @out param {text} message - Текст ошибки
  * @return {record}
@@ -6690,8 +6875,11 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION api.update_order (
   pId		    numeric,
   pParent	    numeric default null,
-  pType		    numeric default null,
+  pType		    varchar default null,
   pCode		    varchar default null,
+  pClient       numeric default null,
+  pAmount       numeric default null,
+  pUuid         uuid default null,
   pDescription	text default null,
   OUT id        numeric,
   OUT result	boolean,
@@ -6700,7 +6888,7 @@ CREATE OR REPLACE FUNCTION api.update_order (
 AS $$
 DECLARE
   nType         numeric;
-  nOrder         numeric;
+  nOrder        numeric;
   arTypes       text[];
 BEGIN
   IF current_session() IS NULL THEN
@@ -6714,7 +6902,7 @@ BEGIN
 
   IF pType IS NOT NULL THEN
     pType := lower(pType);
-    arTypes := array_cat(arTypes, ARRAY['memorial']);
+    arTypes := array_cat(arTypes, ARRAY['payment']);
     IF array_position(arTypes, pType::text) IS NULL THEN
       PERFORM IncorrectCode(pType, arTypes);
     END IF;
@@ -6723,7 +6911,7 @@ BEGIN
     SELECT o.type INTO nType FROM db.object o WHERE o.id = pId;
   END IF;
 
-  PERFORM EditOrder(nOrder, pParent, nType,pCode, pDescription);
+  PERFORM EditOrder(nOrder, pParent, nType,pCode, pClient, pAmount, pUuid, pDescription);
 
   id := nOrder;
 
@@ -6742,9 +6930,9 @@ $$ LANGUAGE plpgsql
 -- api.get_order ---------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Возвращает заказ
+ * Возвращает ордер
  * @param {numeric} pId - Идентификатор
- * @return {api.order} - Заказ
+ * @return {api.order} - Ордер
  */
 CREATE OR REPLACE FUNCTION api.get_order (
   pId		numeric
@@ -6759,13 +6947,13 @@ $$ LANGUAGE SQL
 -- api.list_order --------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Возвращает список клиентов.
+ * Возвращает список ордеров.
  * @param {jsonb} pSearch - Условие: '[{"condition": "AND|OR", "field": "<поле>", "compare": "EQL|NEQ|LSS|LEQ|GTR|GEQ|GIN|LKE|ISN|INN", "value": "<значение>"}, ...]'
  * @param {jsonb} pFilter - Фильтр: '{"<поле>": "<значение>"}'
  * @param {integer} pLimit - Лимит по количеству строк
  * @param {integer} pOffSet - Пропустить указанное число строк
  * @param {jsonb} pOrderBy - Сортировать по указанным в массиве полям
- * @return {SETOF api.order} - Клиенты
+ * @return {SETOF api.order} - Ордера
  */
 CREATE OR REPLACE FUNCTION api.list_order (
   pSearch	jsonb default null,
@@ -7427,7 +7615,7 @@ $$ LANGUAGE plpgsql
 /**
  * Возвращает заказ
  * @param {numeric} pId - Идентификатор
- * @return {api.tariff} - Заказ
+ * @return {api.tariff} - Тариф
  */
 CREATE OR REPLACE FUNCTION api.get_tariff (
   pId		numeric

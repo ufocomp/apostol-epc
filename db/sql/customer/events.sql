@@ -89,7 +89,7 @@ CREATE OR REPLACE FUNCTION EventObjectDelete (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog('M', 1016, 'Объект удален.', pObject);
+  PERFORM WriteToEventLog('M', 1016, 'Объект удалён.', pObject);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -223,7 +223,7 @@ CREATE OR REPLACE FUNCTION EventDocumentDelete (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog('M', 1016, 'Документ удален.', pObject);
+  PERFORM WriteToEventLog('M', 1016, 'Документ удалён.', pObject);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -350,7 +350,7 @@ CREATE OR REPLACE FUNCTION EventReferenceDelete (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog('M', 1016, 'Справочник удален.', pObject);
+  PERFORM WriteToEventLog('M', 1016, 'Справочник удалён.', pObject);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -478,7 +478,7 @@ CREATE OR REPLACE FUNCTION EventAddressDelete (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog('M', 1016, 'Адрес удален.', pObject);
+  PERFORM WriteToEventLog('M', 1016, 'Адрес удалён.', pObject);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -770,7 +770,7 @@ CREATE OR REPLACE FUNCTION EventContractDelete (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog('M', 1016, 'Договор удален.', pObject);
+  PERFORM WriteToEventLog('M', 1016, 'Договор удалён.', pObject);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -897,7 +897,7 @@ CREATE OR REPLACE FUNCTION EventCardDelete (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog('M', 1016, 'Карта удалена.', pObject);
+  PERFORM WriteToEventLog('M', 1016, 'Карта удалёна.', pObject);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -1172,7 +1172,7 @@ CREATE OR REPLACE FUNCTION EventChargePointDelete (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog('M', 1016, 'Зарядная станция удалена.', pObject);
+  PERFORM WriteToEventLog('M', 1016, 'Зарядная станция удалёна.', pObject);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -1218,6 +1218,146 @@ BEGIN
   DELETE FROM db.charge_point WHERE id = pObject;
 
   PERFORM WriteToEventLog('W', 2010, '[' || pObject || '] [' || coalesce(r.label, '<null>') || '] Зарядная станция уничтожена.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- INVOICE ---------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- EventInvoiceCreate ----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventInvoiceCreate (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1010, 'Счёт на оплату создан.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventInvoiceOpen ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventInvoiceOpen (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1011, 'Счёт на оплату открыт.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventInvoiceEdit ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventInvoiceEdit (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1012, 'Счёт на оплату изменён.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventInvoiceSave ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventInvoiceSave (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1013, 'Счёт на оплату сохранён.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventInvoiceEnable ----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventInvoiceEnable (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1014, 'Счёт на оплату в работе.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventInvoiceCancel ----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventInvoiceCancel (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1018, 'Счёт на оплату отменён.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventInvoiceDisable ---------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventInvoiceDisable (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1015, 'Счёт на оплату оплачен.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventInvoiceDelete ----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventInvoiceDelete (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1016, 'Счёт на оплату удалён.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventInvoiceRestore ---------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventInvoiceRestore (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1017, 'Счёт на оплату восстановлен.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventInvoiceDrop ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventInvoiceDrop (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+DECLARE
+  r		record;
+BEGIN
+  SELECT label INTO r FROM Object WHERE id = pObject;
+
+  DELETE FROM db.invoice WHERE id = pObject;
+
+  PERFORM WriteToEventLog('W', 2010, '[' || pObject || '] [' || coalesce(r.label, '<null>') || '] Счёт на оплату уничтожен.');
 END;
 $$ LANGUAGE plpgsql;
 
@@ -1286,7 +1426,33 @@ CREATE OR REPLACE FUNCTION EventOrderEnable (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog('M', 1014, 'Ордер включен.', pObject);
+  PERFORM WriteToEventLog('M', 1014, 'Ордер отправлен.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventOrderCancel ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventOrderCancel (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1018, 'Ордер отменён.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventOrderReturn ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventOrderReturn (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1019, 'Ордер возвращён.', pObject);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -1299,7 +1465,7 @@ CREATE OR REPLACE FUNCTION EventOrderDisable (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog('M', 1015, 'Ордер выключен.', pObject);
+  PERFORM WriteToEventLog('M', 1015, 'Ордер принят.', pObject);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -1312,7 +1478,7 @@ CREATE OR REPLACE FUNCTION EventOrderDelete (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog('M', 1016, 'Ордер удален.', pObject);
+  PERFORM WriteToEventLog('M', 1016, 'Ордер удалён.', pObject);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -1439,7 +1605,7 @@ CREATE OR REPLACE FUNCTION EventCalendarDelete (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog('M', 1016, 'Календарь удален.', pObject);
+  PERFORM WriteToEventLog('M', 1016, 'Календарь удалён.', pObject);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -1566,7 +1732,7 @@ CREATE OR REPLACE FUNCTION EventTariffDelete (
 ) RETURNS	void
 AS $$
 BEGIN
-  PERFORM WriteToEventLog('M', 1016, 'Тариф удален.', pObject);
+  PERFORM WriteToEventLog('M', 1016, 'Тариф удалён.', pObject);
 END;
 $$ LANGUAGE plpgsql;
 

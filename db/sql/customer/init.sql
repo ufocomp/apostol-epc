@@ -24,6 +24,7 @@ BEGIN
   INSERT INTO db.essence (code, name) VALUES ('contract', 'Договор');
   INSERT INTO db.essence (code, name) VALUES ('card', 'Карта');
   INSERT INTO db.essence (code, name) VALUES ('charge_point', 'Зарядная станция');
+  INSERT INTO db.essence (code, name) VALUES ('invoice', 'Счёт');
   INSERT INTO db.essence (code, name) VALUES ('order', 'Ордер');
 
   INSERT INTO db.essence (code, name) VALUES ('calendar', 'Календарь');
@@ -56,6 +57,7 @@ BEGIN
   INSERT INTO db.action (code, name) VALUES ('abort', 'Прервать');
   INSERT INTO db.action (code, name) VALUES ('postpone', 'Отложить');
   INSERT INTO db.action (code, name) VALUES ('reserve', 'Резервировать');
+  INSERT INTO db.action (code, name) VALUES ('return', 'Вернуть');
 
   -- OCPP ----------------------------------------------------------------------
 
@@ -118,6 +120,12 @@ BEGIN
       nEssence := GetEssence('charge_point');
 
       nId[2] := AddClass(nId[1], nEssence, 'charge_point', 'Зарядная станция', false);
+
+      -- Счёт-фактура
+
+      nEssence := GetEssence('invoice');
+
+      nId[2] := AddClass(nId[1], nEssence, 'invoice', 'Счёт на оплату', false);
 
       -- Ордер
 
@@ -193,8 +201,12 @@ BEGIN
       PERFORM AddType(rec_class.id, 'private.charge_point', 'Приватная', 'Приватная зарядная станция');
     END IF;
 
+    IF rec_class.code = 'invoice' THEN
+      PERFORM AddType(rec_class.id, 'meter.invoice', 'Счёт', 'Счёт на оплату потребленной электроэнергии');
+    END IF;
+
     IF rec_class.code = 'order' THEN
-      PERFORM AddType(rec_class.id, 'memorial.order', 'Ордер', 'Заказы');
+      PERFORM AddType(rec_class.id, 'payment.order', 'Заказ', 'Заказ на оплату через платёжную систему');
     END IF;
 
     IF rec_class.code = 'calendar' THEN
@@ -842,6 +854,167 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
+-- AddInvoiceMethods -------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION AddInvoiceMethods (
+  pClass	numeric
+)
+RETURNS void
+AS $$
+DECLARE
+  nState  	    numeric;
+
+  rec_class	    record;
+  rec_type	    record;
+  rec_state	    record;
+  rec_method	record;
+BEGIN
+
+  FOR rec_class IN SELECT * FROM Class WHERE id = pClass
+  LOOP
+    -- Операции (без учёта состояния)
+
+    PERFORM AddMethod(null, rec_class.id, null, GetAction('create'), null, 'Создать');
+    PERFORM AddMethod(null, rec_class.id, null, GetAction('open'), null, 'Открыть');
+    PERFORM AddMethod(null, rec_class.id, null, GetAction('edit'), null, 'Изменить');
+    PERFORM AddMethod(null, rec_class.id, null, GetAction('save'), null, 'Сохранить');
+    PERFORM AddMethod(null, rec_class.id, null, GetAction('enable'), null, 'Включить');
+    PERFORM AddMethod(null, rec_class.id, null, GetAction('disable'), null, 'Выключить');
+    PERFORM AddMethod(null, rec_class.id, null, GetAction('delete'), null, 'Удалить');
+    PERFORM AddMethod(null, rec_class.id, null, GetAction('restore'), null, 'Восстановить');
+    PERFORM AddMethod(null, rec_class.id, null, GetAction('drop'), null, 'Уничтожить');
+
+    -- Операции
+
+    FOR rec_type IN SELECT * FROM StateType
+    LOOP
+
+      CASE rec_type.code
+      WHEN 'created' THEN
+
+        nState := AddState(rec_class.id, rec_type.id, rec_type.code, 'Не оплачен');
+
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('enable'), null, 'В работу');
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('disable'), null, 'Оплатить');
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('delete'), null, 'Удалить');
+
+      WHEN 'enabled' THEN
+
+        nState := AddState(rec_class.id, rec_type.id, rec_type.code, 'В работе');
+
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('cancel'), null, 'Отменить');
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('disable'), null, 'Оплатить');
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('delete'), null, 'Удалить');
+
+      WHEN 'disabled' THEN
+
+        nState := AddState(rec_class.id, rec_type.id, rec_type.code, 'Оплачен');
+
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('enable'), null, 'В работу');
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('delete'), null, 'Удалить');
+
+      WHEN 'deleted' THEN
+
+        nState := AddState(rec_class.id, rec_type.id, rec_type.code, 'Удалён');
+
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('restore'), null, 'Восстановить');
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('drop'), null, 'Уничтожить');
+
+      END CASE;
+
+    END LOOP;
+
+    FOR rec_method IN SELECT * FROM Method WHERE class = rec_class.id AND state IS NULL
+    LOOP
+      IF rec_method.actioncode = 'create' THEN
+        PERFORM AddTransition(null, rec_method.id, GetState(rec_class.id, 'created'));
+      END IF;
+
+      IF rec_method.actioncode = 'enable' THEN
+        PERFORM AddTransition(null, rec_method.id, GetState(rec_class.id, 'enabled'));
+      END IF;
+
+      IF rec_method.actioncode = 'disable' THEN
+        PERFORM AddTransition(null, rec_method.id, GetState(rec_class.id, 'disabled'));
+      END IF;
+
+      IF rec_method.actioncode = 'delete' THEN
+        PERFORM AddTransition(null, rec_method.id, GetState(rec_class.id, 'deleted'));
+      END IF;
+
+      IF rec_method.actioncode = 'restore' THEN
+        PERFORM AddTransition(null, rec_method.id, GetState(rec_class.id, 'created'));
+      END IF;
+    END LOOP;
+
+    FOR rec_state IN SELECT * FROM State WHERE class = rec_class.id
+    LOOP
+      CASE rec_state.code
+      WHEN 'created' THEN
+
+        FOR rec_method IN SELECT * FROM Method WHERE state = rec_state.id
+        LOOP
+          IF rec_method.actioncode = 'enable' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'enabled'));
+          END IF;
+
+          IF rec_method.actioncode = 'disable' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'disabled'));
+          END IF;
+
+          IF rec_method.actioncode = 'delete' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'deleted'));
+          END IF;
+        END LOOP;
+
+      WHEN 'enabled' THEN
+
+        FOR rec_method IN SELECT * FROM Method WHERE state = rec_state.id
+        LOOP
+          IF rec_method.actioncode = 'cancel' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'created'));
+          END IF;
+
+          IF rec_method.actioncode = 'disable' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'disabled'));
+          END IF;
+
+          IF rec_method.actioncode = 'delete' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'deleted'));
+          END IF;
+        END LOOP;
+
+      WHEN 'disabled' THEN
+
+        FOR rec_method IN SELECT * FROM Method WHERE state = rec_state.id
+        LOOP
+          IF rec_method.actioncode = 'enable' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'enabled'));
+          END IF;
+
+          IF rec_method.actioncode = 'delete' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'deleted'));
+          END IF;
+        END LOOP;
+
+      WHEN 'deleted' THEN
+
+        FOR rec_method IN SELECT * FROM Method WHERE state = rec_state.id
+        LOOP
+          IF rec_method.actioncode = 'restore' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'created'));
+          END IF;
+        END LOOP;
+      END CASE;
+    END LOOP;
+  END LOOP;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
 -- AddOrderMethods -------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -881,23 +1054,24 @@ BEGIN
       CASE rec_type.code
       WHEN 'created' THEN
 
-        nState := AddState(rec_class.id, rec_type.id, rec_type.code, 'Создан');
+        nState := AddState(rec_class.id, rec_type.id, rec_type.code, 'Новый');
 
-          PERFORM AddMethod(null, rec_class.id, nState, GetAction('enable'), null, 'В работу');
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('enable'), null, 'Отправить');
           PERFORM AddMethod(null, rec_class.id, nState, GetAction('delete'), null, 'Удалить');
 
       WHEN 'enabled' THEN
 
-        nState := AddState(rec_class.id, rec_type.id, rec_type.code, 'В работе');
+        nState := AddState(rec_class.id, rec_type.id, rec_type.code, 'Отправлен');
 
-          PERFORM AddMethod(null, rec_class.id, nState, GetAction('disable'), null, 'Оплатить');
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('cancel'), null, 'Отменить');
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('disable'), null, 'Принять');
           PERFORM AddMethod(null, rec_class.id, nState, GetAction('delete'), null, 'Удалить');
 
       WHEN 'disabled' THEN
 
-        nState := AddState(rec_class.id, rec_type.id, rec_type.code, 'Оплачен');
+        nState := AddState(rec_class.id, rec_type.id, rec_type.code, 'Принят');
 
-          PERFORM AddMethod(null, rec_class.id, nState, GetAction('enable'), null, 'В работу');
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('return'), null, 'Вернуть');
           PERFORM AddMethod(null, rec_class.id, nState, GetAction('delete'), null, 'Удалить');
 
       WHEN 'deleted' THEN
@@ -954,6 +1128,10 @@ BEGIN
 
         FOR rec_method IN SELECT * FROM Method WHERE state = rec_state.id
         LOOP
+          IF rec_method.actioncode = 'cancel' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'created'));
+          END IF;
+
           IF rec_method.actioncode = 'disable' THEN
             PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'disabled'));
           END IF;
@@ -1498,6 +1676,76 @@ BEGIN
 
       PERFORM AddChargePointMethods(rec_class.id);
 
+    ELSIF rec_class.essencecode = 'invoice' THEN
+
+      IF rec_class.code = 'invoice' THEN
+
+        FOR rec_action IN SELECT * FROM Action
+        LOOP
+
+          IF rec_action.code = 'create' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Счёт на оплату создан', 'EventInvoiceCreate();');
+          END IF;
+
+          IF rec_action.code = 'open' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Счёт на оплату открыт', 'EventInvoiceOpen();');
+          END IF;
+
+          IF rec_action.code = 'edit' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Счёт на оплату изменён', 'EventInvoiceEdit();');
+          END IF;
+
+          IF rec_action.code = 'save' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Счёт на оплату сохранён', 'EventInvoiceSave();');
+          END IF;
+
+          IF rec_action.code = 'enable' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Счёт на оплату в работе', 'EventInvoiceEnable();');
+          END IF;
+
+          IF rec_action.code = 'cancel' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Счёт на оплату будет отменён', 'EventInvoiceCancel();');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Смена состояния', 'ChangeObjectState();');
+          END IF;
+
+          IF rec_action.code = 'disable' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Счёт на оплату оплачен', 'EventInvoiceDisable();');
+          END IF;
+
+          IF rec_action.code = 'delete' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Счёт на оплату будет удалён', 'EventInvoiceDelete();');
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+          END IF;
+
+          IF rec_action.code = 'restore' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Счёт на оплату восстановлен', 'EventInvoiceDelete();');
+          END IF;
+
+          IF rec_action.code = 'drop' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Счёт на оплату будет уничтожен', 'EventInvoiceDrop();');
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+          END IF;
+
+        END LOOP;
+
+      ELSE
+        -- Для всех остальных события класса родителя
+        FOR rec_action IN SELECT * FROM Action
+        LOOP
+          PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+        END LOOP;
+
+      END IF;
+
+      PERFORM AddInvoiceMethods(rec_class.id);
+
     ELSIF rec_class.essencecode = 'order' THEN
 
       IF rec_class.code = 'order' THEN
@@ -1527,12 +1775,22 @@ BEGIN
 
           IF rec_action.code = 'enable' THEN
             PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Ордер в работе', 'EventOrderEnable();');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Ордер отправлен', 'EventOrderEnable();');
+          END IF;
+
+          IF rec_action.code = 'cancel' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Ордер будет отменён', 'EventOrderCancel();');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Смена состояния', 'ChangeObjectState();');
+          END IF;
+
+          IF rec_action.code = 'return' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Ордер будет возвращён', 'EventOrderReturn();');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Смена состояния', 'ChangeObjectState();');
           END IF;
 
           IF rec_action.code = 'disable' THEN
             PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Ордер оплачен', 'EventOrderDisable();');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Ордер принят', 'EventOrderDisable();');
           END IF;
 
           IF rec_action.code = 'delete' THEN
@@ -1561,7 +1819,7 @@ BEGIN
 
       END IF;
 
-      PERFORM AddCardMethods(rec_class.id);
+      PERFORM AddOrderMethods(rec_class.id);
 
     ELSIF rec_class.essencecode = 'reference' THEN
 

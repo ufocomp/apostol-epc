@@ -15,6 +15,9 @@
 \echo [M] call charge_point.sql
 \ir charge_point.sql
 
+\echo [M] call invoice.sql
+\ir invoice.sql
+
 \echo [M] call order.sql
 \ir order.sql
 

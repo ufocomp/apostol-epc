@@ -16,6 +16,15 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
+CREATE OR REPLACE FUNCTION InvoiceCodeExists (
+  pCode		varchar
+) RETURNS	void
+AS $$
+BEGIN
+  RAISE EXCEPTION 'Счёт с кодом "%" уже существует.', pCode;
+END;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE;
+
 CREATE OR REPLACE FUNCTION OrderCodeExists (
   pCode		varchar
 ) RETURNS	void
@@ -25,7 +34,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
-CREATE OR REPLACE FUNCTION OrderTransactionExists()
+CREATE OR REPLACE FUNCTION InvoiceTransactionExists()
 RETURNS	void
 AS $$
 BEGIN
@@ -69,10 +78,10 @@ END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
 --------------------------------------------------------------------------------
--- FUNCTION InvalidOrderAmount -------------------------------------------------
+-- FUNCTION InvalidInvoiceAmount -------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION InvalidOrderAmount() RETURNS	void
+CREATE OR REPLACE FUNCTION InvalidInvoiceAmount() RETURNS	void
 AS $$
 BEGIN
   RAISE EXCEPTION 'Неверная сумма заказа.';
@@ -80,7 +89,7 @@ END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
 --------------------------------------------------------------------------------
--- FUNCTION InvalidOrderAmount -------------------------------------------------
+-- FUNCTION InvalidInvoiceAmount -------------------------------------------------
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION CardNotAssociated (
