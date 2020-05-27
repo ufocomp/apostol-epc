@@ -1,0 +1,25 @@
+\echo [M] ./kernel/tables.psql
+
+\echo [M] call workflow.sql
+\ir workflow.sql
+
+\echo [M] call object.sql
+\ir object.sql
+
+\echo [M] call document.sql
+\ir document.sql
+
+\echo [M] call reference.sql
+\ir reference.sql
+
+\echo [M] call log.sql
+\ir log.sql
+
+\echo [M] call calendar.sql
+\ir calendar.sql
+
+\echo [M] call kladr.sql
+\ir kladr.sql
+
+\echo [M] call address.sql
+\ir address.sql

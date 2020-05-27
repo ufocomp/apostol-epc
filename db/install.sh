@@ -51,6 +51,7 @@ display_help()
     display_message "  --help"
     display_message "  --install"
     display_message "  --make"
+    display_message "  --creatdb"
     display_message "  --update"
     display_message "  --patch"
     display_message "  --kladr"
@@ -73,7 +74,7 @@ for OPTION in "$@"; do
         # Script options.
         (--install)	SCRIPT="install";;
         (--make)	SCRIPT="make";;
-        (--update)	SCRIPT="update";;
+        (--createdb)	SCRIPT="createdb";;
         (--patch)	SCRIPT="patch";;
         (--kladr)	SCRIPT="kladr";;
         (--api)		SCRIPT="api";;
@@ -99,13 +100,14 @@ build_sql()
 {
     push_directory "$SQL_DIR"
 
-    sudo -u postgres -H psql -d template1 -f $SCRIPT.conf 2>"../log/$SCRIPT.log"
+    sudo -u postgres -H psql -d template1 -f $SCRIPT.psql 2>"../log/$SCRIPT.log"
 
     pop_directory
 }
 
 # Build.
 #==============================================================================
+
 if [[ $DISPLAY_HELP ]]; then
     display_help
 else

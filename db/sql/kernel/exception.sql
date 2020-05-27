@@ -218,33 +218,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
-CREATE OR REPLACE FUNCTION ClientCodeExists (
-  pCode		varchar
-) RETURNS	void
-AS $$
-BEGIN
-  RAISE EXCEPTION 'Клиент с кодом "%" уже существует.', pCode;
-END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE;
-
-CREATE OR REPLACE FUNCTION CardCodeExists (
-  pCode		varchar
-) RETURNS	void
-AS $$
-BEGIN
-  RAISE EXCEPTION 'Карта с кодом "%" уже существует.', pCode;
-END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE;
-
-CREATE OR REPLACE FUNCTION ChargePointExists (
-  pCode		varchar
-) RETURNS	void
-AS $$
-BEGIN
-  RAISE EXCEPTION 'Зарядная станция с идентификатором "%" уже существует.', pCode;
-END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE;
-
 CREATE OR REPLACE FUNCTION AlreadyExists (
   pWho		varchar
 ) RETURNS	void
@@ -448,7 +421,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
-CREATE OR REPLACE FUNCTION IncorrectRegisterKey (
+CREATE OR REPLACE FUNCTION IncorrectRegistryKey (
   pKey		text,
   pArray	anyarray
 ) RETURNS	void
@@ -458,28 +431,3 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
---------------------------------------------------------------------------------
--- FUNCTION ActionNotFound -----------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION ActionNotFound (
-  pAction	text
-) RETURNS	void
-AS $$
-BEGIN
-  RAISE EXCEPTION 'OCPP: Неопределенное действие: "%".', pAction;
-END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE;
-
---------------------------------------------------------------------------------
--- FUNCTION UnknownTransaction -------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION UnknownTransaction (
-  pId		numeric
-) RETURNS	void
-AS $$
-BEGIN
-  RAISE EXCEPTION 'Неизвестная транзакия: "%".', pId;
-END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE;

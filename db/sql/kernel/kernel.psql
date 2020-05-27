@@ -1,0 +1,24 @@
+\echo [M] ./kernel/kernel.psql
+
+\echo [M] call dt.sql
+\ir dt.sql
+
+\echo [M] call exception.sql
+\ir exception.sql
+
+\echo [M] call sequence.sql
+\ir sequence.sql
+
+\echo [M] call public.sql
+\ir public.sql
+
+\echo [M] call general.sql
+\ir general.sql
+
+\echo [M] call security.sql
+\ir security.sql
+
+\echo [M] call registry.sql
+\ir registry.sql
+
+\ir tables.psql

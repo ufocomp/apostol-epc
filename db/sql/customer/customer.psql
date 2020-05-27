@@ -1,0 +1,30 @@
+\echo [M] customer.psql
+
+\echo [M] call exception.sql
+\ir exception.sql
+
+\echo [M] call tariff.sql
+\ir tariff.sql
+
+\echo [M] call client.sql
+\ir client.sql
+
+\echo [M] call card.sql
+\ir card.sql
+
+\echo [M] call charge_point.sql
+\ir charge_point.sql
+
+\echo [M] call order.sql
+\ir order.sql
+
+\echo [M] call security.sql
+\ir security.sql
+
+\echo [M] call init.sql
+\ir init.sql
+
+\echo [M] call events.sql
+\ir events.sql
+
+\ir ocpp.psql

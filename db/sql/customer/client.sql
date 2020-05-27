@@ -598,6 +598,24 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
+-- GetClientCode ---------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetClientCode (
+  pClient	numeric
+) RETURNS	varchar
+AS $$
+DECLARE
+  vCode     varchar;
+BEGIN
+  SELECT code INTO vCode FROM db.client WHERE id = pClient;
+  RETURN vCode;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
 -- GetClientUserId -------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -689,3 +707,162 @@ AS
     FROM Client c INNER JOIN ObjectDocument d ON d.id = c.document;
 
 GRANT SELECT ON ObjectClient TO administrator;
+
+--------------------------------------------------------------------------------
+-- ClientTariffs ---------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW ClientTariffs (Id, Client, Tariff,
+    Type, TypeCode, TypeName, TypeDescription,
+    Code, Name, Description, Cost,
+    validFromDate, validToDate
+)
+AS
+  SELECT ol.id, ol.object, ol.linked, ol.type, t.code, t.name, t.description,
+         r.code, r.name, r.description, f.cost,
+         ol.validfromdate, ol.validtodate
+    FROM db.object_link ol INNER JOIN db.type t ON t.id = ol.type
+                           INNER JOIN db.reference r ON r.id = ol.linked
+                           INNER JOIN db.tariff f ON f.reference = r.id;
+
+GRANT SELECT ON ClientTariffs TO administrator;
+
+--------------------------------------------------------------------------------
+-- FUNCTION GetClientTariff ----------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Возвращает стоимость тарифа.
+ * @param {numeric} pObject - Идентификатор объекта (клиента)
+ * @param {numeric} pType - Идентификатор типа тарифа
+ * @param {timestamp} pDate - Дата
+ * @return {text}
+ */
+CREATE OR REPLACE FUNCTION GetClientTariff (
+  pObject	numeric,
+  pType	    numeric,
+  pDate		timestamp default oper_date()
+) RETURNS	numeric
+AS $$
+DECLARE
+  nTariff	numeric;
+BEGIN
+  SELECT Linked INTO nTariff
+    FROM db.object_link
+   WHERE Object = pObject
+     AND Type = pType
+     AND validFromDate <= pDate
+     AND ValidToDate > pDate;
+
+  RETURN GetTariffCost(nTariff);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- GetClientTariffs ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetClientTariffs (
+  pClient	numeric,
+  pDate		timestamp default oper_date()
+) RETURNS	text[][]
+AS $$
+DECLARE
+  arResult	text[][];
+  i		    integer default 1;
+  r		    ClientTariffs%rowtype;
+BEGIN
+  FOR r IN
+    SELECT *
+      FROM ClientTariffs
+     WHERE client = pClient
+       AND validFromDate <= pDate
+       AND ValidToDate > pDate
+     ORDER BY Type
+  LOOP
+    arResult[i] := ARRAY[r.tariff, r.typecode, r.typename, r.code, GetTariffCost(r.tariff)];
+    i := i + 1;
+  END LOOP;
+
+  RETURN arResult;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- GetClientTariffs ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetClientTariffs (
+  pClient	numeric,
+  pDate		timestamp default oper_date()
+) RETURNS	text[]
+AS $$
+DECLARE
+  arResult	text[];
+  r		    ClientTariffs%rowtype;
+BEGIN
+  FOR r IN
+    SELECT *
+      FROM ClientTariffs
+     WHERE client = pClient
+       AND validFromDate <= pDate
+       AND ValidToDate > pDate
+     ORDER BY Type
+  LOOP
+    arResult := array_cat(arResult, ARRAY[r.tariff, r.typecode, r.typename, r.code, GetTariffCost(r.tariff)]);
+  END LOOP;
+
+  RETURN arResult;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- GetClientTariffsJson --------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetClientTariffsJson (
+  pClient	numeric,
+  pDate		timestamp default oper_date()
+) RETURNS	json
+AS $$
+DECLARE
+  arResult	json[];
+  r		    record;
+BEGIN
+  FOR r IN
+    SELECT Tariff AS Id, TypeCode, TypeName, Code, GetTariffCost(Tariff) AS Cost
+      FROM ClientTariffs
+     WHERE client = pClient
+       AND validFromDate <= pDate
+       AND ValidToDate > pDate
+     ORDER BY Type
+  LOOP
+    arResult := array_append(arResult, row_to_json(r));
+  END LOOP;
+
+  RETURN array_to_json(arResult);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- GetClientTariffsJsonb -------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetClientTariffsJsonb (
+  pObject	numeric,
+  pDate		timestamp default oper_date()
+) RETURNS	jsonb
+AS $$
+BEGIN
+  RETURN GetClientTariffsJson(pObject, pDate);
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;

@@ -1,72 +1,68 @@
 --------------------------------------------------------------------------------
--- REGISTER --------------------------------------------------------------------
+-- REGISTRY --------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE SCHEMA IF NOT EXISTS register AUTHORIZATION kernel;
-
---------------------------------------------------------------------------------
-
-CREATE TABLE register.key (
-    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REGISTER'),
+CREATE TABLE registry.key (
+    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REGISTRY'),
     root		numeric(12),
     parent		numeric(12),
     key			text NOT NULL,
     level		integer NOT NULL,
-    CONSTRAINT fk_register_key_root FOREIGN KEY (root) REFERENCES register.key(id),
-    CONSTRAINT fk_register_key_parent FOREIGN KEY (parent) REFERENCES register.key(id)
+    CONSTRAINT fk_registry_key_root FOREIGN KEY (root) REFERENCES registry.key(id),
+    CONSTRAINT fk_registry_key_parent FOREIGN KEY (parent) REFERENCES registry.key(id)
 );
 
-COMMENT ON TABLE register.key IS 'Реестр (ключ).';
+COMMENT ON TABLE registry.key IS 'Реестр (ключ).';
 
-COMMENT ON COLUMN register.key.id IS 'Идентификатор';
-COMMENT ON COLUMN register.key.root IS 'Идентификатор корневого узла';
-COMMENT ON COLUMN register.key.parent IS 'Идентификатор родительского узла';
-COMMENT ON COLUMN register.key.key IS 'Ключ';
-COMMENT ON COLUMN register.key.level IS 'Уровень вложенности';
+COMMENT ON COLUMN registry.key.id IS 'Идентификатор';
+COMMENT ON COLUMN registry.key.root IS 'Идентификатор корневого узла';
+COMMENT ON COLUMN registry.key.parent IS 'Идентификатор родительского узла';
+COMMENT ON COLUMN registry.key.key IS 'Ключ';
+COMMENT ON COLUMN registry.key.level IS 'Уровень вложенности';
 
-CREATE INDEX register_key_root ON register.key (root);
-CREATE INDEX register_key_parent ON register.key (parent);
-CREATE INDEX register_key_key ON register.key (key);
-CREATE INDEX register_key_level ON register.key (level);
+CREATE INDEX registry_key_root ON registry.key (root);
+CREATE INDEX registry_key_parent ON registry.key (parent);
+CREATE INDEX registry_key_key ON registry.key (key);
+CREATE INDEX registry_key_level ON registry.key (level);
 
-CREATE UNIQUE INDEX register_key_unique ON register.key (root, parent, key);
+CREATE UNIQUE INDEX registry_key_unique ON registry.key (root, parent, key);
 
 --------------------------------------------------------------------------------
--- REGISTER_VALUE --------------------------------------------------------------
+-- REGISTRY_VALUE --------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE TABLE register.value (
-    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REGISTER'),
+CREATE TABLE registry.value (
+    id			numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REGISTRY'),
     key			numeric(12) NOT NULL,
     vname		text NOT NULL,
     vtype		integer NOT NULL,
-    vinteger		integer,
-    vnumeric		numeric,
-    vdatetime		timestamp,
+    vinteger	integer,
+    vnumeric	numeric,
+    vdatetime	timestamp,
     vstring		text,
-    vboolean		boolean,
-    CONSTRAINT ch_register_value_type CHECK (vtype BETWEEN 0 AND 4),
-    CONSTRAINT fk_register_value_key FOREIGN KEY (key) REFERENCES register.key(id)
+    vboolean	boolean,
+    CONSTRAINT ch_registry_value_type CHECK (vtype BETWEEN 0 AND 4),
+    CONSTRAINT fk_registry_value_key FOREIGN KEY (key) REFERENCES registry.key(id)
 );
 
-COMMENT ON TABLE register.value IS 'Реестр (значение).';
+COMMENT ON TABLE registry.value IS 'Реестр (значение).';
 
-COMMENT ON COLUMN register.value.id IS 'Идентификатор';
-COMMENT ON COLUMN register.value.key IS 'Идентификатор ключа';
-COMMENT ON COLUMN register.value.vname IS 'Имя значения';
-COMMENT ON COLUMN register.value.vtype IS 'Тип данных';
-COMMENT ON COLUMN register.value.vinteger IS 'Целое число: vtype = 0';
-COMMENT ON COLUMN register.value.vnumeric IS 'Число с произвольной точностью: vtype = 1';
-COMMENT ON COLUMN register.value.vdatetime IS 'Дата и время: vtype = 2';
-COMMENT ON COLUMN register.value.vstring IS 'Строка: vtype = 3';
-COMMENT ON COLUMN register.value.vboolean IS 'Логический: vtype = 4';
+COMMENT ON COLUMN registry.value.id IS 'Идентификатор';
+COMMENT ON COLUMN registry.value.key IS 'Идентификатор ключа';
+COMMENT ON COLUMN registry.value.vname IS 'Имя значения';
+COMMENT ON COLUMN registry.value.vtype IS 'Тип данных';
+COMMENT ON COLUMN registry.value.vinteger IS 'Целое число: vtype = 0';
+COMMENT ON COLUMN registry.value.vnumeric IS 'Число с произвольной точностью: vtype = 1';
+COMMENT ON COLUMN registry.value.vdatetime IS 'Дата и время: vtype = 2';
+COMMENT ON COLUMN registry.value.vstring IS 'Строка: vtype = 3';
+COMMENT ON COLUMN registry.value.vboolean IS 'Логический: vtype = 4';
 
 --------------------------------------------------------------------------------
 
-CREATE INDEX register_value_key ON register.value (key);
-CREATE INDEX register_value_name ON register.value (vname);
+CREATE INDEX registry_value_key ON registry.value (key);
+CREATE INDEX registry_value_name ON registry.value (vname);
 
-CREATE UNIQUE INDEX register_value_unique ON register.value (key, vname);
+CREATE UNIQUE INDEX registry_value_unique ON registry.value (key, vname);
 
 --------------------------------------------------------------------------------
 -- FUNCTION reg_key_to_array ---------------------------------------------------
@@ -77,7 +73,7 @@ CREATE OR REPLACE FUNCTION reg_key_to_array (
 ) RETURNS 	text[]
 AS $$
 DECLARE
-  i		integer;
+  i		    integer;
   arKey		text[];
   vStr		text;
   vKey		text;
@@ -119,14 +115,14 @@ CREATE OR REPLACE FUNCTION get_reg_key (
 AS $$
 DECLARE
   vKey		text;
-  r		record;
+  r		    record;
 BEGIN
   FOR r IN 
     WITH RECURSIVE keytree(id, parent, key) AS (
-      SELECT id, parent, key FROM register.key WHERE id = pKey
+      SELECT id, parent, key FROM registry.key WHERE id = pKey
     UNION ALL
       SELECT k.id, k.parent, k.key
-        FROM register.key k INNER JOIN keytree kt ON kt.parent = k.id
+        FROM registry.key k INNER JOIN keytree kt ON kt.parent = k.id
        WHERE k.root IS NOT NULL
     )
     SELECT key FROM keytree
@@ -153,7 +149,7 @@ CREATE OR REPLACE FUNCTION get_reg_value (
 ) RETURNS	Variant 
 AS $$
   SELECT vtype, vinteger, vnumeric, vdatetime, vstring, vboolean 
-    FROM register.value 
+    FROM registry.value 
    WHERE id = pId
 $$ LANGUAGE SQL
    SECURITY DEFINER
@@ -165,9 +161,9 @@ $$ LANGUAGE SQL
 
 CREATE OR REPLACE FUNCTION RegEnumKey (
   pId		numeric
-) RETURNS	SETOF register.key
+) RETURNS	SETOF registry.key
 AS $$
-  SELECT * FROM register.key WHERE parent = pId
+  SELECT * FROM registry.key WHERE parent = pId
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -184,7 +180,7 @@ CREATE OR REPLACE FUNCTION RegEnumValue (
   OUT value	Variant
 ) RETURNS	SETOF record
 AS $$
-  SELECT id, key, vname, get_reg_value(id) FROM register.value WHERE key = pKey
+  SELECT v.id, v.key, v.vname, get_reg_value(v.id) FROM registry.value v WHERE v.key = pKey
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -195,9 +191,9 @@ $$ LANGUAGE SQL
 
 CREATE OR REPLACE FUNCTION RegEnumValueEx (
   pKey		numeric
-) RETURNS	SETOF register.value
+) RETURNS	SETOF registry.value
 AS $$
-  SELECT * FROM register.value WHERE key = pKey
+  SELECT * FROM registry.value WHERE key = pKey
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -210,7 +206,7 @@ CREATE OR REPLACE FUNCTION RegQueryValue (
   pId		numeric
 ) RETURNS	Variant
 AS $$
-  SELECT get_reg_value(id) FROM register.value WHERE id = pId
+  SELECT get_reg_value(id) FROM registry.value WHERE id = pId
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -221,9 +217,9 @@ $$ LANGUAGE SQL
 
 CREATE OR REPLACE FUNCTION RegQueryValueEx (
   pId		numeric
-) RETURNS	register.value
+) RETURNS	registry.value
 AS $$
-  SELECT * FROM register.value WHERE id = pId
+  SELECT * FROM registry.value WHERE id = pId
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -233,11 +229,11 @@ $$ LANGUAGE SQL
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION RegGetValue (
-  pKey		numeric,
+  pKey		    numeric,
   pValueName	text
-) RETURNS	Variant
+) RETURNS	    Variant
 AS $$
-  SELECT get_reg_value(id) FROM register.value WHERE key = pKey AND vname = pValueName
+  SELECT get_reg_value(id) FROM registry.value WHERE key = pKey AND vname = pValueName
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -247,11 +243,11 @@ $$ LANGUAGE SQL
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION RegGetValueEx (
-  pKey		numeric,
+  pKey		    numeric,
   pValueName	text
-) RETURNS	register.value
+) RETURNS	    registry.value
 AS $$
-  SELECT * FROM register.value WHERE key = pKey AND vname = pValueName
+  SELECT * FROM registry.value WHERE key = pKey AND vname = pValueName
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
@@ -261,29 +257,29 @@ $$ LANGUAGE SQL
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION RegSetValue (
-  pKey		numeric,
+  pKey		    numeric,
   pValueName	text,
-  pData		Variant
-) RETURNS	numeric
+  pData		    Variant
+) RETURNS	    numeric
 AS $$
 DECLARE
-  nId		numeric;
+  nId		    numeric;
 BEGIN
-  SELECT id INTO nId FROM register.value WHERE id = pKey;
+  SELECT id INTO nId FROM registry.value WHERE id = pKey;
 
   IF not found THEN
 
-    SELECT id INTO nId FROM register.value WHERE key = pKey AND vname = coalesce(pValueName, 'default');
+    SELECT id INTO nId FROM registry.value WHERE key = pKey AND vname = coalesce(pValueName, 'default');
 
     IF not found THEN
 
-      INSERT INTO register.value (key, vname, vtype, vinteger, vnumeric, vdatetime, vstring, vboolean)
+      INSERT INTO registry.value (key, vname, vtype, vinteger, vnumeric, vdatetime, vstring, vboolean)
       VALUES (pKey, pValueName, pData.vType, pData.vInteger, pData.vNumeric, pData.vDateTime, pData.vString, pData.vBoolean)
       RETURNING id INTO nId;
 
     ELSE
 
-      UPDATE register.value 
+      UPDATE registry.value 
          SET vtype = coalesce(pData.vType, vtype), 
              vinteger = coalesce(pData.vInteger, vinteger), 
              vnumeric = coalesce(pData.vNumeric, vnumeric), 
@@ -296,7 +292,7 @@ BEGIN
 
   ELSE
 
-    UPDATE register.value 
+    UPDATE registry.value 
        SET vname = coalesce(pValueName, vname),
            vtype = coalesce(pData.vType, vtype), 
            vinteger = coalesce(pData.vInteger, vinteger), 
@@ -319,34 +315,34 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION RegSetValueEx (
-  pKey		numeric,
+  pKey		    numeric,
   pValueName	text,
-  pType		integer,
-  pInteger	integer default null,
-  pNumeric	numeric default null,
-  pDateTime	timestamp default null,
-  pString	text default null,
-  pBoolean	boolean default null
-) RETURNS	numeric
+  pType		    integer,
+  pInteger	    integer default null,
+  pNumeric	    numeric default null,
+  pDateTime	    timestamp default null,
+  pString	    text default null,
+  pBoolean	    boolean default null
+) RETURNS	    numeric
 AS $$
 DECLARE
-  nId		numeric;
+  nId		    numeric;
 BEGIN
-  SELECT id INTO nId FROM register.value WHERE id = pKey;
+  SELECT id INTO nId FROM registry.value WHERE id = pKey;
 
   IF not found THEN
 
-    SELECT id INTO nId FROM register.value WHERE key = pKey AND vname = coalesce(pValueName, 'default');
+    SELECT id INTO nId FROM registry.value WHERE key = pKey AND vname = coalesce(pValueName, 'default');
 
     IF not found THEN
 
-      INSERT INTO register.value (key, vname, vtype, vinteger, vnumeric, vdatetime, vstring, vboolean)
+      INSERT INTO registry.value (key, vname, vtype, vinteger, vnumeric, vdatetime, vstring, vboolean)
       VALUES (pKey, pValueName, pType, pInteger, pNumeric, pDateTime, pString, pBoolean)
       RETURNING id INTO nId;
 
     ELSE
 
-      UPDATE register.value 
+      UPDATE registry.value 
          SET vtype = coalesce(pType, vtype), 
              vinteger = coalesce(pInteger, vinteger), 
              vnumeric = coalesce(pNumeric, vnumeric), 
@@ -359,7 +355,7 @@ BEGIN
 
   ELSE
 
-    UPDATE register.value 
+    UPDATE registry.value 
        SET vname = coalesce(pValueName, vname),
            vtype = coalesce(pType, vtype), 
            vinteger = coalesce(pInteger, vinteger), 
@@ -395,10 +391,10 @@ BEGIN
   pParent := coalesce(pParent, pRoot);
 
   IF pParent IS NOT NULL THEN
-    SELECT level + 1 INTO nLevel FROM register.key WHERE id = pParent;
+    SELECT level + 1 INTO nLevel FROM registry.key WHERE id = pParent;
   END IF;
  
-  INSERT INTO register.key (root, parent, key, level) 
+  INSERT INTO registry.key (root, parent, key, level) 
   VALUES (pRoot, pParent, pKey, nLevel) 
   RETURNING id INTO nId;
 
@@ -419,7 +415,7 @@ AS $$
 DECLARE
   nId		numeric;
 BEGIN
-  SELECT id INTO nId FROM register.key WHERE key = pKey AND level = 0;
+  SELECT id INTO nId FROM registry.key WHERE key = pKey AND level = 0;
   RETURN nId;
 END;
 $$ LANGUAGE plpgsql
@@ -438,7 +434,7 @@ AS $$
 DECLARE
   nId		numeric;
 BEGIN
-  SELECT id INTO nId FROM register.key WHERE parent = pParent AND key = pKey;
+  SELECT id INTO nId FROM registry.key WHERE parent = pParent AND key = pKey;
   RETURN nId;
 END;
 $$ LANGUAGE plpgsql
@@ -450,14 +446,14 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION GetRegKeyValue (
-  pKey		numeric,
+  pKey		    numeric,
   pValueName	varchar
-) RETURNS	numeric
+) RETURNS	    numeric
 AS $$
 DECLARE
-  nId		numeric;
+  nId		    numeric;
 BEGIN
-  SELECT id INTO nId FROM register.value WHERE key = pKey AND vname = pValueName;
+  SELECT id INTO nId FROM registry.value WHERE key = pKey AND vname = pValueName;
   RETURN nId;
 END;
 $$ LANGUAGE plpgsql
@@ -473,8 +469,8 @@ CREATE OR REPLACE FUNCTION DelRegKey (
 ) RETURNS	void
 AS $$
 BEGIN
-  DELETE FROM register.value WHERE key = pKey;
-  DELETE FROM register.key WHERE id = pKey;
+  DELETE FROM registry.value WHERE key = pKey;
+  DELETE FROM registry.key WHERE id = pKey;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
@@ -489,7 +485,7 @@ CREATE OR REPLACE FUNCTION DelRegKeyValue (
 ) RETURNS	void
 AS $$
 BEGIN
-  DELETE FROM register.value WHERE id = pId;
+  DELETE FROM registry.value WHERE id = pId;
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
@@ -504,9 +500,9 @@ CREATE OR REPLACE FUNCTION DelTreeRegKey (
 ) RETURNS	void
 AS $$
 DECLARE
-  r		record;  
+  r		    record;
 BEGIN
-  FOR r IN SELECT id FROM register.key WHERE parent = pKey
+  FOR r IN SELECT id FROM registry.key WHERE parent = pKey
   LOOP
     PERFORM DelTreeRegKey(r.id);
   END LOOP;
@@ -532,12 +528,12 @@ DECLARE
   nParent	numeric;
 
   arKey		text[];
-  i		integer;
+  i		    integer;
 BEGIN
   arKey := ARRAY['CURRENT_CONFIG', 'CURRENT_USER'];
 
   IF array_position(arKey, pKey) IS NULL THEN
-    PERFORM IncorrectRegisterKey(pKey, arKey);
+    PERFORM IncorrectRegistryKey(pKey, arKey);
   END IF;
 
   IF pKey = 'CURRENT_CONFIG' THEN
@@ -584,12 +580,12 @@ AS $$
 DECLARE
   nId		numeric;
   arKey		text[];
-  i		integer;
+  i		    integer;
 BEGIN
   arKey := ARRAY['CURRENT_CONFIG', 'CURRENT_USER'];
 
   IF array_position(arKey, pKey) IS NULL THEN
-    PERFORM IncorrectRegisterKey(pKey, arKey);
+    PERFORM IncorrectRegistryKey(pKey, arKey);
   END IF;
 
   IF pKey = 'CURRENT_CONFIG' THEN
@@ -710,10 +706,10 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- REGISTER --------------------------------------------------------------------
+-- REGISTRY --------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW register (Id, Key, KeyName, Parnet, SubKey, SubKeyName, Level, 
+CREATE OR REPLACE VIEW registry (Id, Key, KeyName, Parent, SubKey, SubKeyName, Level,
   ValueName, Value
 ) 
 AS
@@ -721,14 +717,14 @@ AS
          CASE r.key WHEN 'kernel' THEN 'CURRENT_CONFIG' ELSE 'CURRENT_USER' END, 
          k.parent, k.id, k.key, k.level, 
          v.vname, get_reg_value(v.id)
-    FROM register.key k  LEFT JOIN register.value v ON v.key = k.id
-                        INNER JOIN (SELECT id, key FROM register.key) r ON r.id = k.root;
+    FROM registry.key k  LEFT JOIN registry.value v ON v.key = k.id
+                        INNER JOIN (SELECT * FROM registry.key) r ON r.id = k.root;
 
 --------------------------------------------------------------------------------
--- REGISTER_EX -----------------------------------------------------------------
+-- REGISTRY_EX -----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW register_ex (Id, Key, KeyName, Parnet, SubKey, SubKeyName, Level, 
+CREATE OR REPLACE VIEW registry_ex (Id, Key, KeyName, Parent, SubKey, SubKeyName, Level,
   ValueName, vType, vInteger, vNumeric, vDateTime, vString, vBoolean
 ) 
 AS
@@ -736,97 +732,97 @@ AS
          CASE r.key WHEN 'kernel' THEN 'CURRENT_CONFIG' ELSE 'CURRENT_USER' END, 
          k.parent, k.id, k.key, k.level, 
          v.vname, v.vtype, v.vinteger, v.vnumeric, v.vdatetime, v.vstring, v.vboolean
-    FROM register.key k  LEFT JOIN register.value v ON v.key = k.id
-                        INNER JOIN (SELECT id, key FROM register.key) r ON r.id = k.root;
+    FROM registry.key k  LEFT JOIN registry.value v ON v.key = k.id
+                        INNER JOIN (SELECT * FROM registry.key) r ON r.id = k.root;
 
 --------------------------------------------------------------------------------
--- register --------------------------------------------------------------------
+-- registry --------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION register (
+CREATE OR REPLACE FUNCTION registry (
   pKey		numeric
-) RETURNS	SETOF register
+) RETURNS	SETOF registry
 AS $$
-  SELECT * FROM register WHERE key = pKey
+  SELECT * FROM registry WHERE key = pKey
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- register_ex -----------------------------------------------------------------
+-- registry_ex -----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION register_ex (
+CREATE OR REPLACE FUNCTION registry_ex (
   pKey		numeric
-) RETURNS	SETOF register_ex
+) RETURNS	SETOF registry_ex
 AS $$
-  SELECT * FROM register_ex WHERE key = pKey
+  SELECT * FROM registry_ex WHERE key = pKey
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- Register --------------------------------------------------------------------
+-- Registry --------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW Register
+CREATE OR REPLACE VIEW Registry
 AS
-  SELECT * FROM register(GetRegRoot('kernel'))
+  SELECT * FROM registry(GetRegRoot('kernel'))
    UNION ALL
-  SELECT * FROM register(GetRegRoot(current_username()));
+  SELECT * FROM registry(GetRegRoot(current_username()));
 
-GRANT ALL ON Register TO administrator;
+GRANT ALL ON Registry TO administrator;
 
 --------------------------------------------------------------------------------
--- RegisterEx ------------------------------------------------------------------
+-- RegistryEx ------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW RegisterEx
+CREATE OR REPLACE VIEW RegistryEx
 AS
-  SELECT * FROM register_ex(GetRegRoot('kernel'))
+  SELECT * FROM registry_ex(GetRegRoot('kernel'))
    UNION ALL
-  SELECT * FROM register_ex(GetRegRoot(current_username()));
+  SELECT * FROM registry_ex(GetRegRoot(current_username()));
 
-GRANT ALL ON RegisterEx TO administrator;
+GRANT ALL ON RegistryEx TO administrator;
 
 --------------------------------------------------------------------------------
--- register_key ----------------------------------------------------------------
+-- registry_key ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW register_key
+CREATE OR REPLACE VIEW registry_key
 AS
-  SELECT * FROM register.key;
+  SELECT * FROM registry.key;
 
 --------------------------------------------------------------------------------
--- FUNCTION register_key -------------------------------------------------------
+-- FUNCTION registry_key -------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION register_key (
+CREATE OR REPLACE FUNCTION registry_key (
   pKey		numeric
-) RETURNS	SETOF register_key
+) RETURNS	SETOF registry_key
 AS $$
-  SELECT * FROM register_key WHERE root = pKey
+  SELECT * FROM registry_key WHERE root = pKey
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- RegisterKey -----------------------------------------------------------------
+-- RegistryKey -----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW RegisterKey
+CREATE OR REPLACE VIEW RegistryKey
 AS
-  SELECT * FROM register_key(GetRegRoot('kernel'))
+  SELECT * FROM registry_key(GetRegRoot('kernel'))
    UNION ALL
-  SELECT * FROM register_key(GetRegRoot(current_username()));
+  SELECT * FROM registry_key(GetRegRoot(current_username()));
 
-GRANT ALL ON RegisterKey TO administrator;
+GRANT ALL ON RegistryKey TO administrator;
 
 --------------------------------------------------------------------------------
--- register_value --------------------------------------------------------------
+-- registry_value --------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW register_value (Id, Key, KeyName, SubKey, SubKeyName, 
+CREATE OR REPLACE VIEW registry_value (Id, Key, KeyName, SubKey, SubKeyName, 
   ValueName, Value
 )
 AS
@@ -834,14 +830,14 @@ AS
          CASE r.key WHEN 'kernel' THEN 'CURRENT_CONFIG' ELSE 'CURRENT_USER' END, 
          k.id, k.key, 
          v.vname, get_reg_value(v.id)
-    FROM register.value v, LATERAL (SELECT * FROM register.key WHERE id = v.key) k, 
-                           LATERAL (SELECT id, key FROM register.key WHERE id = k.root) r;
+    FROM registry.value v, LATERAL (SELECT * FROM registry.key WHERE id = v.key) k, 
+                           LATERAL (SELECT * FROM registry.key WHERE id = k.root) r;
 
 --------------------------------------------------------------------------------
--- register_value_ex -----------------------------------------------------------
+-- registry_value_ex -----------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW register_value_ex (Id, Key, KeyName, SubKey, SubKeyName, 
+CREATE OR REPLACE VIEW registry_value_ex (Id, Key, KeyName, SubKey, SubKeyName, 
   ValueName, vType, vInteger, vNumeric, vDateTime, vString, vBoolean
 )
 AS
@@ -849,55 +845,55 @@ AS
          CASE r.key WHEN 'kernel' THEN 'CURRENT_CONFIG' ELSE 'CURRENT_USER' END, 
          k.id, k.key, 
          v.vname, v.vtype, v.vinteger, v.vnumeric, v.vdatetime, v.vstring, v.vboolean
-    FROM register.value v, LATERAL (SELECT * FROM register.key WHERE id = v.key) k, 
-                           LATERAL (SELECT id, key FROM register.key WHERE id = k.root) r;
+    FROM registry.value v, LATERAL (SELECT * FROM registry.key WHERE id = v.key) k, 
+                           LATERAL (SELECT * FROM registry.key WHERE id = k.root) r;
 
 --------------------------------------------------------------------------------
--- FUNCTION register_value -----------------------------------------------------
+-- FUNCTION registry_value -----------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION register_value (
+CREATE OR REPLACE FUNCTION registry_value (
   pKey		numeric
-) RETURNS	SETOF register_value
+) RETURNS	SETOF registry_value
 AS $$
-  SELECT * FROM register_value WHERE key = pKey
+  SELECT * FROM registry_value WHERE key = pKey
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- FUNCTION register_value_ex --------------------------------------------------
+-- FUNCTION registry_value_ex --------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION register_value_ex (
+CREATE OR REPLACE FUNCTION registry_value_ex (
   pKey		numeric
-) RETURNS	SETOF register_value_ex
+) RETURNS	SETOF registry_value_ex
 AS $$
-  SELECT * FROM register_value_ex WHERE key = pKey
+  SELECT * FROM registry_value_ex WHERE key = pKey
 $$ LANGUAGE SQL
    SECURITY DEFINER
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- RegisterValue ---------------------------------------------------------------
+-- RegistryValue ---------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW RegisterValue
+CREATE OR REPLACE VIEW RegistryValue
 AS
-  SELECT * FROM register_value(GetRegRoot('kernel'))
+  SELECT * FROM registry_value(GetRegRoot('kernel'))
    UNION ALL
-  SELECT * FROM register_value(GetRegRoot(current_username()));
+  SELECT * FROM registry_value(GetRegRoot(current_username()));
 
-GRANT ALL ON RegisterValue TO administrator;
+GRANT ALL ON RegistryValue TO administrator;
 
 --------------------------------------------------------------------------------
--- RegisterValueEx -------------------------------------------------------------
+-- RegistryValueEx -------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW RegisterValueEx
+CREATE OR REPLACE VIEW RegistryValueEx
 AS
-  SELECT * FROM register_value_ex(GetRegRoot('kernel'))
+  SELECT * FROM registry_value_ex(GetRegRoot('kernel'))
    UNION ALL
-  SELECT * FROM register_value_ex(GetRegRoot(current_username()));
+  SELECT * FROM registry_value_ex(GetRegRoot(current_username()));
 
-GRANT ALL ON RegisterValueEx TO administrator;
+GRANT ALL ON RegistryValueEx TO administrator;

@@ -303,6 +303,24 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
+-- GetCardCode -----------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION GetCardCode (
+  pCard		numeric
+) RETURNS	varchar
+AS $$
+DECLARE
+  vCode     varchar;
+BEGIN
+  SELECT code INTO vCode FROM db.card WHERE id = pCard;
+  RETURN vCode;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
 -- GetCardClient ---------------------------------------------------------------
 --------------------------------------------------------------------------------
 

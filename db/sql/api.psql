@@ -1,0 +1,11 @@
+\echo [M] api.psql
+\ir sets.conf
+\connect :dbname kernel
+\echo [M] Повторное создание объектов в базе данных :dbname для схемы "api"
+
+DROP SCHEMA IF EXISTS api CASCADE;
+CREATE SCHEMA IF NOT EXISTS api AUTHORIZATION kernel;
+GRANT USAGE ON SCHEMA api TO administrator;
+
+\ir './api/api.psql'
+\q

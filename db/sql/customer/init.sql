@@ -19,14 +19,15 @@ BEGIN
   INSERT INTO db.essence (code, name) VALUES ('document', 'Документ');
   INSERT INTO db.essence (code, name) VALUES ('reference', 'Справочник');
 
+  INSERT INTO db.essence (code, name) VALUES ('address', 'Адрес');
   INSERT INTO db.essence (code, name) VALUES ('client', 'Клиент');
   INSERT INTO db.essence (code, name) VALUES ('contract', 'Договор');
   INSERT INTO db.essence (code, name) VALUES ('card', 'Карта');
+  INSERT INTO db.essence (code, name) VALUES ('charge_point', 'Зарядная станция');
+  INSERT INTO db.essence (code, name) VALUES ('order', 'Ордер');
 
   INSERT INTO db.essence (code, name) VALUES ('calendar', 'Календарь');
-  INSERT INTO db.essence (code, name) VALUES ('address', 'Адрес');
-
-  INSERT INTO db.essence (code, name) VALUES ('charge_point', 'Зарядная станция');
+  INSERT INTO db.essence (code, name) VALUES ('tariff', 'Тариф');
 
   ------------------------------------------------------------------------------
 
@@ -88,6 +89,12 @@ BEGIN
 
     nId[1] := AddClass(nId[0], nEssence, 'document', 'Документ', true);
 
+      -- Адрес
+
+      nEssence := GetEssence('address');
+
+      nId[2] := AddClass(nId[1], nEssence, 'address', 'Адрес', false);
+
       -- Клиент
 
       nEssence := GetEssence('client');
@@ -106,11 +113,17 @@ BEGIN
 
       nId[2] := AddClass(nId[1], nEssence, 'card', 'Карта', false);
 
-      -- Адрес
+      -- Зарядная станция
 
-      nEssence := GetEssence('address');
+      nEssence := GetEssence('charge_point');
 
-      nId[2] := AddClass(nId[1], nEssence, 'address', 'Адрес', false);
+      nId[2] := AddClass(nId[1], nEssence, 'charge_point', 'Зарядная станция', false);
+
+      -- Ордер
+
+      nEssence := GetEssence('order');
+
+      nId[2] := AddClass(nId[1], nEssence, 'order', 'Ордер', false);
 
     -- Справочник
 
@@ -124,11 +137,12 @@ BEGIN
 
       nId[2] := AddClass(nId[1], nEssence, 'calendar', 'Календарь', false);
 
-      -- Зарядная станция
+      -- Тариф
 
-      nEssence := GetEssence('charge_point');
+      nEssence := GetEssence('tariff');
 
-      nId[2] := AddClass(nId[1], nEssence, 'charge_point', 'Зарядная станция', false);
+      nId[2] := AddClass(nId[1], nEssence, 'tariff', 'Тариф', false);
+
 END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
@@ -152,18 +166,20 @@ BEGIN
 
   FOR rec_class IN SELECT * FROM Class WHERE NOT abstract
   LOOP
+    IF rec_class.code = 'address' THEN
+      PERFORM AddType(rec_class.id, 'post.address', 'Почтовый', 'Почтовый адрес');
+      PERFORM AddType(rec_class.id, 'actual.address', 'Фактический', 'Фактический адрес');
+      PERFORM AddType(rec_class.id, 'legal.address', 'Юридический', 'Юридический адрес');
+    END IF;
+
     IF rec_class.code = 'client' THEN
       PERFORM AddType(rec_class.id, 'entity.client', 'ЮЛ', 'Юридическое лицо');
-      PERFORM AddType(rec_class.id, 'natural.client', 'ФЛ', 'Физическое лицо');
-      PERFORM AddType(rec_class.id, 'sole.client', 'ИП', 'Индивидуальный предприниматель');
+      PERFORM AddType(rec_class.id, 'physical.client', 'ФЛ', 'Физическое лицо');
+      PERFORM AddType(rec_class.id, 'individual.client', 'ИП', 'Индивидуальный предприниматель');
     END IF;
 
     IF rec_class.code = 'contract' THEN
       PERFORM AddType(rec_class.id, 'service.contract', 'Обслуживания', 'Договор обслуживания');
-    END IF;
-
-    IF rec_class.code = 'calendar' THEN
-      PERFORM AddType(rec_class.id, 'workday.calendar', 'Рабочий', 'Календарь рабочих дней');
     END IF;
 
     IF rec_class.code = 'card' THEN
@@ -172,15 +188,21 @@ BEGIN
       PERFORM AddType(rec_class.id, 'plastic.card', 'Пластиковая карта', 'Пластиковая карта');
     END IF;
 
-    IF rec_class.code = 'address' THEN
-      PERFORM AddType(rec_class.id, 'post.address', 'Почтовый', 'Почтовый адрес');
-      PERFORM AddType(rec_class.id, 'actual.address', 'Фактический', 'Фактический адрес');
-      PERFORM AddType(rec_class.id, 'legal.address', 'Юридический', 'Юридический адрес');
-    END IF;
-
     IF rec_class.code = 'charge_point' THEN
       PERFORM AddType(rec_class.id, 'public.charge_point', 'Публичная', 'Публичная зарядная станция');
       PERFORM AddType(rec_class.id, 'private.charge_point', 'Приватная', 'Приватная зарядная станция');
+    END IF;
+
+    IF rec_class.code = 'order' THEN
+      PERFORM AddType(rec_class.id, 'memorial.order', 'Ордер', 'Заказы');
+    END IF;
+
+    IF rec_class.code = 'calendar' THEN
+      PERFORM AddType(rec_class.id, 'workday.calendar', 'Рабочий', 'Календарь рабочих дней');
+    END IF;
+
+    IF rec_class.code = 'tariff' THEN
+      PERFORM AddType(rec_class.id, 'client.tariff', 'Тариф', 'Тарифы');
     END IF;
 
   END LOOP;
@@ -820,6 +842,157 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
+-- AddOrderMethods -------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION AddOrderMethods (
+  pClass	numeric
+)
+RETURNS void
+AS $$
+DECLARE
+  nState  	    numeric;
+
+  rec_class	    record;
+  rec_type	    record;
+  rec_state	    record;
+  rec_method	record;
+BEGIN
+
+  FOR rec_class IN SELECT * FROM Class WHERE id = pClass
+  LOOP
+    -- Операции (без учёта состояния)
+
+    PERFORM AddMethod(null, rec_class.id, null, GetAction('create'), null, 'Создать');
+    PERFORM AddMethod(null, rec_class.id, null, GetAction('open'), null, 'Открыть');
+    PERFORM AddMethod(null, rec_class.id, null, GetAction('edit'), null, 'Изменить');
+    PERFORM AddMethod(null, rec_class.id, null, GetAction('save'), null, 'Сохранить');
+    PERFORM AddMethod(null, rec_class.id, null, GetAction('enable'), null, 'Включить');
+    PERFORM AddMethod(null, rec_class.id, null, GetAction('disable'), null, 'Выключить');
+    PERFORM AddMethod(null, rec_class.id, null, GetAction('delete'), null, 'Удалить');
+    PERFORM AddMethod(null, rec_class.id, null, GetAction('restore'), null, 'Восстановить');
+    PERFORM AddMethod(null, rec_class.id, null, GetAction('drop'), null, 'Уничтожить');
+
+    -- Операции
+
+    FOR rec_type IN SELECT * FROM StateType
+    LOOP
+
+      CASE rec_type.code
+      WHEN 'created' THEN
+
+        nState := AddState(rec_class.id, rec_type.id, rec_type.code, 'Создан');
+
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('enable'), null, 'В работу');
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('delete'), null, 'Удалить');
+
+      WHEN 'enabled' THEN
+
+        nState := AddState(rec_class.id, rec_type.id, rec_type.code, 'В работе');
+
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('disable'), null, 'Оплатить');
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('delete'), null, 'Удалить');
+
+      WHEN 'disabled' THEN
+
+        nState := AddState(rec_class.id, rec_type.id, rec_type.code, 'Оплачен');
+
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('enable'), null, 'В работу');
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('delete'), null, 'Удалить');
+
+      WHEN 'deleted' THEN
+
+        nState := AddState(rec_class.id, rec_type.id, rec_type.code, 'Удалён');
+
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('restore'), null, 'Восстановить');
+          PERFORM AddMethod(null, rec_class.id, nState, GetAction('drop'), null, 'Уничтожить');
+
+      END CASE;
+
+    END LOOP;
+
+    FOR rec_method IN SELECT * FROM Method WHERE class = rec_class.id AND state IS NULL
+    LOOP
+      IF rec_method.actioncode = 'create' THEN
+        PERFORM AddTransition(null, rec_method.id, GetState(rec_class.id, 'created'));
+      END IF;
+
+      IF rec_method.actioncode = 'enable' THEN
+        PERFORM AddTransition(null, rec_method.id, GetState(rec_class.id, 'enabled'));
+      END IF;
+
+      IF rec_method.actioncode = 'disable' THEN
+        PERFORM AddTransition(null, rec_method.id, GetState(rec_class.id, 'disabled'));
+      END IF;
+
+      IF rec_method.actioncode = 'delete' THEN
+        PERFORM AddTransition(null, rec_method.id, GetState(rec_class.id, 'deleted'));
+      END IF;
+
+      IF rec_method.actioncode = 'restore' THEN
+        PERFORM AddTransition(null, rec_method.id, GetState(rec_class.id, 'created'));
+      END IF;
+    END LOOP;
+
+    FOR rec_state IN SELECT * FROM State WHERE class = rec_class.id
+    LOOP
+      CASE rec_state.code
+      WHEN 'created' THEN
+
+        FOR rec_method IN SELECT * FROM Method WHERE state = rec_state.id
+        LOOP
+          IF rec_method.actioncode = 'enable' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'enabled'));
+          END IF;
+
+          IF rec_method.actioncode = 'delete' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'deleted'));
+          END IF;
+        END LOOP;
+
+      WHEN 'enabled' THEN
+
+        FOR rec_method IN SELECT * FROM Method WHERE state = rec_state.id
+        LOOP
+          IF rec_method.actioncode = 'disable' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'disabled'));
+          END IF;
+
+          IF rec_method.actioncode = 'delete' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'deleted'));
+          END IF;
+        END LOOP;
+
+      WHEN 'disabled' THEN
+
+        FOR rec_method IN SELECT * FROM Method WHERE state = rec_state.id
+        LOOP
+          IF rec_method.actioncode = 'enable' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'enabled'));
+          END IF;
+
+          IF rec_method.actioncode = 'delete' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'deleted'));
+          END IF;
+        END LOOP;
+
+      WHEN 'deleted' THEN
+
+        FOR rec_method IN SELECT * FROM Method WHERE state = rec_state.id
+        LOOP
+          IF rec_method.actioncode = 'restore' THEN
+            PERFORM AddTransition(rec_state.id, rec_method.id, GetState(rec_class.id, 'created'));
+          END IF;
+        END LOOP;
+      END CASE;
+    END LOOP;
+  END LOOP;
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
 -- KernelInit ------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -935,6 +1108,74 @@ BEGIN
 
           IF rec_action.code = 'drop' THEN
             PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Документ будет уничтожен', 'EventDocumentDrop();');
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+          END IF;
+
+        END LOOP;
+
+      ELSE
+        -- Для всех остальных события класса родителя
+        FOR rec_action IN SELECT * FROM Action
+        LOOP
+          PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+        END LOOP;
+
+      END IF;
+
+      PERFORM AddDefaultMethods(rec_class.id);
+
+    ELSIF rec_class.essencecode = 'address' THEN
+
+      IF rec_class.code = 'address' THEN
+
+        FOR rec_action IN SELECT * FROM Action
+        LOOP
+
+          IF rec_action.code = 'create' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Адрес создан', 'EventAddressCreate();');
+          END IF;
+
+          IF rec_action.code = 'open' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Адрес открыт', 'EventAddressOpen();');
+          END IF;
+
+          IF rec_action.code = 'edit' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Адрес изменён', 'EventAddressEdit();');
+          END IF;
+
+          IF rec_action.code = 'save' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Адрес сохранён', 'EventAddressSave();');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Обновить кеш', 'UpdateObjectCache();');
+          END IF;
+
+          IF rec_action.code = 'enable' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Смена состояния у всех детей', 'ExecuteMethodForAllChild();');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Адрес доступен', 'EventAddressEnable();');
+          END IF;
+
+          IF rec_action.code = 'disable' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Смена состояния у всех детей', 'ExecuteMethodForAllChild();');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Адрес недоступен', 'EventAddressDisable();');
+          END IF;
+
+          IF rec_action.code = 'delete' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Адрес будет удалён', 'EventAddressDelete();');
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+          END IF;
+
+          IF rec_action.code = 'restore' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Адрес восстановлен', 'EventAddressRestore();');
+          END IF;
+
+          IF rec_action.code = 'drop' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Адрес будет уничтожен', 'EventAddressDrop();');
             PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
           END IF;
 
@@ -1146,139 +1387,6 @@ BEGIN
 
       PERFORM AddCardMethods(rec_class.id);
 
-    ELSIF rec_class.essencecode = 'address' THEN
-
-      IF rec_class.code = 'address' THEN
-
-        FOR rec_action IN SELECT * FROM Action
-        LOOP
-
-          IF rec_action.code = 'create' THEN
-            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Адрес создан', 'EventAddressCreate();');
-          END IF;
-
-          IF rec_action.code = 'open' THEN
-            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Адрес открыт', 'EventAddressOpen();');
-          END IF;
-
-          IF rec_action.code = 'edit' THEN
-            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Адрес изменён', 'EventAddressEdit();');
-          END IF;
-
-          IF rec_action.code = 'save' THEN
-            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Адрес сохранён', 'EventAddressSave();');
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Обновить кеш', 'UpdateObjectCache();');
-          END IF;
-
-          IF rec_action.code = 'enable' THEN
-            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Смена состояния у всех детей', 'ExecuteMethodForAllChild();');
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Адрес доступен', 'EventAddressEnable();');
-          END IF;
-
-          IF rec_action.code = 'disable' THEN
-            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Смена состояния у всех детей', 'ExecuteMethodForAllChild();');
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Адрес недоступен', 'EventAddressDisable();');
-          END IF;
-
-          IF rec_action.code = 'delete' THEN
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Адрес будет удалён', 'EventAddressDelete();');
-            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-          END IF;
-
-          IF rec_action.code = 'restore' THEN
-            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Адрес восстановлен', 'EventAddressRestore();');
-          END IF;
-
-          IF rec_action.code = 'drop' THEN
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Адрес будет уничтожен', 'EventAddressDrop();');
-            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-          END IF;
-
-        END LOOP;
-
-      ELSE
-        -- Для всех остальных события класса родителя
-        FOR rec_action IN SELECT * FROM Action
-        LOOP
-          PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-        END LOOP;
-
-      END IF;
-
-      PERFORM AddDefaultMethods(rec_class.id);
-
-    ELSIF rec_class.essencecode = 'reference' THEN
-
-      IF rec_class.code = 'reference' THEN
-
-        FOR rec_action IN SELECT * FROM Action
-        LOOP
-
-          IF rec_action.code = 'create' THEN
-            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Справочник создан', 'EventReferenceCreate();');
-          END IF;
-
-          IF rec_action.code = 'open' THEN
-            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Справочник открыт', 'EventReferenceOpen();');
-          END IF;
-
-          IF rec_action.code = 'edit' THEN
-            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Справочник изменён', 'EventReferenceEdit();');
-          END IF;
-
-          IF rec_action.code = 'save' THEN
-            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Справочник сохранён', 'EventReferenceSave();');
-          END IF;
-
-          IF rec_action.code = 'enable' THEN
-            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Справочник доступен', 'EventReferenceEnable();');
-          END IF;
-
-          IF rec_action.code = 'disable' THEN
-            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Справочник недоступен', 'EventReferenceDisable();');
-          END IF;
-
-          IF rec_action.code = 'delete' THEN
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Справочник будет удалён', 'EventReferenceDelete();');
-            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-          END IF;
-
-          IF rec_action.code = 'restore' THEN
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Справочник восстановлен', 'EventReferenceRestore();');
-            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-          END IF;
-
-          IF rec_action.code = 'drop' THEN
-            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Справочник будет уничтожен', 'EventReferenceDrop();');
-            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-          END IF;
-
-        END LOOP;
-
-      ELSE
-        -- Для всех остальных события класса родителя
-        FOR rec_action IN SELECT * FROM Action
-        LOOP
-          PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
-        END LOOP;
-
-      END IF;
-
-      PERFORM AddDefaultMethods(rec_class.id);
-
     ELSIF rec_class.essencecode = 'charge_point' THEN
 
       IF rec_class.code = 'charge_point' THEN
@@ -1389,6 +1497,266 @@ BEGIN
       END IF;
 
       PERFORM AddChargePointMethods(rec_class.id);
+
+    ELSIF rec_class.essencecode = 'order' THEN
+
+      IF rec_class.code = 'order' THEN
+
+        FOR rec_action IN SELECT * FROM Action
+        LOOP
+
+          IF rec_action.code = 'create' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Ордер создан', 'EventOrderCreate();');
+          END IF;
+
+          IF rec_action.code = 'open' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Ордер открыт', 'EventOrderOpen();');
+          END IF;
+
+          IF rec_action.code = 'edit' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Ордер изменён', 'EventOrderEdit();');
+          END IF;
+
+          IF rec_action.code = 'save' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Ордер сохранён', 'EventOrderSave();');
+          END IF;
+
+          IF rec_action.code = 'enable' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Ордер в работе', 'EventOrderEnable();');
+          END IF;
+
+          IF rec_action.code = 'disable' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Ордер оплачен', 'EventOrderDisable();');
+          END IF;
+
+          IF rec_action.code = 'delete' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Ордер будет удалён', 'EventOrderDelete();');
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+          END IF;
+
+          IF rec_action.code = 'restore' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Ордер восстановлен', 'EventOrderDelete();');
+          END IF;
+
+          IF rec_action.code = 'drop' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Ордер будет уничтожен', 'EventOrderDrop();');
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+          END IF;
+
+        END LOOP;
+
+      ELSE
+        -- Для всех остальных события класса родителя
+        FOR rec_action IN SELECT * FROM Action
+        LOOP
+          PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+        END LOOP;
+
+      END IF;
+
+      PERFORM AddCardMethods(rec_class.id);
+
+    ELSIF rec_class.essencecode = 'reference' THEN
+
+      IF rec_class.code = 'reference' THEN
+
+        FOR rec_action IN SELECT * FROM Action
+        LOOP
+
+          IF rec_action.code = 'create' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Справочник создан', 'EventReferenceCreate();');
+          END IF;
+
+          IF rec_action.code = 'open' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Справочник открыт', 'EventReferenceOpen();');
+          END IF;
+
+          IF rec_action.code = 'edit' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Справочник изменён', 'EventReferenceEdit();');
+          END IF;
+
+          IF rec_action.code = 'save' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Справочник сохранён', 'EventReferenceSave();');
+          END IF;
+
+          IF rec_action.code = 'enable' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Справочник доступен', 'EventReferenceEnable();');
+          END IF;
+
+          IF rec_action.code = 'disable' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Справочник недоступен', 'EventReferenceDisable();');
+          END IF;
+
+          IF rec_action.code = 'delete' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Справочник будет удалён', 'EventReferenceDelete();');
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+          END IF;
+
+          IF rec_action.code = 'restore' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Справочник восстановлен', 'EventReferenceRestore();');
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+          END IF;
+
+          IF rec_action.code = 'drop' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Справочник будет уничтожен', 'EventReferenceDrop();');
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+          END IF;
+
+        END LOOP;
+
+      ELSE
+        -- Для всех остальных события класса родителя
+        FOR rec_action IN SELECT * FROM Action
+        LOOP
+          PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+        END LOOP;
+
+      END IF;
+
+      PERFORM AddDefaultMethods(rec_class.id);
+
+    ELSIF rec_class.essencecode = 'calendar' THEN
+
+      IF rec_class.code = 'calendar' THEN
+
+        FOR rec_action IN SELECT * FROM Action
+        LOOP
+
+          IF rec_action.code = 'create' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Календарь создан', 'EventCalendarCreate();');
+          END IF;
+
+          IF rec_action.code = 'open' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Календарь открыт', 'EventCalendarOpen();');
+          END IF;
+
+          IF rec_action.code = 'edit' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Календарь изменён', 'EventCalendarEdit();');
+          END IF;
+
+          IF rec_action.code = 'save' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Календарь сохранён', 'EventCalendarSave();');
+          END IF;
+
+          IF rec_action.code = 'enable' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Календарь доступен', 'EventCalendarEnable();');
+          END IF;
+
+          IF rec_action.code = 'disable' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Календарь недоступен', 'EventCalendarDisable();');
+          END IF;
+
+          IF rec_action.code = 'delete' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Календарь будет удалён', 'EventCalendarDelete();');
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+          END IF;
+
+          IF rec_action.code = 'restore' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Календарь восстановлен', 'EventCalendarRestore();');
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+          END IF;
+
+          IF rec_action.code = 'drop' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Календарь будет уничтожен', 'EventCalendarDrop();');
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+          END IF;
+
+        END LOOP;
+
+      ELSE
+        -- Для всех остальных события класса родителя
+        FOR rec_action IN SELECT * FROM Action
+        LOOP
+          PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+        END LOOP;
+
+      END IF;
+
+      PERFORM AddDefaultMethods(rec_class.id);
+
+    ELSIF rec_class.essencecode = 'tariff' THEN
+
+      IF rec_class.code = 'tariff' THEN
+
+        FOR rec_action IN SELECT * FROM Action
+        LOOP
+
+          IF rec_action.code = 'create' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Тариф создан', 'EventTariffCreate();');
+          END IF;
+
+          IF rec_action.code = 'open' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Тариф открыт', 'EventTariffOpen();');
+          END IF;
+
+          IF rec_action.code = 'edit' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Тариф изменён', 'EventTariffEdit();');
+          END IF;
+
+          IF rec_action.code = 'save' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Тариф сохранён', 'EventTariffSave();');
+          END IF;
+
+          IF rec_action.code = 'enable' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Тариф доступен', 'EventTariffEnable();');
+          END IF;
+
+          IF rec_action.code = 'disable' THEN
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Тариф недоступен', 'EventTariffDisable();');
+          END IF;
+
+          IF rec_action.code = 'delete' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Тариф будет удалён', 'EventTariffDelete();');
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+          END IF;
+
+          IF rec_action.code = 'restore' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Тариф восстановлен', 'EventTariffRestore();');
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+          END IF;
+
+          IF rec_action.code = 'drop' THEN
+            PERFORM AddEvent(rec_class.id, nEvent, rec_action.id, 'Тариф будет уничтожен', 'EventTariffDrop();');
+            PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+          END IF;
+
+        END LOOP;
+
+      ELSE
+        -- Для всех остальных события класса родителя
+        FOR rec_action IN SELECT * FROM Action
+        LOOP
+          PERFORM AddEvent(rec_class.id, nParent, rec_action.id, 'События класса родителя');
+        END LOOP;
+
+      END IF;
+
+      PERFORM AddDefaultMethods(rec_class.id);
 
     ELSE
 

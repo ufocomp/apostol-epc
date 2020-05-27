@@ -30,13 +30,13 @@ GRANT SELECT ON all_col_comments TO PUBLIC;
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION array_pos (
-  anyarray	text[],
+  anyarray	    text[],
   anyelement 	text
-) RETURNS	int
+) RETURNS	    int
 AS $$
 DECLARE
-  i		int;
-  l		int;
+  i		        int;
+  l		        int;
 BEGIN
   i := 1;
   l := array_length(anyarray, 1);
@@ -57,13 +57,13 @@ $$ LANGUAGE plpgsql;
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION array_pos (
-  anyarray	numeric[],
+  anyarray	    numeric[],
   anyelement 	numeric
-) RETURNS	int
+) RETURNS	    int
 AS $$
 DECLARE
-  i		int;
-  l		int;
+  i		        int;
+  l		        int;
 BEGIN
   i := 1;
   l := array_length(anyarray, 1);
@@ -89,7 +89,7 @@ CREATE OR REPLACE FUNCTION string_to_array_trim (
 ) RETURNS	text[]
 AS $$
 DECLARE
-  i		int;
+  i		    int;
   pos		int;
   arr		text[];
 BEGIN
@@ -117,7 +117,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION str_to_inet (
   str		text,
   OUT host	inet,
-  OUT range     integer
+  OUT range integer
 ) RETURNS	record
 AS $$
 DECLARE
@@ -161,11 +161,9 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION IntToStr (
   pValue	numeric,
-  pFormat	text default '999999999999'
+  pFormat	text DEFAULT '999999999999'
 ) RETURNS	text
 AS $$
-DECLARE
-  sStr		text;
 BEGIN
   RETURN trim(to_char(pValue, pFormat));
 END;
@@ -179,13 +177,11 @@ GRANT EXECUTE ON FUNCTION IntToStr(numeric, text) TO PUBLIC;
 
 CREATE OR REPLACE FUNCTION StrToInt (
   pValue	text,
-  pFormat	text default '999999999999'
+  pFormat	text DEFAULT '999999999999'
 ) RETURNS	numeric
 AS $$
-DECLARE
-  sStr		text;
 BEGIN
-  return to_number(pValue, pFormat);
+  RETURN to_number(pValue, pFormat);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -197,13 +193,11 @@ GRANT EXECUTE ON FUNCTION IntToStr(numeric, text) TO PUBLIC;
 
 CREATE OR REPLACE FUNCTION DateToStr (
   pValue	timestamptz,
-  pFormat	text default 'DD.MM.YYYY HH24:MI:SS'
+  pFormat	text DEFAULT 'DD.MM.YYYY HH24:MI:SS'
 ) RETURNS	text
 AS $$
-DECLARE
-  sStr		text;
 BEGIN
-  return to_char(pValue, pFormat);
+  RETURN to_char(pValue, pFormat);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -213,13 +207,11 @@ GRANT EXECUTE ON FUNCTION DateToStr(timestamptz, text) TO PUBLIC;
 
 CREATE OR REPLACE FUNCTION DateToStr (
   pValue	timestamp,
-  pFormat	text default 'DD.MM.YYYY HH24:MI:SS'
+  pFormat	text DEFAULT 'DD.MM.YYYY HH24:MI:SS'
 ) RETURNS	text
 AS $$
-DECLARE
-  sStr		text;
 BEGIN
-  return to_char(pValue, pFormat);
+  RETURN to_char(pValue, pFormat);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -229,13 +221,11 @@ GRANT EXECUTE ON FUNCTION DateToStr(timestamp, text) TO PUBLIC;
 
 CREATE OR REPLACE FUNCTION DateToStr (
   pValue	date,
-  pFormat	text default 'DD.MM.YYYY'
+  pFormat	text DEFAULT 'DD.MM.YYYY'
 ) RETURNS	text
 AS $$
-DECLARE
-  sStr		text;
 BEGIN
-  return to_char(pValue, pFormat);
+  RETURN to_char(pValue, pFormat);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -247,11 +237,11 @@ GRANT EXECUTE ON FUNCTION DateToStr(date, text) TO PUBLIC;
 
 CREATE OR REPLACE FUNCTION StrToDate (
   pValue	text,
-  pFormat	text default 'DD.MM.YYYY'
+  pFormat	text DEFAULT 'DD.MM.YYYY'
 ) RETURNS	date
 AS $$
 BEGIN
-  return to_date(pValue, pFormat);
+  RETURN to_date(pValue, pFormat);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -263,11 +253,11 @@ GRANT EXECUTE ON FUNCTION StrToDate(text, text) TO PUBLIC;
 
 CREATE OR REPLACE FUNCTION StrToTimeStamp (
   pValue	text,
-  pFormat	text default 'DD.MM.YYYY HH24:MI:SS'
+  pFormat	text DEFAULT 'DD.MM.YYYY HH24:MI:SS'
 ) RETURNS	timestamp
 AS $$
 BEGIN
-  return to_timestamp(pValue, pFormat);
+  RETURN to_timestamp(pValue, pFormat);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -279,11 +269,11 @@ GRANT EXECUTE ON FUNCTION StrToTimeStamp(text, text) TO PUBLIC;
 
 CREATE OR REPLACE FUNCTION StrToTimeStamptz (
   pValue	text,
-  pFormat	text default 'DD.MM.YYYY HH24:MI:SS'
+  pFormat	text DEFAULT 'DD.MM.YYYY HH24:MI:SS'
 ) RETURNS	timestamptz
 AS $$
 BEGIN
-  return to_timestamp(pValue, pFormat);
+  RETURN to_timestamp(pValue, pFormat);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -421,8 +411,8 @@ GRANT EXECUTE ON FUNCTION GetCompare(text) TO PUBLIC;
 
 CREATE OR REPLACE FUNCTION GetColumns (
   pTable	text,
-  pSchema	text default current_schema(),
-  pAlias	text default null
+  pSchema	text DEFAULT current_schema(),
+  pAlias	text DEFAULT null
 ) RETURNS	text[]
 AS $$
 DECLARE
@@ -457,7 +447,7 @@ CREATE OR REPLACE FUNCTION array_add_text (
 ) RETURNS	text[]
 AS $$
 DECLARE
-  i		integer;
+  i		    integer;
   arResult	text[];
 BEGIN
   FOR i IN 1..array_length(pArray, 1)
@@ -499,7 +489,7 @@ GRANT EXECUTE ON FUNCTION max(integer, integer) TO PUBLIC;
 
 CREATE OR REPLACE FUNCTION min_array (
   parray	anyarray,
-  pelement 	anyelement default null
+  pelement 	anyelement DEFAULT null
 ) RETURNS	anyelement
 AS $$
 DECLARE
@@ -535,12 +525,12 @@ GRANT EXECUTE ON FUNCTION min_array(anyarray, anyelement) TO PUBLIC;
 
 CREATE OR REPLACE FUNCTION max_array (
   parray	anyarray,
-  pelement 	anyelement default null
+  pelement 	anyelement DEFAULT null
 ) RETURNS	anyelement
 AS $$
 DECLARE
-  i		integer;
-  r		integer;
+  i		    integer;
+  r		    integer;
 BEGIN
   i := 1;
   r := null;
@@ -574,10 +564,10 @@ CREATE OR REPLACE FUNCTION inet_to_array (
 ) RETURNS	text[]
 AS $$
 DECLARE
-  r		text[];
-  i		integer;
-  p		integer;
-  v		text;
+  r		    text[];
+  i		    integer;
+  p		    integer;
+  v		    text;
 BEGIN
   v := host(ip);
   p := position('.' in v);
@@ -605,7 +595,7 @@ GRANT EXECUTE ON FUNCTION inet_to_array(inet) TO PUBLIC;
 
 CREATE OR REPLACE FUNCTION result_success (
   result	out boolean,
-  message		out text
+  message	out text
 )
 RETURNS 	record
 AS $$
@@ -622,7 +612,7 @@ GRANT EXECUTE ON FUNCTION result_success() TO PUBLIC;
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION GetISOTime (
-  pTime		timestamp default current_timestamp at time zone 'utc'
+  pTime		timestamp DEFAULT current_timestamp at time zone 'utc'
 )
 RETURNS 	text
 AS $$
@@ -642,8 +632,8 @@ CREATE OR REPLACE FUNCTION quote_literal_json (
 ) RETURNS	text
 AS $$
 DECLARE
-  l		integer;
-  c		integer;
+  l		    integer;
+  c		    integer;
 BEGIN
   l := position('->>' in pStr);
   IF l > 0 THEN
@@ -671,8 +661,8 @@ CREATE OR REPLACE FUNCTION array_quote_literal_json (
 ) RETURNS	anyarray
 AS $$
 DECLARE
-  i		integer;
-  l		integer;
+  i		    integer;
+  l		    integer;
   vStr		text;
 BEGIN
   FOR i IN 1..array_length(pArray, 1)

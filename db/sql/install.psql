@@ -1,0 +1,6 @@
+\echo [M] install.psql
+\ir sets.conf
+\echo [M] Создание новой базы данных :dbname
+\ir './kernel/database.sql'
+\ir kernel.psql
+\q

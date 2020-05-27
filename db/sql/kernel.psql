@@ -1,0 +1,13 @@
+\echo [M] kernel.psql
+\connect :dbname postgres
+\echo [M] Создание схем
+\ir './kernel/scheme.sql'
+\ir './customer/scheme.sql'
+\connect :dbname kernel
+\echo [M] Создание объектов
+\ir './kernel/kernel.psql'
+\ir './customer/customer.psql'
+\ir './api/api.psql'
+\connect :dbname admin
+\echo [M] Ввод первоначальных данных
+\ir './customer/admin.sql'

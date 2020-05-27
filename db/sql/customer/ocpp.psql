@@ -1,0 +1,2 @@
+\echo [M] call ocpp.sql
+\ir ocpp.sql

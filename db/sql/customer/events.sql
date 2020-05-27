@@ -387,6 +387,135 @@ END;
 $$ LANGUAGE plpgsql;
 
 --------------------------------------------------------------------------------
+-- ADDRESS ---------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- EventAddressCreate ----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventAddressCreate (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1010, 'Адрес создан.', pObject);
+  PERFORM ExecuteObjectAction(pObject, GetAction('enable'));
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventAddressOpen ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventAddressOpen (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1011, 'Адрес открыт на просмотр.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventAddressEdit ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventAddressEdit (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1012, 'Адрес изменён.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventAddressSave ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventAddressSave (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1013, 'Адрес сохранён.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventAddressEnable ----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventAddressEnable (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1014, 'Адрес открыт.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventAddressDisable ---------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventAddressDisable (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1015, 'Адрес закрыт.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventAddressDelete ----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventAddressDelete (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1016, 'Адрес удален.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventAddressRestore ---------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventAddressRestore (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1017, 'Адрес восстановлен.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventAddressDrop ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventAddressDrop (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+DECLARE
+  r		record;
+BEGIN
+  SELECT label INTO r FROM db.object WHERE id = pObject;
+
+  DELETE FROM db.object_link WHERE linked = pObject;
+  DELETE FROM db.address WHERE id = pObject;
+
+  PERFORM WriteToEventLog('W', 2010, '[' || pObject || '] [' || coalesce(r.label, '<null>') || '] Адрес уничтожен.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
 -- CLIENT ----------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -537,6 +666,7 @@ BEGIN
 
   SELECT userid INTO nUserId FROM client WHERE id = pObject;
   IF nUserId IS NOT NULL THEN
+    UPDATE db.client SET userid = null WHERE id = pObject;
     DELETE FROM db.session WHERE userid = nUserId;
     PERFORM DeleteUser(nUserId);
   END IF;
@@ -810,135 +940,6 @@ END;
 $$ LANGUAGE plpgsql;
 
 --------------------------------------------------------------------------------
--- ADDRESS ---------------------------------------------------------------------
---------------------------------------------------------------------------------
-
---------------------------------------------------------------------------------
--- EventAddressCreate ----------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION EventAddressCreate (
-  pObject	numeric default context_object()
-) RETURNS	void
-AS $$
-BEGIN
-  PERFORM WriteToEventLog('M', 1010, 'Адрес создан.', pObject);
-  PERFORM ExecuteObjectAction(pObject, GetAction('enable'));
-END;
-$$ LANGUAGE plpgsql;
-
---------------------------------------------------------------------------------
--- EventAddressOpen ------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION EventAddressOpen (
-  pObject	numeric default context_object()
-) RETURNS	void
-AS $$
-BEGIN
-  PERFORM WriteToEventLog('M', 1011, 'Адрес открыт на просмотр.', pObject);
-END;
-$$ LANGUAGE plpgsql;
-
---------------------------------------------------------------------------------
--- EventAddressEdit ------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION EventAddressEdit (
-  pObject	numeric default context_object()
-) RETURNS	void
-AS $$
-BEGIN
-  PERFORM WriteToEventLog('M', 1012, 'Адрес изменён.', pObject);
-END;
-$$ LANGUAGE plpgsql;
-
---------------------------------------------------------------------------------
--- EventAddressSave ------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION EventAddressSave (
-  pObject	numeric default context_object()
-) RETURNS	void
-AS $$
-BEGIN
-  PERFORM WriteToEventLog('M', 1013, 'Адрес сохранён.', pObject);
-END;
-$$ LANGUAGE plpgsql;
-
---------------------------------------------------------------------------------
--- EventAddressEnable ----------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION EventAddressEnable (
-  pObject	numeric default context_object()
-) RETURNS	void
-AS $$
-BEGIN
-  PERFORM WriteToEventLog('M', 1014, 'Адрес открыт.', pObject);
-END;
-$$ LANGUAGE plpgsql;
-
---------------------------------------------------------------------------------
--- EventAddressDisable ---------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION EventAddressDisable (
-  pObject	numeric default context_object()
-) RETURNS	void
-AS $$
-BEGIN
-  PERFORM WriteToEventLog('M', 1015, 'Адрес закрыт.', pObject);
-END;
-$$ LANGUAGE plpgsql;
-
---------------------------------------------------------------------------------
--- EventAddressDelete ----------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION EventAddressDelete (
-  pObject	numeric default context_object()
-) RETURNS	void
-AS $$
-BEGIN
-  PERFORM WriteToEventLog('M', 1016, 'Адрес удален.', pObject);
-END;
-$$ LANGUAGE plpgsql;
-
---------------------------------------------------------------------------------
--- EventAddressRestore ---------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION EventAddressRestore (
-  pObject	numeric default context_object()
-) RETURNS	void
-AS $$
-BEGIN
-  PERFORM WriteToEventLog('M', 1017, 'Адрес восстановлен.', pObject);
-END;
-$$ LANGUAGE plpgsql;
-
---------------------------------------------------------------------------------
--- EventAddressDrop ------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION EventAddressDrop (
-  pObject	numeric default context_object()
-) RETURNS	void
-AS $$
-DECLARE
-  r		record;
-BEGIN
-  SELECT label INTO r FROM db.object WHERE id = pObject;
-
-  DELETE FROM db.object_link WHERE linked = pObject;
-  DELETE FROM db.address WHERE id = pObject;
-
-  PERFORM WriteToEventLog('W', 2010, '[' || pObject || '] [' || coalesce(r.label, '<null>') || '] Адрес уничтожен.');
-END;
-$$ LANGUAGE plpgsql;
-
---------------------------------------------------------------------------------
 -- CHARGE_POINT ----------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -1080,7 +1081,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 --------------------------------------------------------------------------------
--- EventChargePointSuspendedEVSE ------------------------------------------------------
+-- EventChargePointSuspendedEVSE -----------------------------------------------
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION EventChargePointSuspendedEVSE (
@@ -1217,5 +1218,386 @@ BEGIN
   DELETE FROM db.charge_point WHERE id = pObject;
 
   PERFORM WriteToEventLog('W', 2010, '[' || pObject || '] [' || coalesce(r.label, '<null>') || '] Зарядная станция уничтожена.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- ORDER -----------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- EventOrderCreate ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventOrderCreate (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1010, 'Ордер создан.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventOrderOpen --------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventOrderOpen (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1011, 'Ордер открыт.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventOrderEdit --------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventOrderEdit (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1012, 'Ордер изменён.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventOrderSave --------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventOrderSave (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1013, 'Ордер сохранён.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventOrderEnable ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventOrderEnable (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1014, 'Ордер включен.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventOrderDisable -----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventOrderDisable (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1015, 'Ордер выключен.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventOrderDelete ------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventOrderDelete (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1016, 'Ордер удален.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventOrderRestore -----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventOrderRestore (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1017, 'Ордер восстановлен.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventOrderDrop --------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventOrderDrop (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+DECLARE
+  r		record;
+BEGIN
+  SELECT label INTO r FROM Object WHERE id = pObject;
+
+  DELETE FROM db.order WHERE id = pObject;
+
+  PERFORM WriteToEventLog('W', 2010, '[' || pObject || '] [' || coalesce(r.label, '<null>') || '] Ордер уничтожен.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- CALENDAR --------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- EventCalendarCreate ---------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventCalendarCreate (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1010, 'Календарь создан.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventCalendarOpen -----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventCalendarOpen (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1011, 'Календарь открыт.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventCalendarEdit -----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventCalendarEdit (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1012, 'Календарь изменён.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventCalendarSave -----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventCalendarSave (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1013, 'Календарь сохранён.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventCalendarEnable ---------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventCalendarEnable (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1014, 'Календарь включен.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventCalendarDisable --------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventCalendarDisable (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1015, 'Календарь выключен.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventCalendarDelete ---------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventCalendarDelete (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1016, 'Календарь удален.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventCalendarRestore --------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventCalendarRestore (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1017, 'Календарь восстановлен.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventCalendarDrop -----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventCalendarDrop (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+DECLARE
+  r		record;
+BEGIN
+  SELECT label INTO r FROM Object WHERE id = pObject;
+
+  DELETE FROM db.calendar WHERE id = pObject;
+
+  PERFORM WriteToEventLog('W', 2010, '[' || pObject || '] [' || coalesce(r.label, '<null>') || '] Календарь уничтожен.');
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- TARIFF ----------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- EventTariffCreate -----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventTariffCreate (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1010, 'Тариф создан.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventTariffOpen -------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventTariffOpen (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1011, 'Тариф открыт.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventTariffEdit -------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventTariffEdit (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1012, 'Тариф изменён.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventTariffSave -------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventTariffSave (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1013, 'Тариф сохранён.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventTariffEnable -----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventTariffEnable (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1014, 'Тариф включен.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventTariffDisable ----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventTariffDisable (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1015, 'Тариф выключен.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventTariffDelete -----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventTariffDelete (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1016, 'Тариф удален.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventTariffRestore ----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventTariffRestore (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+BEGIN
+  PERFORM WriteToEventLog('M', 1017, 'Тариф восстановлен.', pObject);
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------------------
+-- EventTariffDrop -------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION EventTariffDrop (
+  pObject	numeric default context_object()
+) RETURNS	void
+AS $$
+DECLARE
+  r		record;
+BEGIN
+  SELECT label INTO r FROM Object WHERE id = pObject;
+
+  DELETE FROM db.tariff WHERE id = pObject;
+
+  PERFORM WriteToEventLog('W', 2010, '[' || pObject || '] [' || coalesce(r.label, '<null>') || '] Тариф уничтожен.');
 END;
 $$ LANGUAGE plpgsql;

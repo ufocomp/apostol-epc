@@ -1,3 +1,6 @@
+\echo [M] kladr.psql
+\ir sets.conf
+
 \connect :dbname kernel
 
 \echo [M] Очистка КЛАДР...
@@ -38,3 +41,5 @@ FROM :'street' WITH (FORMAT csv, DELIMITER ';');
 -- 47 Ленинградская область
 
 SELECT LoadFromKladr(ARRAY['77', '50']);
+
+\q
