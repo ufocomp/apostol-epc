@@ -112,7 +112,7 @@ include_directories(src/app src/core src/modules src/modules/Workers src/modules
 
 file(GLOB app_files version.h src/app/*.hpp src/app/*.cpp)
 file(GLOB core_files src/core/*.hpp src/core/*.cpp)
-file(GLOB modules_files src/modules/Modules.hpp src/modules/*/*/*.hpp src/modules/*/*/*.cpp)
+file(GLOB modules_files src/modules/Modules.hpp src/modules/*/*.hpp src/modules/*/*/*.hpp src/modules/*/*/*.cpp)
 file(GLOB processes_files src/processes/Processes.hpp src/processes/*/*.hpp src/processes/*/*.cpp)
 
 # Apostol Core
@@ -168,10 +168,16 @@ set(INSTALL_PATH "${PROJECT_PREFIX}")
 install(TARGETS ${PROJECT_NAME} DESTINATION ${INSTALL_BIN_PATH})
 
 install(DIRECTORY DESTINATION ${INSTALL_PATH})
+install(DIRECTORY DESTINATION ${INSTALL_PATH}/auth)
 install(DIRECTORY DESTINATION ${INSTALL_PATH}/conf)
 install(DIRECTORY DESTINATION ${INSTALL_PATH}/logs)
+install(DIRECTORY DESTINATION ${INSTALL_PATH}/sites)
+install(DIRECTORY conf/auth/ DESTINATION ${INSTALL_PATH}/auth)
+install(DIRECTORY conf/sites/ DESTINATION ${INSTALL_PATH}/sites)
 install(DIRECTORY www/ DESTINATION ${INSTALL_PATH}/www)
 install(FILES conf/default.conf DESTINATION ${INSTALL_PATH}/conf)
+install(FILES conf/auth.conf DESTINATION ${INSTALL_PATH}/conf)
+install(FILES conf/sites.conf DESTINATION ${INSTALL_PATH}/conf)
 install(FILES conf/default.conf DESTINATION ${INSTALL_PATH} RENAME ${PROJECT_NAME}.conf)
 
 if (INSTALL_AS_ROOT)

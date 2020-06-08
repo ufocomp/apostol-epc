@@ -25,9 +25,6 @@ Author:
 #define APOSTOL_PROCESSES_HPP
 //----------------------------------------------------------------------------------------------------------------------
 
-#include "Header.hpp"
-//----------------------------------------------------------------------------------------------------------------------
-
 static inline void CreateProcesses(CCustomProcess *AParent, CApplication *AApplication) {
 
 }
