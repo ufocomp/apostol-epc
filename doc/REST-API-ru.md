@@ -1,7 +1,7 @@
 # API EPC Electro.
 
 ## Общая информация
- * Базовая конечная точка (endpoint): [localhost:8080](http://localhost:8080)
+ * Базовая конечная точка (endpoint): [localhost:4977](http://localhost:4977)
  * Все конечные точки возвращают `JSON-объект`
  * Все поля, относящиеся ко времени и меткам времени, указаны в **миллисекундах**. 
 
@@ -135,13 +135,13 @@ Authorization: <схема авторизации> <данные пользов�
 **Пример:**
 ```http request
 POST /api/v1/whoami HTTP/1.1
-Host: localhost:8080
+Host: localhost:4977
 Authorization: Basic dXNlcm5hbWU6cGFzc3dvcmQ=
 ````
 
 ```http request
 POST /api/v1/whoami HTTP/1.1
-Host: localhost:8080
+Host: localhost:4977
 Authorization: Token 4b641a6d7ec3c961ae421bb4b58eb83b56f99b1f:cb72b1c56d43d0cd6286ed19e743eed42df7816e
 ````
 
@@ -225,12 +225,12 @@ curl -X POST \
      -H "Session: efa885ebde1baa991a3c798fc1141f6bec92fc90" \
      -H "Nonce: 1589998352818000" \
      -H "Signature: 91609292e250fc30c48c2ad387d1121c703853fa88ce027e6ba0efe1fcb50ba1" \
-     http://localhost:8080/api/v1/whoami
+     http://localhost:4977/api/v1/whoami
 ````     
 * **http request:**
 ```http request
 POST /api/v1/whoami HTTP/1.1
-Host: localhost:8080
+Host: localhost:4977
 Session: efa885ebde1baa991a3c798fc1141f6bec92fc90
 Nonce: 1589998352818000
 Signature: 91609292e250fc30c48c2ad387d1121c703853fa88ce027e6ba0efe1fcb50ba1
@@ -297,12 +297,12 @@ curl -X POST \
      -H "Nonce: 1589998352902000" \
      -H "Signature: 2b2bf5188ea40dfe8207efec56956b6170bdbc2f0ab0bffd8b50acd60979b09b" \
      -d "{\"classcode\":\"client\",\"statecode\":\"enabled\",\"actioncode\":\"invite\"}" \
-     http://localhost:8080/api/v1/method/get
+     http://localhost:4977/api/v1/method/get
 ````
 * **http request:**
 ```http request
 POST /api/v1/method/get HTTP/1.1
-Host: localhost:8080
+Host: localhost:4977
 Session: efa885ebde1baa991a3c798fc1141f6bec92fc90
 Nonce: 1589998352902000
 Signature: 2b2bf5188ea40dfe8207efec56956b6170bdbc2f0ab0bffd8b50acd60979b09b
@@ -348,7 +348,7 @@ message | STRING | Сообщение об ошибке
 Запрос:
 ```http request
 POST /api/v1/sign/in HTTP/1.1
-Host: localhost:8080
+Host: localhost:4977
 Content-Type: application/json
 
 {"username": "admin", "password": "admin"}
@@ -412,7 +412,7 @@ message | STRING | Сообщение об ошибке
 Запрос:
 ```http request
 POST /api/v1/sign/up HTTP/1.1
-Host: localhost:8080
+Host: localhost:4977
 Content-Type: application/json
 
 {"type":"physical","username":"ivan","password":"Passw0rd","name":{"name":"Иванов Иван Иванович","short":"Иванов Иван","first":"Иван","last":"Иванов","middle":"Иванович"},"phone":"+79001234567","email":"ivan@mail.ru"}
@@ -557,7 +557,7 @@ INN | Ключ `value` должен быть опушен (не указан).
 
 ```http request
 POST /api/v1/object/geolocation/list HTTP/1.1
-Host: localhost:8080
+Host: localhost:4977
 Content-Type: application/json
 Authorization: Basic YWRtaW46YWRtaW4=
 
@@ -566,7 +566,7 @@ Authorization: Basic YWRtaW46YWRtaW4=
 
 ```http request
 POST /api/v1/address/list HTTP/1.1
-Host: localhost:8080
+Host: localhost:4977
 Content-Type: application/json
 Authorization: Basic YWRtaW46YWRtaW4=
 
@@ -662,7 +662,7 @@ statecode | STRING | Код состояния (вместо идентифик�
 Запрос:
 ```http request
 POST /api/v1/method/get HTTP/1.1
-Host: localhost:8080
+Host: localhost:4977
 Content-Type: application/x-www-form-urlencoded
 Authorization: Basic YWRtaW46YWRtaW4=
 
