@@ -1,16 +1,16 @@
 /*++
 
-Program name:
+Library name:
 
-  apostol
+  apostol-core
 
 Module Name:
 
-  Modules.hpp
+  Workers.hpp
 
 Notices:
 
-  Apostol Web Service
+  Add-ons: Workers
 
 Author:
 
@@ -25,14 +25,11 @@ Author:
 #define APOSTOL_MODULES_HPP
 //----------------------------------------------------------------------------------------------------------------------
 
-#include "Module.hpp"
+#include "Header.hpp"
 //----------------------------------------------------------------------------------------------------------------------
 
-#include "WebService/WebService.hpp"
+#include "Workers/Workers.hpp"
+#include "Helpers/Helpers.hpp"
 //----------------------------------------------------------------------------------------------------------------------
-
-static void CreateModules(CModuleManager *AManager) {
-    CWebService::CreateModule(AManager);
-}
 
 #endif //APOSTOL_MODULES_HPP

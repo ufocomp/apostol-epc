@@ -81,7 +81,7 @@ CREATE OR REPLACE FUNCTION AddEventLog (
   pType		text,
   pCode		numeric,
   pText		text,
-  pObject   numeric default null
+  pObject   numeric DEFAULT null
 ) RETURNS	numeric
 AS $$
 DECLARE
@@ -104,7 +104,7 @@ CREATE OR REPLACE FUNCTION NewEventLog (
   pType		text,
   pCode		numeric,
   pText		text,
-  pObject   numeric default null
+  pObject   numeric DEFAULT null
 ) RETURNS	void
 AS $$
 DECLARE
@@ -124,7 +124,7 @@ CREATE OR REPLACE FUNCTION WriteToEventLog (
   pType		text,
   pCode		numeric,
   pText		text,
-  pObject   numeric default null
+  pObject   numeric DEFAULT null
 ) RETURNS	void
 AS $$
 BEGIN

@@ -135,7 +135,7 @@ CREATE OR REPLACE FUNCTION CreateCalendar (
   pWorkCount    interval,
   pRestStart	interval,
   pRestCount    interval,
-  pDescription	text default null
+  pDescription	text DEFAULT null
 ) RETURNS       numeric
 AS $$
 DECLARE
@@ -184,18 +184,18 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION EditCalendar (
   pId           numeric,
-  pParent       numeric default null,
-  pType         numeric default null,
-  pCode         varchar default null,
-  pName         varchar default null,
-  pWeek         numeric default null,
-  pDayOff       integer[] default null,
-  pHoliday      integer[][] default null,
-  pWorkStart	interval default null,
-  pWorkCount    interval default null,
-  pRestStart	interval default null,
-  pRestCount    interval default null,
-  pDescription	text default null
+  pParent       numeric DEFAULT null,
+  pType         numeric DEFAULT null,
+  pCode         varchar DEFAULT null,
+  pName         varchar DEFAULT null,
+  pWeek         numeric DEFAULT null,
+  pDayOff       integer[] DEFAULT null,
+  pHoliday      integer[][] DEFAULT null,
+  pWorkStart	interval DEFAULT null,
+  pWorkCount    interval DEFAULT null,
+  pRestStart	interval DEFAULT null,
+  pRestCount    interval DEFAULT null,
+  pDescription	text DEFAULT null
 ) RETURNS       void
 AS $$
 DECLARE
@@ -296,7 +296,7 @@ CREATE OR REPLACE FUNCTION AddCalendarDate (
   pWorkCount	interval,
   pRestStart	interval,
   pRestCount	interval,
-  pUserId       numeric default null
+  pUserId       numeric DEFAULT null
 ) RETURNS       numeric
 AS $$
 DECLARE
@@ -322,14 +322,14 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION EditCalendarDate (
   pId           numeric,
-  pCalendar     numeric default null,
-  pDate         date default null,
-  pFlag         bit default null,
-  pWorkStart	interval default null,
-  pWorkCount	interval default null,
-  pRestStart	interval default null,
-  pRestCount	interval default null,
-  pUserId       numeric default null
+  pCalendar     numeric DEFAULT null,
+  pDate         date DEFAULT null,
+  pFlag         bit DEFAULT null,
+  pWorkStart	interval DEFAULT null,
+  pWorkCount	interval DEFAULT null,
+  pRestStart	interval DEFAULT null,
+  pRestCount	interval DEFAULT null,
+  pUserId       numeric DEFAULT null
 ) RETURNS       void
 AS $$
 BEGIN
@@ -370,7 +370,7 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION GetCalendarDate (
   pCalendar	numeric,
   pDate		date,
-  pUserId	numeric default null
+  pUserId	numeric DEFAULT null
 ) RETURNS 	numeric
 AS $$
 DECLARE
@@ -423,7 +423,7 @@ CREATE OR REPLACE FUNCTION calendar_date (
   pCalendar	numeric,
   pDateFrom	date,
   pDateTo	date,
-  pUserId	numeric default null
+  pUserId	numeric DEFAULT null
 ) RETURNS	SETOF calendar_date
 AS $$
   SELECT * 
@@ -471,7 +471,7 @@ CREATE OR REPLACE FUNCTION FillCalendar (
   pCalendar	numeric,
   pDateFrom	date,
   pDateTo	date,
-  pUserId	numeric default null
+  pUserId	numeric DEFAULT null
 ) RETURNS 	void
 AS $$
 DECLARE

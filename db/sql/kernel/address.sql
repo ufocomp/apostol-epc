@@ -271,8 +271,8 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION GetAddressTreeString (
   pCode		varchar,       -- Код из справочника адресов
-  pShort	int default 0, -- Сокращение: 0 - нет; 1 - слева; 2 - справа
-  pLevel	int default 0  -- Ограничение уровня вложенности
+  pShort	int DEFAULT 0, -- Сокращение: 0 - нет; 1 - слева; 2 - справа
+  pLevel	int DEFAULT 0  -- Ограничение уровня вложенности
 ) RETURNS   text
 AS $$
 DECLARE
@@ -428,7 +428,7 @@ CREATE OR REPLACE FUNCTION CreateAddress (
   pBuilding     varchar,
   pStructure    varchar,
   pApartment    varchar,
-  pAddress      text default null
+  pAddress      text DEFAULT null
 ) RETURNS       numeric
 AS $$
 DECLARE
@@ -545,21 +545,21 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION EditAddress (
   pId           numeric,
-  pParent       numeric default null,
-  pType         numeric default null,
-  pCode         varchar default null,
-  pIndex        varchar default null,
-  pCountry      varchar default null,
-  pRegion       varchar default null,
-  pDistrict     varchar default null,
-  pCity         varchar default null,
-  pSettlement   varchar default null,
-  pStreet       varchar default null,
-  pHouse        varchar default null,
-  pBuilding     varchar default null,
-  pStructure    varchar default null,
-  pApartment    varchar default null,
-  pAddress      text default null
+  pParent       numeric DEFAULT null,
+  pType         numeric DEFAULT null,
+  pCode         varchar DEFAULT null,
+  pIndex        varchar DEFAULT null,
+  pCountry      varchar DEFAULT null,
+  pRegion       varchar DEFAULT null,
+  pDistrict     varchar DEFAULT null,
+  pCity         varchar DEFAULT null,
+  pSettlement   varchar DEFAULT null,
+  pStreet       varchar DEFAULT null,
+  pHouse        varchar DEFAULT null,
+  pBuilding     varchar DEFAULT null,
+  pStructure    varchar DEFAULT null,
+  pApartment    varchar DEFAULT null,
+  pAddress      text DEFAULT null
 ) RETURNS void
 AS $$
 DECLARE
@@ -842,13 +842,13 @@ CREATE OR REPLACE VIEW ObjectAddresses (Id, Object, Address,
     Type, TypeCode, TypeName, TypeDescription,
     Code, Index, Country, Region, District, City, Settlement, Street, House,
     Building, Structure, Apartment, SortNum,
-    validFromDate, ValidToDate
+    ValidFromDate, validToDate
 )
 AS
   SELECT ol.id, ol.object, ol.linked, ol.type, t.code, t.name, t.description,
          a.code, a.index, a.country, a.region, a.district, a.city, a.settlement, a.street, a.house,
          a.building, a.structure, a.apartment, a.sortnum,
-         ol.validfromdate, ol.validtodate
+         ol.validFromDate, ol.validToDate
     FROM db.object_link ol INNER JOIN db.type t ON t.id = ol.type
                            INNER JOIN db.address a ON a.id = ol.linked;
 
@@ -867,7 +867,7 @@ GRANT SELECT ON ObjectAddresses TO administrator;
 CREATE OR REPLACE FUNCTION GetObjectAddress (
   pObject	numeric,
   pType	    numeric,
-  pDate		timestamp default oper_date()
+  pDate		timestamp DEFAULT oper_date()
 ) RETURNS	text
 AS $$
 DECLARE
@@ -878,7 +878,7 @@ BEGIN
    WHERE Object = pObject
      AND Type = pType
      AND validFromDate <= pDate
-     AND ValidToDate > pDate;
+     AND validToDate > pDate;
 
   RETURN GetAddressString(nAddress);
 END;
@@ -892,12 +892,12 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION GetObjectAddresses (
   pObject	numeric,
-  pDate		timestamp default oper_date()
+  pDate		timestamp DEFAULT oper_date()
 ) RETURNS	text[][]
 AS $$
 DECLARE
   arResult	text[][];
-  i		    integer default 1;
+  i		    integer DEFAULT 1;
   r		    ObjectAddresses%rowtype;
 BEGIN
   FOR r IN
@@ -905,7 +905,7 @@ BEGIN
       FROM ObjectAddresses
      WHERE Object = pObject
        AND validFromDate <= pDate
-       AND ValidToDate > pDate
+       AND validToDate > pDate
      ORDER BY Type, SortNum
   LOOP
     arResult[i] := ARRAY[r.address, r.typecode, r.typename, r.code, GetAddressString(r.address)];
@@ -924,7 +924,7 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION GetObjectAddresses (
   pObject	numeric,
-  pDate		timestamp default oper_date()
+  pDate		timestamp DEFAULT oper_date()
 ) RETURNS	text[]
 AS $$
 DECLARE
@@ -936,7 +936,7 @@ BEGIN
       FROM ObjectAddresses
      WHERE Object = pObject
        AND validFromDate <= pDate
-       AND ValidToDate > pDate
+       AND validToDate > pDate
      ORDER BY Type, SortNum
   LOOP
     arResult := array_cat(arResult, ARRAY[r.address, r.typecode, r.typename, r.code, GetAddressString(r.address)]);
@@ -954,7 +954,7 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION GetObjectAddressesJson (
   pObject	numeric,
-  pDate		timestamp default oper_date()
+  pDate		timestamp DEFAULT oper_date()
 ) RETURNS	json
 AS $$
 DECLARE
@@ -966,7 +966,7 @@ BEGIN
       FROM ObjectAddresses
      WHERE Object = pObject
        AND validFromDate <= pDate
-       AND ValidToDate > pDate
+       AND validToDate > pDate
      ORDER BY Type, SortNum
   LOOP
     arResult := array_append(arResult, row_to_json(r));
@@ -984,7 +984,7 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION GetObjectAddressesJsonb (
   pObject	numeric,
-  pDate		timestamp default oper_date()
+  pDate		timestamp DEFAULT oper_date()
 ) RETURNS	jsonb
 AS $$
 BEGIN

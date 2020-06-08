@@ -83,8 +83,8 @@ CREATE TRIGGER t_document_update
 create or replace function CreateDocument (
   pParent	numeric,
   pType		numeric,
-  pLabel	text default null,
-  pDesc		text default null
+  pLabel	text DEFAULT null,
+  pDesc		text DEFAULT null
 ) returns 	numeric
 as $$
 declare
@@ -94,7 +94,7 @@ begin
 
   insert into db.document (object, description)
   values (nObject, pDesc)
-  returning id into nObject;
+  RETURNING id into nObject;
 
   return nObject;
 end;

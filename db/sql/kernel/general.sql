@@ -11,7 +11,7 @@ CREATE OR REPLACE FUNCTION JsonToIntArray (
 ) RETURNS	integer[]
 AS $$
 DECLARE
-  r		record;
+  r		    record;
   result	integer[];
 BEGIN
   IF json_typeof(pJson) = 'array' THEN
@@ -45,7 +45,7 @@ CREATE OR REPLACE FUNCTION JsonbToIntArray (
 ) RETURNS	integer[]
 AS $$
 DECLARE
-  r		record;
+  r		    record;
   result	integer[];
 BEGIN
   IF jsonb_typeof(pJson) = 'array' THEN
@@ -79,7 +79,7 @@ CREATE OR REPLACE FUNCTION JsonToNumArray (
 ) RETURNS	numeric[]
 AS $$
 DECLARE
-  r		record;
+  r		    record;
   result	numeric[];
 BEGIN
   IF json_typeof(pJson) = 'array' THEN
@@ -113,7 +113,7 @@ CREATE OR REPLACE FUNCTION JsonbToNumArray (
 ) RETURNS	numeric[]
 AS $$
 DECLARE
-  r		record;
+  r		    record;
   result	numeric[];
 BEGIN
   IF jsonb_typeof(pJson) = 'array' THEN
@@ -147,7 +147,7 @@ CREATE OR REPLACE FUNCTION JsonToStrArray (
 ) RETURNS	text[]
 AS $$
 DECLARE
-  r		record;
+  r		    record;
   result	text[];
 BEGIN
   IF json_typeof(pJson) = 'array' THEN
@@ -181,7 +181,7 @@ CREATE OR REPLACE FUNCTION JsonbToStrArray (
 ) RETURNS	text[]
 AS $$
 DECLARE
-  r		record;
+  r		    record;
   result	text[];
 BEGIN
   IF jsonb_typeof(pJson) = 'array' THEN
@@ -215,7 +215,7 @@ CREATE OR REPLACE FUNCTION JsonToBoolArray (
 ) RETURNS	boolean[]
 AS $$
 DECLARE
-  r		record;
+  r		    record;
   result	boolean[];
 BEGIN
   IF json_typeof(pJson) = 'array' THEN
@@ -249,7 +249,7 @@ CREATE OR REPLACE FUNCTION JsonbToBoolArray (
 ) RETURNS	boolean[]
 AS $$
 DECLARE
-  r		record;
+  r		    record;
   result	boolean[];
 BEGIN
   IF jsonb_typeof(pJson) = 'array' THEN
@@ -284,7 +284,7 @@ CREATE OR REPLACE FUNCTION jsonb_array_to_string (
 ) RETURNS	text
 AS $$
 DECLARE
-  r		record;
+  r		    record;
   arStr		text[];
 BEGIN
   IF jsonb_typeof(pJson) = 'array' THEN
@@ -315,8 +315,8 @@ CREATE OR REPLACE FUNCTION CheckJsonKeys (
 ) RETURNS	void
 AS $$
 DECLARE
-  e		record;
-  r		record;
+  e		    record;
+  r		    record;
 BEGIN
   IF json_typeof(pJson) = 'array' THEN
 
@@ -356,8 +356,8 @@ CREATE OR REPLACE FUNCTION CheckJsonbKeys (
 ) RETURNS	void
 AS $$
 DECLARE
-  e		record;
-  r		record;
+  e		    record;
+  r		    record;
 BEGIN
   IF jsonb_typeof(pJson) = 'array' THEN
 

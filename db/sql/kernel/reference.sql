@@ -58,9 +58,9 @@ DECLARE
 BEGIN
   SELECT type INTO nType FROM db.object WHERE id = NEW.id;
 
-  INSERT INTO db.aou SELECT NEW.id, 1001, B'000', B'110';
+  INSERT INTO db.aou SELECT NEW.id, 1002, B'000', B'110';
   IF GetTypeCode(nType) <> 'private.charge_point' THEN
-    INSERT INTO db.aou SELECT NEW.id, 1002, B'000', B'100';
+    INSERT INTO db.aou SELECT NEW.id, 1003, B'000', B'100';
   END IF;
 
   RETURN NEW;
@@ -106,7 +106,7 @@ create or replace function CreateReference (
   pType         numeric,
   pCode         varchar,
   pName         varchar,
-  pDescription  text default null
+  pDescription  text DEFAULT null
 ) returns       numeric
 as $$
 declare
@@ -116,7 +116,7 @@ begin
 
   insert into db.reference (object, code, name, description)
   values (nObject, pCode, pName, pDescription)
-  returning id into nObject;
+  RETURNING id into nObject;
 
   return nObject;
 end;
@@ -130,11 +130,11 @@ $$ LANGUAGE plpgsql
 
 create or replace function EditReference (
   pId           numeric,
-  pParent       numeric default null,
-  pType         numeric default null,
-  pCode         varchar default null,
-  pName         varchar default null,
-  pDescription  text default null
+  pParent       numeric DEFAULT null,
+  pType         numeric DEFAULT null,
+  pCode         varchar DEFAULT null,
+  pName         varchar DEFAULT null,
+  pDescription  text DEFAULT null
 ) returns       void
 as $$
 declare

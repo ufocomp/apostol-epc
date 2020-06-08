@@ -26,10 +26,33 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
-CREATE OR REPLACE FUNCTION SessionLoginError() RETURNS void
+CREATE OR REPLACE FUNCTION AuthenticateError (
+  pMessage	text
+) RETURNS void
 AS $$
 BEGIN
-  RAISE EXCEPTION 'Вход в систему по ключу сессии невозможен. Ключ не прошёл проверку.';
+  RAISE EXCEPTION 'Вход в систему невозможен. %', pMessage;
+END;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION TokenError () RETURNS void
+AS $$
+BEGIN
+  RAISE EXCEPTION 'Токен недействителен.';
+END;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION SignatureError () RETURNS void
+AS $$
+BEGIN
+  RAISE EXCEPTION 'Подпись не верна или отсутствует.';
+END;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION NonceExpired() RETURNS void
+AS $$
+BEGIN
+  RAISE EXCEPTION 'Истекло время запроса.';
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
@@ -106,13 +129,6 @@ CREATE OR REPLACE FUNCTION IncorrectDocumentType() RETURNS void
 AS $$
 BEGIN
   RAISE EXCEPTION 'Неверно задан тип документа.';
-END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE;
-
-CREATE OR REPLACE FUNCTION ClientNameIsNull() RETURNS void
-AS $$
-BEGIN
-  RAISE EXCEPTION 'Наименование клиента не должно быть пустым.';
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
@@ -403,15 +419,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
-CREATE OR REPLACE FUNCTION CacheTableNotFound (
-  pTable	text
-) RETURNS	void
-AS $$
-BEGIN
-  RAISE EXCEPTION ' найдена таблица %.', pTable;
-END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE;
-
 CREATE OR REPLACE FUNCTION LoginIpTableError (
   pHost		inet
 ) RETURNS void
@@ -431,3 +438,20 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
+CREATE OR REPLACE FUNCTION IssuerNotFound (
+  pCode     text
+) RETURNS void
+AS $$
+BEGIN
+  RAISE EXCEPTION 'Не найден эмитент: %', pCode;
+END;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION AudienceNotFound (
+  pCode     text
+) RETURNS void
+AS $$
+BEGIN
+  RAISE EXCEPTION 'Не найдена аудитория: %', pCode;
+END;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE;

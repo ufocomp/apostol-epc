@@ -774,14 +774,15 @@ DECLARE
   r		    ClientTariffs%rowtype;
 BEGIN
   FOR r IN
-    SELECT *
+    SELECT Tariff as Id, Type, TypeCode, TypeName, TypeDescription,
+           Code, Name, Description, Cost, validFromDate, validToDate
       FROM ClientTariffs
      WHERE client = pClient
        AND validFromDate <= pDate
        AND ValidToDate > pDate
      ORDER BY Type
   LOOP
-    arResult[i] := ARRAY[r.tariff, r.typecode, r.typename, r.code, GetTariffCost(r.tariff)];
+    arResult[i] := ARRAY[r.tariff, r.typecode, r.typename, r.code, r.cost];
     i := i + 1;
   END LOOP;
 
@@ -805,14 +806,15 @@ DECLARE
   r		    ClientTariffs%rowtype;
 BEGIN
   FOR r IN
-    SELECT *
+    SELECT Tariff as Id, Type, TypeCode, TypeName, TypeDescription,
+           Code, Name, Description, Cost, validFromDate, validToDate
       FROM ClientTariffs
      WHERE client = pClient
        AND validFromDate <= pDate
        AND ValidToDate > pDate
      ORDER BY Type
   LOOP
-    arResult := array_cat(arResult, ARRAY[r.tariff, r.typecode, r.typename, r.code, GetTariffCost(r.tariff)]);
+    arResult := array_cat(arResult, ARRAY[r.id, r.type, r.typecode, r.typename, r.typedescription, r.code, r.name, r.description, r.cost, r.validFromDate, r.validToDate]);
   END LOOP;
 
   RETURN arResult;
@@ -835,7 +837,8 @@ DECLARE
   r		    record;
 BEGIN
   FOR r IN
-    SELECT Tariff AS Id, TypeCode, TypeName, Code, GetTariffCost(Tariff) AS Cost
+    SELECT Tariff as Id, Type, TypeCode, TypeName, TypeDescription,
+           Code, Name, Description, Cost, validFromDate, validToDate
       FROM ClientTariffs
      WHERE client = pClient
        AND validFromDate <= pDate

@@ -101,11 +101,11 @@ CREATE OR REPLACE FUNCTION db.ft_object_after_insert()
 RETURNS trigger AS $$
 BEGIN
   INSERT INTO db.aom SELECT NEW.ID;
-  INSERT INTO db.aou SELECT NEW.ID, 1000, B'000', B'111';
+  INSERT INTO db.aou SELECT NEW.ID, 1001, B'000', B'111';
   INSERT INTO db.aou SELECT NEW.ID, NEW.OWNER, B'000', B'111';
 
   IF NEW.OWNER <> NEW.SUID THEN
-    IF NOT IsUserRole(1000, NEW.SUID) THEN
+    IF NOT IsUserRole(1001, NEW.SUID) THEN
       INSERT INTO db.aou SELECT NEW.ID, NEW.SUID, B'000', B'110';
     END IF;
   END IF;
@@ -374,7 +374,7 @@ $$ LANGUAGE SQL
 CREATE OR REPLACE FUNCTION chmodo (
   pObject	numeric,
   pMask		bit,
-  pUserId	numeric default current_userid()
+  pUserId	numeric DEFAULT current_userid()
 ) RETURNS	void
 AS $$
 DECLARE
@@ -382,7 +382,7 @@ DECLARE
   bAllow     bit;
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole(1000) THEN
+    IF NOT IsUserRole(1001) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -409,7 +409,7 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION GetObjectMask (
   pObject	numeric,
-  pUserId	numeric default session_userid()
+  pUserId	numeric DEFAULT current_userid()
 ) RETURNS	bit
 AS $$
   SELECT CASE
@@ -429,7 +429,7 @@ $$ LANGUAGE SQL
 
 CREATE OR REPLACE FUNCTION GetObjectAccessMask (
   pObject	numeric,
-  pUserId	numeric default session_userid()
+  pUserId	numeric DEFAULT current_userid()
 ) RETURNS	bit
 AS $$
   SELECT mask FROM aou(pUserId, pObject)
@@ -444,7 +444,7 @@ $$ LANGUAGE SQL
 CREATE OR REPLACE FUNCTION CheckObjectAccess (
   pObject	numeric,
   pMask		bit,
-  pUserId	numeric default session_userid()
+  pUserId	numeric DEFAULT current_userid()
 ) RETURNS	boolean
 AS $$
 BEGIN
@@ -460,7 +460,7 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION DecodeObjectAccess (
   pObject	numeric,
-  pUserId	numeric default session_userid(),
+  pUserId	numeric DEFAULT current_userid(),
   OUT s		boolean,
   OUT u		boolean,
   OUT d		boolean
@@ -552,8 +552,8 @@ GRANT SELECT ON Object TO administrator;
 
 CREATE OR REPLACE FUNCTION CreateObject (
   pParent	numeric,
-  pType         numeric,
-  pLabel	text default null
+  pType     numeric,
+  pLabel	text DEFAULT null
 ) RETURNS 	numeric
 AS $$
 DECLARE
@@ -727,8 +727,8 @@ CREATE TABLE db.object_state (
     id			    numeric(12) PRIMARY KEY DEFAULT NEXTVAL('SEQUENCE_REF'),
     object		    numeric(12) NOT NULL,
     state		    numeric(12) NOT NULL,
-    validfromdate	timestamp DEFAULT NOW() NOT NULL,
-    validtodate		timestamp DEFAULT TO_DATE('4433-12-31', 'YYYY-MM-DD') NOT NULL,
+    validFromDate	timestamp DEFAULT NOW() NOT NULL,
+    validToDate		timestamp DEFAULT TO_DATE('4433-12-31', 'YYYY-MM-DD') NOT NULL,
     CONSTRAINT fk_object_state_object FOREIGN KEY (object) REFERENCES db.object(id),
     CONSTRAINT fk_object_state_state FOREIGN KEY (state) REFERENCES db.state(id)
 );
@@ -738,14 +738,14 @@ COMMENT ON TABLE db.object_state IS 'Состояние объекта.';
 COMMENT ON COLUMN db.object_state.id IS 'Идентификатор';
 COMMENT ON COLUMN db.object_state.object IS 'Объект';
 COMMENT ON COLUMN db.object_state.state IS 'Ссылка на состояние объекта';
-COMMENT ON COLUMN db.object_state.validfromdate IS 'Дата начала периода действия';
-COMMENT ON COLUMN db.object_state.validtodate IS 'Дата окончания периода действия';
+COMMENT ON COLUMN db.object_state.validFromDate IS 'Дата начала периода действия';
+COMMENT ON COLUMN db.object_state.validToDate IS 'Дата окончания периода действия';
 
 CREATE INDEX ON db.object_state (object);
 CREATE INDEX ON db.object_state (state);
-CREATE INDEX ON db.object_state (object, validfromdate, validtodate);
+CREATE INDEX ON db.object_state (object, validFromDate, validToDate);
 
-CREATE UNIQUE INDEX ON db.object_state (object, state, validfromdate, validtodate);
+CREATE UNIQUE INDEX ON db.object_state (object, state, validFromDate, validToDate);
 
 --------------------------------------------------------------------------------
 
@@ -790,11 +790,11 @@ CREATE TRIGGER t_object_state_change
 
 CREATE OR REPLACE VIEW ObjectState (Id, Object, Class,
   State, StateTypeCode, StateTypeName, StateCode, StateLabel,
-  validFromDate, ValidToDate
+  ValidFromDate, validToDate
 )
 AS
   SELECT o.id, o.object, s.class, o.state, s.typecode, s.typename, s.code, s.label,
-         o.validfromdate, o.validtodate
+         o.validFromDate, o.validToDate
     FROM db.object_state o INNER JOIN State s ON s.id = o.state;
 
 GRANT SELECT ON ObjectState TO administrator;
@@ -806,7 +806,7 @@ GRANT SELECT ON ObjectState TO administrator;
 CREATE OR REPLACE FUNCTION AddObjectState (
   pObject       numeric,
   pState        numeric,
-  pDateFrom     timestamp default oper_date()
+  pDateFrom     timestamp DEFAULT oper_date()
 ) RETURNS       numeric
 AS $$
 DECLARE
@@ -816,26 +816,26 @@ DECLARE
   dtDateTo      timestamp;
 BEGIN
   -- получим дату значения в текущем диапозоне дат
-  SELECT max(validFromDate), max(ValidToDate) INTO dtDateFrom, dtDateTo
+  SELECT max(validFromDate), max(validToDate) INTO dtDateFrom, dtDateTo
     FROM db.object_state
    WHERE object = pObject
      AND validFromDate <= pDateFrom
-     AND ValidToDate > pDateFrom;
+     AND validToDate > pDateFrom;
 
   IF dtDateFrom = pDateFrom THEN
     -- обновим значение в текущем диапозоне дат
     UPDATE db.object_state SET State = pState
      WHERE object = pObject
        AND validFromDate <= pDateFrom
-       AND ValidToDate > pDateFrom;
+       AND validToDate > pDateFrom;
   ELSE
     -- обновим дату значения в текущем диапозоне дат
-    UPDATE db.object_state SET ValidToDate = pDateFrom
+    UPDATE db.object_state SET validToDate = pDateFrom
      WHERE object = pObject
        AND validFromDate <= pDateFrom
-       AND ValidToDate > pDateFrom;
+       AND validToDate > pDateFrom;
 
-    INSERT INTO db.object_state (object, state, validfromdate, validtodate)
+    INSERT INTO db.object_state (object, state, validFromDate, validToDate)
     VALUES (pObject, pState, pDateFrom, coalesce(dtDateTo, MAXDATE()))
     RETURNING id INTO nId;
   END IF;
@@ -864,7 +864,7 @@ BEGIN
     FROM db.object_state
    WHERE object = pObject
      AND validFromDate <= pDate
-     AND ValidToDate > pDate;
+     AND validToDate > pDate;
 
   RETURN nState;
 END;
@@ -878,7 +878,7 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION GetObjectStateCode (
   pObject	numeric,
-  pDate		timestamp default oper_date()
+  pDate		timestamp DEFAULT oper_date()
 ) RETURNS 	varchar
 AS $$
 DECLARE
@@ -907,7 +907,7 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION GetObjectStateType (
   pObject	numeric,
-  pDate		timestamp default oper_date()
+  pDate		timestamp DEFAULT oper_date()
 ) RETURNS	numeric
 AS $$
 DECLARE
@@ -917,7 +917,7 @@ BEGIN
     FROM db.object_state
    WHERE object = pObject
      AND validFromDate <= pDate
-     AND ValidToDate > pDate;
+     AND validToDate > pDate;
 
   RETURN GetStateTypeByState(nState);
 END;
@@ -931,7 +931,7 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION GetObjectStateTypeCode (
   pObject	numeric,
-  pDate		timestamp default oper_date()
+  pDate		timestamp DEFAULT oper_date()
 ) RETURNS 	varchar
 AS $$
 DECLARE
@@ -941,7 +941,7 @@ BEGIN
     FROM db.object_state
    WHERE object = pObject
      AND validFromDate <= pDate
-     AND ValidToDate > pDate;
+     AND validToDate > pDate;
 
   RETURN GetStateTypeCodeByState(nState);
 EXCEPTION
@@ -976,8 +976,8 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION ChangeObjectState (
-  pObject	numeric default context_object(),
-  pMethod	numeric default context_method()
+  pObject	numeric DEFAULT context_object(),
+  pMethod	numeric DEFAULT context_method()
 ) RETURNS 	void
 AS $$
 DECLARE
@@ -1023,8 +1023,8 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION ExecuteAction (
-  pClass	numeric default context_class(),
-  pAction	numeric default context_action()
+  pClass	numeric DEFAULT context_class(),
+  pAction	numeric DEFAULT context_action()
 ) RETURNS	void
 AS $$
 DECLARE
@@ -1062,7 +1062,7 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION ExecuteMethod (
   pObject       numeric,
   pMethod       numeric,
-  pForm         jsonb default null
+  pForm         jsonb DEFAULT null
 ) RETURNS       void
 AS $$
 DECLARE
@@ -1102,11 +1102,11 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION ExecuteMethodForAllChild (
-  pObject	numeric default context_object(),
-  pClass	numeric default context_class(),
-  pMethod	numeric default context_method(),
-  pAction	numeric default context_action(),
-  pForm		jsonb default context_form()
+  pObject	numeric DEFAULT context_object(),
+  pClass	numeric DEFAULT context_class(),
+  pMethod	numeric DEFAULT context_method(),
+  pAction	numeric DEFAULT context_action(),
+  pForm		jsonb DEFAULT context_form()
 ) RETURNS	void
 AS $$
 DECLARE
@@ -1136,7 +1136,7 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION ExecuteObjectAction (
   pObject	numeric,
   pAction	numeric,
-  pForm		jsonb default null
+  pForm		jsonb DEFAULT null
 ) RETURNS 	void
 AS $$
 DECLARE
@@ -1311,7 +1311,7 @@ DECLARE
   nId		numeric;
 BEGIN
   SELECT id INTO nId FROM db.object_group_member WHERE gid = pGroup AND object = pObject;
-  IF not found THEN
+  IF NOT found THEN
     INSERT INTO db.object_group_member (gid, object) 
     VALUES (pGroup, pObject)
     RETURNING id INTO nId;
@@ -1372,7 +1372,7 @@ CREATE TABLE db.object_link (
     Type		    numeric(12) NOT NULL,
     Linked		    numeric(12),
     validFromDate	timestamp DEFAULT NOW() NOT NULL,
-    ValidToDate		timestamp DEFAULT TO_DATE('4433-12-31', 'YYYY-MM-DD') NOT NULL,
+    validToDate		timestamp DEFAULT TO_DATE('4433-12-31', 'YYYY-MM-DD') NOT NULL,
     CONSTRAINT fk_object_link_object FOREIGN KEY (object) REFERENCES db.object(id),
     CONSTRAINT fk_object_link_type FOREIGN KEY (type) REFERENCES db.type(id),
     CONSTRAINT fk_object_link_linked FOREIGN KEY (linked) REFERENCES db.object(id)
@@ -1385,12 +1385,12 @@ COMMENT ON TABLE db.object_link IS 'Связанные с объектом об�
 COMMENT ON COLUMN db.object_link.object IS 'Идентификатор объекта';
 COMMENT ON COLUMN db.object_link.type IS 'Идентификатор типа связанного объекта';
 COMMENT ON COLUMN db.object_link.linked IS 'Идентификатор связанного объекта';
-COMMENT ON COLUMN db.object_link.validfromdate IS 'Дата начала периода действия';
-COMMENT ON COLUMN db.object_link.validtodate IS 'Дата окончания периода действия';
+COMMENT ON COLUMN db.object_link.validFromDate IS 'Дата начала периода действия';
+COMMENT ON COLUMN db.object_link.validToDate IS 'Дата окончания периода действия';
 
 --------------------------------------------------------------------------------
 
-CREATE UNIQUE INDEX ON db.object_link (object, type, validfromdate, validtodate);
+CREATE UNIQUE INDEX ON db.object_link (object, type, validFromDate, validToDate);
 
 CREATE INDEX ON db.object_link (object);
 CREATE INDEX ON db.object_link (type);
@@ -1409,7 +1409,7 @@ CREATE INDEX ON db.object_link (linked);
 CREATE OR REPLACE FUNCTION SetObjectLink (
   pObject	    numeric,
   pLinked	    numeric,
-  pDateFrom	    timestamp default oper_date()
+  pDateFrom	    timestamp DEFAULT oper_date()
 ) RETURNS 	    numeric
 AS $$
 DECLARE
@@ -1424,12 +1424,12 @@ BEGIN
   SELECT type INTO nType FROM db.object WHERE id = pLinked;
 
   -- получим дату значения в текущем диапозоне дат
-  SELECT max(validFromDate), max(ValidToDate) INTO dtDateFrom, dtDateTo
+  SELECT max(validFromDate), max(validToDate) INTO dtDateFrom, dtDateTo
     FROM db.object_link
    WHERE Object = pObject
      AND Type = nType
      AND validFromDate <= pDateFrom
-     AND ValidToDate > pDateFrom;
+     AND validToDate > pDateFrom;
 
   IF dtDateFrom = pDateFrom THEN
     -- обновим значение в текущем диапозоне дат
@@ -1437,16 +1437,16 @@ BEGIN
      WHERE Object = pObject
        AND Type = nType
        AND validFromDate <= pDateFrom
-       AND ValidToDate > pDateFrom;
+       AND validToDate > pDateFrom;
   ELSE
     -- обновим дату значения в текущем диапозоне дат
-    UPDATE db.object_link SET ValidToDate = pDateFrom
+    UPDATE db.object_link SET validToDate = pDateFrom
      WHERE Object = pObject
        AND Type = nType
        AND validFromDate <= pDateFrom
-       AND ValidToDate > pDateFrom;
+       AND validToDate > pDateFrom;
 
-    INSERT INTO db.object_link (object, type, linked, validfromdate, validtodate)
+    INSERT INTO db.object_link (object, type, linked, validFromDate, validToDate)
     VALUES (pObject, nType, pLinked, pDateFrom, coalesce(dtDateTo, MAXDATE()))
     RETURNING id INTO nId;
   END IF;
@@ -1470,7 +1470,7 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION GetObjectLink (
   pObject	numeric,
   pType	    numeric,
-  pDate		timestamp default oper_date()
+  pDate		timestamp DEFAULT oper_date()
 ) RETURNS	text
 AS $$
 DECLARE
@@ -1481,7 +1481,7 @@ BEGIN
    WHERE Object = pObject
      AND Type = pType
      AND validFromDate <= pDate
-     AND ValidToDate > pDate;
+     AND validToDate > pDate;
 
   RETURN nLinked;
 END;
@@ -1546,7 +1546,7 @@ CREATE OR REPLACE FUNCTION AddObjectFile (
   pPath		text,
   pSize		numeric,
   pDate		timestamp,
-  pBody		bytea default null
+  pBody		bytea DEFAULT null
 ) RETURNS	numeric
 AS $$
 DECLARE
@@ -1572,8 +1572,8 @@ CREATE OR REPLACE FUNCTION EditObjectFile (
   pPath		text,
   pSize		numeric,
   pDate		timestamp,
-  pBody		bytea default null,
-  pLoad		timestamp default now()
+  pBody		bytea DEFAULT null,
+  pLoad		timestamp DEFAULT now()
 ) RETURNS	void
 AS $$
 BEGIN
@@ -1616,7 +1616,7 @@ CREATE OR REPLACE FUNCTION GetObjectFiles (
 AS $$
 DECLARE
   arResult	text[][]; 
-  i		    integer default 1;
+  i		    integer DEFAULT 1;
   r		    ObjectFile%rowtype;
 BEGIN
   FOR r IN
@@ -1911,7 +1911,7 @@ CREATE OR REPLACE FUNCTION GetObjectData (
 AS $$
 DECLARE
   arResult	text[][];
-  i		    integer default 1;
+  i		    integer DEFAULT 1;
   r		    ObjectData%rowtype;
 BEGIN
   FOR r IN
@@ -2125,7 +2125,7 @@ CREATE OR REPLACE FUNCTION GetObjectCoordinates (
 AS $$
 DECLARE
   arResult	text[][];
-  i		    integer default 1;
+  i		    integer DEFAULT 1;
   r		    ObjectCoordinates%rowtype;
 BEGIN
   FOR r IN

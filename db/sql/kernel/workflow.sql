@@ -161,11 +161,11 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION EditClass (
   pId		numeric,
-  pParent	numeric default null,
-  pEssence	numeric default null,
-  pCode		varchar default null,
-  pLabel	text default null,
-  pAbstract	boolean default null
+  pParent	numeric DEFAULT null,
+  pEssence	numeric DEFAULT null,
+  pCode		varchar DEFAULT null,
+  pLabel	text DEFAULT null,
+  pAbstract	boolean DEFAULT null
 ) RETURNS	void
 AS $$
 DECLARE
@@ -320,7 +320,7 @@ CREATE OR REPLACE FUNCTION AddType (
   pClass	numeric,
   pCode		varchar,
   pName		varchar,
-  pDescription	text default null
+  pDescription	text DEFAULT null
 ) RETURNS	numeric
 AS $$
 DECLARE
@@ -342,10 +342,10 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION EditType (
   pId		numeric,
-  pClass	numeric default null,
-  pCode		varchar default null,
-  pName		varchar default null,
-  pDescription	text default null
+  pClass	numeric DEFAULT null,
+  pCode		varchar DEFAULT null,
+  pName		varchar DEFAULT null,
+  pDescription	text DEFAULT null
 ) RETURNS	void
 AS $$
 DECLARE
@@ -577,7 +577,7 @@ CREATE OR REPLACE FUNCTION AddState (
   pType		numeric,
   pCode		varchar,
   pLabel	text,
-  pSequence     integer default null
+  pSequence     integer DEFAULT null
 ) RETURNS	numeric
 AS $$
 DECLARE
@@ -605,13 +605,13 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION EditState (
-  pId		numeric,
-  pClass	numeric default null,
-  pType		numeric default null,
-  pCode		varchar default null,
-  pLabel	text default null,
-  pSequence     integer default null
-) RETURNS	void
+  pId		    numeric,
+  pClass	    numeric DEFAULT null,
+  pType		    numeric DEFAULT null,
+  pCode		    varchar DEFAULT null,
+  pLabel	    text DEFAULT null,
+  pSequence     integer DEFAULT null
+) RETURNS	    void
 AS $$
 BEGIN
   UPDATE db.state
@@ -960,8 +960,8 @@ CREATE OR REPLACE FUNCTION AddMethod (
   pAction	numeric,
   pCode		varchar,
   pLabel	text,
-  pSequence	integer default null,
-  pVisible	boolean default true
+  pSequence	integer DEFAULT null,
+  pVisible	boolean DEFAULT true
 ) RETURNS	numeric
 AS $$
 DECLARE
@@ -990,11 +990,11 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION EditMethod (
   pId		numeric,
-  pParent	numeric default null,
-  pClass	numeric default null,
-  pState	numeric default null,
-  pAction	numeric default null,
-  pCode		varchar default null,
+  pParent	numeric DEFAULT null,
+  pClass	numeric DEFAULT null,
+  pState	numeric DEFAULT null,
+  pAction	numeric DEFAULT null,
+  pCode		varchar DEFAULT null,
   pLabel	text default null,
   pSequence	integer default null,
   pVisible	boolean default null

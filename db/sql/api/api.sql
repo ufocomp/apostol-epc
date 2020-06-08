@@ -7,29 +7,37 @@
 --------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
--- api.login -------------------------------------------------------------------
+-- api.signin ------------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Вход в систему по имени и паролю пользователя.
+ * @brief Вход в систему по имени и паролю пользователя.
  * @param {text} pUserName - Пользователь (login)
  * @param {text} pPassword - Пароль
+ * @param {text} pAgent - Агент
  * @param {inet} pHost - IP адрес
- * @out param {text} session - Ключ сессии
+ * @out param {text} session - Сессия
+ * @out param {text} key - Одноразовый ключ аутентификации
+ * @out param {text} secret - Секретный ключ для подписи POST API запросов
  * @out param {boolean} result - Результат
  * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.login (
+CREATE OR REPLACE FUNCTION api.signin (
   pUserName     text,
   pPassword     text,
-  pHost         inet default null,
-  OUT session	text,
+  pAgent        text DEFAULT null,
+  pHost         inet DEFAULT null,
+  OUT session   text,
+  OUT key		text,
+  OUT secret	text,
   OUT result	boolean,
   OUT message	text
 ) RETURNS       record
 AS $$
 BEGIN
-  session := Login(pUserName, pPassword, pHost);
+  session := SignIn(pUserName, pPassword, pAgent, pHost);
+  key := current_key(session);
+  secret := session_secret(session);
   result := session IS NOT NULL;
   message := GetErrorMessage();
 END;
@@ -38,54 +46,25 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.slogin ------------------------------------------------------------------
+-- api.signout -----------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Вход в систему по ключу сессии.
- * @param {text} pSession - Ключ сессии
- * @param {inet} pHost - IP адрес
- * @out param {text} session - Ключ сессии
+ * @brief Выход из системы.
+ * @param {text} pSession - Сессия
+ * @param {boolean} pCloseAll - Закрыть все сессии
  * @out param {boolean} result - Результат
  * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.slogin (
-  pSession      text,
-  pHost         inet default null,
-  OUT session	text,
-  OUT result	boolean,
-  OUT message	text
-) RETURNS       record
-AS $$
-BEGIN
-  session := pSession;
-  result := SessionLogin(pSession, pHost);
-  message := GetErrorMessage();
-END;
-$$ LANGUAGE plpgsql
-   SECURITY DEFINER
-   SET search_path = kernel, pg_temp;
-
---------------------------------------------------------------------------------
--- api.logout ------------------------------------------------------------------
---------------------------------------------------------------------------------
-/**
- * Выход из системы.
- * @param {text} pSession - Ключ сессии
- * @param {boolean} pLogoutAll - Закрыть все сессии
- * @out param {boolean} result - Результат
- * @out param {text} message - Текст ошибки
- * @return {record}
- */
-CREATE OR REPLACE FUNCTION api.logout (
-  pSession	    text default current_session(),
-  pLogoutAll	boolean default false,
+CREATE OR REPLACE FUNCTION api.signout (
+  pSession	    text DEFAULT current_session(),
+  pCloseAll 	boolean DEFAULT false,
   OUT result	boolean,
   OUT message	text
 ) RETURNS	    record
 AS $$
 BEGIN
-  result := Logout(pSession, pLogoutAll);
+  result := SignOut(pSession, pCloseAll);
   message := GetErrorMessage();
 END;
 $$ LANGUAGE plpgsql
@@ -93,10 +72,67 @@ $$ LANGUAGE plpgsql
    SET search_path = kernel, pg_temp;
 
 --------------------------------------------------------------------------------
--- api.join --------------------------------------------------------------------
+-- api.authenticate ------------------------------------------------------------
 --------------------------------------------------------------------------------
 /**
- * Создаёт нового клиента и пользователя.
+ * @brief Аутентификация.
+ * @param {text} pSession - Сессия
+ * @param {text} pKey - Одноразовый ключ аутентификации
+ * @param {text} pAgent - Агент
+ * @param {inet} pHost - IP адрес
+ * @out param {text} key - Новый ключ аутентификации
+ * @out param {boolean} result - Результат
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.authenticate (
+  pSession      text,
+  pKey          text,
+  pAgent        text DEFAULT null,
+  pHost         inet DEFAULT null,
+  OUT key       text,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS       record
+AS $$
+BEGIN
+  key := Authenticate(pSession, pKey, pAgent, pHost);
+  result := key IS NOT NULL;
+  message := GetErrorMessage();
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.authorize ---------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Авторизовать.
+ * @param {text} pSession - Сессия
+ * @out param {boolean} valid - Действителена
+ * @out param {text} message - Текст ошибки
+ * @return {record}
+ */
+CREATE OR REPLACE FUNCTION api.authorize (
+  pSession      text,
+  OUT valid     boolean,
+  OUT message	text
+) RETURNS       record
+AS $$
+BEGIN
+  valid := Authorize(pSession);
+  message := GetErrorMessage();
+END;
+$$ LANGUAGE plpgsql
+   SECURITY DEFINER
+   SET search_path = kernel, pg_temp;
+
+--------------------------------------------------------------------------------
+-- api.signup ------------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Регистрация.
  * @param {varchar} pType - Tип клиента
  * @param {varchar} pUserName - Имя пользователя (login)
  * @param {text} pPassword - Пароль
@@ -105,29 +141,36 @@ $$ LANGUAGE plpgsql
  * @param {text} pEmail - Электронный адрес
  * @param {jsonb} pInfo - Дополнительная информация
  * @param {text} pDescription - Информация о клиенте
+ * @param {text} pAudience - Идентификатор внешней системы (для Google - ClientId)
+ * @param {text} pCode - Код пользователя во внешней системе
  * @out param {numeric} id - Идентификатор
  * @out param {boolean} result - Результат
  * @out param {text} message - Текст ошибки
  * @return {record}
  */
-CREATE OR REPLACE FUNCTION api.join (
+CREATE OR REPLACE FUNCTION api.signup (
   pType         varchar,
   pUserName     varchar,
   pPassword     text,
   pName         jsonb,
-  pPhone        text default null,
-  pEmail        text default null,
-  pInfo         jsonb default null,
-  pDescription  text default null,
-  OUT id        numeric,
-  OUT result    boolean,
-  OUT message   text
-) RETURNS       record
+  pPhone        text DEFAULT null,
+  pEmail        text DEFAULT null,
+  pInfo         jsonb DEFAULT null,
+  pDescription  text DEFAULT null,
+  pAudience     text DEFAULT null,
+  pCode         text DEFAULT null,
+  OUT id	    numeric,
+  OUT result	boolean,
+  OUT message	text
+) RETURNS	    record
 AS $$
 DECLARE
   cn            record;
+
+  nId           numeric;
   nClient       numeric;
   nUserId       numeric;
+  nAudience     numeric;
 
   jPhone        jsonb;
   jEmail        jsonb;
@@ -139,18 +182,58 @@ BEGIN
     PERFORM LoginFailed();
   END IF;
 
-  pType := lower(pType);
+  pType := coalesce(lower(pType), 'physical');
   arTypes := array_cat(arTypes, ARRAY['entity', 'physical', 'individual']);
   IF array_position(arTypes, pType::text) IS NULL THEN
     PERFORM IncorrectCode(pType, arTypes);
   END IF;
 
+  SELECT u.id INTO nUserId FROM db.user u WHERE type = 'U' AND username = pUserName;
+
+  IF found THEN
+    RAISE EXCEPTION 'Учётная запись "%" уже зарегистрирована.', pUserName;
+  END IF;
+
+  SELECT u.id INTO nUserId FROM db.user u WHERE type = 'U' AND phone = pPhone;
+
+  IF found THEN
+    RAISE EXCEPTION 'Учётная запись с номером телефона "%" уже зарегистрирована.', pPhone;
+  END IF;
+
+  SELECT u.id INTO nUserId FROM db.user u WHERE type = 'U' AND email = pEmail;
+
+  IF found THEN
+    RAISE EXCEPTION 'Учётная запись с электронным адресом "%" уже зарегистрирована.', pEmail;
+  END IF;
+
   arKeys := array_cat(arKeys, ARRAY['name', 'short', 'first', 'last', 'middle']);
-  PERFORM CheckJsonbKeys('join', arKeys, pName);
+  PERFORM CheckJsonbKeys('signup', arKeys, pName);
 
   SELECT * INTO cn FROM jsonb_to_record(pName) AS x(name varchar, short varchar, first varchar, last varchar, middle varchar);
 
+  IF NULLIF(cn.name, '') IS NULL THEN
+    cn.name := pUserName;
+  END IF;
+
+  pPassword := coalesce(NULLIF(pPassword, ''), GenSecretKey(9));
+
   nUserId := CreateUser(pUserName, pPassword, cn.short, pPhone, pEmail, cn.name);
+
+  IF pCode IS NOT NULL THEN
+    SELECT a.id INTO nAudience FROM db.audience a WHERE a.code = pAudience;
+
+    IF NOT found THEN
+      PERFORM AudienceNotFound(pAudience);
+    END IF;
+
+    SELECT a.id INTO nId FROM db.auth a WHERE a.audience = nAudience AND a.code = pCode;
+
+    IF found THEN
+      RAISE EXCEPTION 'Учётная запись для внешнего пользователя "%" уже зарегистрирована.', pCode;
+    END IF;
+
+    PERFORM CreateAuth(nUserId, nAudience, pCode);
+  END IF;
 
   PERFORM AddMemberToGroup(nUserId, 1002);
 
@@ -159,7 +242,7 @@ BEGIN
   END IF;
 
   IF pEmail IS NOT NULL THEN
-    jEmail := jsonb_build_array(pEmail);
+    jEmail := jsonb_build_object('default', pEmail);
   END IF;
 
   nClient := CreateClient(null, GetType(pType || '.client'), pUserName, nUserId, jPhone, jEmail, pInfo, pDescription);
@@ -273,7 +356,7 @@ $$ LANGUAGE SQL
  * @return {session} - Сессия
  */
 CREATE OR REPLACE FUNCTION api.current_session()
-RETURNS	session
+RETURNS     SETOF session
 AS $$
   SELECT * FROM session WHERE key = current_session()
 $$ LANGUAGE SQL
@@ -288,7 +371,7 @@ $$ LANGUAGE SQL
  * @return {users} - Учётная запись пользователя
  */
 CREATE OR REPLACE FUNCTION api.current_user (
-) RETURNS	users
+) RETURNS   SETOF users
 AS $$
   SELECT * FROM users WHERE id = current_userid()
 $$ LANGUAGE SQL
@@ -337,7 +420,7 @@ $$ LANGUAGE plpgsql
  * @return {area} - Зона
  */
 CREATE OR REPLACE FUNCTION api.current_area (
-) RETURNS	area
+) RETURNS	SETOF area
 AS $$
   SELECT * FROM area WHERE id = current_area();
 $$ LANGUAGE SQL
@@ -355,10 +438,10 @@ $$ LANGUAGE SQL
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.set_area (
-  pArea	numeric,
+  pArea	        numeric,
   OUT result	boolean,
   OUT message	text
-) RETURNS 	record
+) RETURNS 	    record
 AS $$
 BEGIN
   IF current_session() IS NULL THEN
@@ -384,7 +467,7 @@ $$ LANGUAGE plpgsql
  * @return {interface} - Интерфейс
  */
 CREATE OR REPLACE FUNCTION api.current_interface (
-) RETURNS 	interface
+) RETURNS 	SETOF interface
 AS $$
   SELECT * FROM interface WHERE id = current_interface();
 $$ LANGUAGE SQL
@@ -512,7 +595,7 @@ $$ LANGUAGE plpgsql
  * @return {language} - Язык
  */
 CREATE OR REPLACE FUNCTION api.current_language (
-) RETURNS 	language
+) RETURNS 	SETOF language
 AS $$
   SELECT * FROM language WHERE id = current_language();
 $$ LANGUAGE SQL
@@ -535,9 +618,17 @@ CREATE OR REPLACE FUNCTION api.set_language (
   OUT message	text
 ) RETURNS 	    record
 AS $$
+DECLARE
+  nId           numeric;
 BEGIN
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
+  END IF;
+
+  SELECT id INTO nId FROM language WHERE id = pLang;
+
+  IF NOT FOUND THEN
+    PERFORM ObjectNotFound('язык', 'id', pLang);
   END IF;
 
   PERFORM SetLanguage(pLang);
@@ -562,17 +653,30 @@ $$ LANGUAGE plpgsql
  * @return {record}
  */
 CREATE OR REPLACE FUNCTION api.set_language (
-  pCode 	    text default 'ru',
+  pCode 	    text DEFAULT 'ru',
   OUT result	boolean,
   OUT message	text
 ) RETURNS 	    record
 AS $$
+DECLARE
+  arCodes	    text[];
+  r		        record;
 BEGIN
   IF current_session() IS NULL THEN
     PERFORM LoginFailed();
   END IF;
 
-  PERFORM SetLanguage(pCode);
+  FOR r IN SELECT code FROM db.language
+  LOOP
+    arCodes := array_append(arCodes, r.code);
+  END LOOP;
+
+  IF array_position(arCodes, pCode::text) IS NULL THEN
+    PERFORM IncorrectCode(pCode, arCodes);
+  END IF;
+
+  PERFORM SetLanguage(GetLanguage(pCode));
+
   SELECT * INTO result, message FROM result_success();
 EXCEPTION
 WHEN others THEN
@@ -605,10 +709,10 @@ GRANT SELECT ON api.event_log TO daemon;
  * @return {SETOF api.event_log} - Записи
  */
 CREATE OR REPLACE FUNCTION api.event_log (
-  pType		    char default null,
-  pCode		    numeric default null,
-  pDateFrom	    timestamp default null,
-  pDateTo	    timestamp default null
+  pType		    char DEFAULT null,
+  pCode		    numeric DEFAULT null,
+  pDateFrom	    timestamp DEFAULT null,
+  pDateTo	    timestamp DEFAULT null
 ) RETURNS	    SETOF api.event_log
 AS $$
   SELECT *
@@ -677,9 +781,9 @@ CREATE OR REPLACE FUNCTION api.add_user (
   pUserName     varchar,
   pPassword     text,
   pFullName     text,
-  pPhone        text default null,
-  pEmail        text default null,
-  pDescription  text default null,
+  pPhone        text DEFAULT null,
+  pEmail        text DEFAULT null,
+  pDescription  text DEFAULT null,
   OUT id        numeric,
   OUT result    boolean,
   OUT message   text
@@ -798,7 +902,7 @@ $$ LANGUAGE plpgsql
  * @return {SETOF users} - Учётная запись пользователя
  */
 CREATE OR REPLACE FUNCTION api.get_user (
-  pId		numeric default current_userid()
+  pId		numeric DEFAULT current_userid()
 ) RETURNS	SETOF users
 AS $$
 DECLARE
@@ -809,7 +913,7 @@ BEGIN
   END IF;
 
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole(1000) THEN
+    IF NOT IsUserRole(1001) THEN
       IF coalesce(pId, current_userid()) <> current_userid() THEN
         PERFORM AccessDenied();
       END IF;
@@ -835,7 +939,7 @@ $$ LANGUAGE plpgsql
  * @return {SETOF users} - Учётные записи пользователей
  */
 CREATE OR REPLACE FUNCTION api.list_user (
-  pId		numeric default null
+  pId		numeric DEFAULT null
 ) RETURNS	SETOF users
 AS $$
 DECLARE
@@ -846,7 +950,7 @@ BEGIN
   END IF;
 
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole(1000) THEN
+    IF NOT IsUserRole(1001) THEN
       IF coalesce(pId, current_userid()) <> current_userid() THEN
         PERFORM AccessDenied();
       END IF;
@@ -912,7 +1016,7 @@ $$ LANGUAGE plpgsql
  * @return {record} - Группы
  */
 CREATE OR REPLACE FUNCTION api.user_member (
-  pUserId		    numeric default current_userid(),
+  pUserId		    numeric DEFAULT current_userid(),
   OUT id		    numeric,
   OUT username		varchar,
   OUT fullname		text,
@@ -935,7 +1039,7 @@ $$ LANGUAGE SQL
  * @return {record} - Группы
  */
 CREATE OR REPLACE FUNCTION api.member_user (
-  pUserId           numeric default current_userid(),
+  pUserId           numeric DEFAULT current_userid(),
   OUT id            numeric,
   OUT username      varchar,
   OUT fullname      text,
@@ -1095,7 +1199,7 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION api.add_group (
   pGroupName	varchar,
   pFullName     text,
-  pDescription  text default null,
+  pDescription  text DEFAULT null,
   OUT id        numeric,
   OUT result    boolean,
   OUT message   text
@@ -1308,7 +1412,7 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION api.group_member_del (
   pGroup		numeric,
-  pMember		numeric default null,
+  pMember		numeric DEFAULT null,
   OUT result    boolean,
   OUT message   text
 ) RETURNS 		record
@@ -1372,7 +1476,7 @@ $$ LANGUAGE SQL
  * @return {record} - Группы
  */
 CREATE OR REPLACE FUNCTION api.member_group (
-  pUserId		    numeric default current_userid(),
+  pUserId		    numeric DEFAULT current_userid(),
   OUT id		    numeric,
   OUT username		varchar,
   OUT fullname		text,
@@ -1413,7 +1517,7 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION api.is_user_role (
   pRole         numeric,
-  pUser         numeric default session_userid(),
+  pUser         numeric DEFAULT current_userid(),
   OUT result    boolean,
   OUT message   text
 ) RETURNS       record
@@ -1440,7 +1544,7 @@ $$ LANGUAGE plpgsql
 
 CREATE OR REPLACE FUNCTION api.is_user_role (
   pRole         text,
-  pUser         text default session_username(),
+  pUser         text DEFAULT session_username(),
   OUT result    boolean,
   OUT message   text
 ) RETURNS       record
@@ -1516,7 +1620,7 @@ CREATE OR REPLACE FUNCTION api.add_area (
   pType         numeric,
   pCode         varchar,
   pName         varchar,
-  pDescription  text default null,
+  pDescription  text DEFAULT null,
   OUT id        numeric,
   OUT result	boolean,
   OUT message	text
@@ -1559,13 +1663,13 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION api.update_area (
   pId			    numeric,
-  pParent		    numeric default null,
-  pType			    numeric default null,
-  pCode			    varchar default null,
-  pName			    varchar default null,
-  pDescription		text default null,
-  pValidFromDate	timestamptz default null,
-  pValidToDate		timestamptz default null,
+  pParent		    numeric DEFAULT null,
+  pType			    numeric DEFAULT null,
+  pCode			    varchar DEFAULT null,
+  pName			    varchar DEFAULT null,
+  pDescription		text DEFAULT null,
+  pValidFromDate	timestamptz DEFAULT null,
+  pValidToDate		timestamptz DEFAULT null,
   OUT id		    numeric,
   OUT result		boolean,
   OUT message		text
@@ -1737,7 +1841,7 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION api.area_member_del (
   pArea		    numeric,
-  pMember		numeric default null,
+  pMember		numeric DEFAULT null,
   OUT result    boolean,
   OUT message   text
 ) RETURNS 		record
@@ -1808,7 +1912,7 @@ $$ LANGUAGE SQL
  * @return {record} - Данные зоны
  */
 CREATE OR REPLACE FUNCTION api.member_area (
-  pUserId		numeric default current_userid()
+  pUserId		numeric DEFAULT current_userid()
 ) RETURNS		SETOF api.area
 AS $$
   SELECT *
@@ -1856,7 +1960,7 @@ GRANT SELECT ON api.interface TO daemon;
  */
 CREATE OR REPLACE FUNCTION api.add_interface (
   pName		    varchar,
-  pDescription	text default null,
+  pDescription	text DEFAULT null,
   OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
@@ -1895,7 +1999,7 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION api.update_interface (
   pId		    numeric,
   pName		    varchar,
-  pDescription	text default null,
+  pDescription	text DEFAULT null,
   OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
@@ -2052,7 +2156,7 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION api.interface_member_del (
   pInterface	numeric,
-  pMember		numeric default null,
+  pMember		numeric DEFAULT null,
   OUT result	boolean,
   OUT message	text
 ) RETURNS 		record
@@ -2123,7 +2227,7 @@ $$ LANGUAGE SQL
  * @return {record} - Данные интерфейса
  */
 CREATE OR REPLACE FUNCTION api.member_interface (
-  pUserId		numeric default current_userid()
+  pUserId		numeric DEFAULT current_userid()
 ) RETURNS		SETOF api.interface
 AS $$
   SELECT *
@@ -2661,11 +2765,11 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION CreateApiSql (
   pScheme       text,
   pTable        text,
-  pSearch       jsonb default null,
-  pFilter       jsonb default null,
-  pLimit        integer default null,
-  pOffSet       integer default null,
-  pOrderBy      jsonb default null
+  pSearch       jsonb DEFAULT null,
+  pFilter       jsonb DEFAULT null,
+  pLimit        integer DEFAULT null,
+  pOffSet       integer DEFAULT null,
+  pOrderBy      jsonb DEFAULT null
 ) RETURNS       text
 AS $$
 DECLARE
@@ -2873,7 +2977,7 @@ CREATE OR REPLACE FUNCTION api.add_class (
   pType		    numeric,
   pCode		    varchar,
   pLabel	    text,
-  pAbstract	    boolean default true,
+  pAbstract	    boolean DEFAULT true,
   OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
@@ -2918,7 +3022,7 @@ CREATE OR REPLACE FUNCTION api.update_class (
   pType		    numeric,
   pCode		    varchar,
   pLabel	    text,
-  pAbstract	    boolean default true,
+  pAbstract	    boolean DEFAULT true,
   OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
@@ -3121,11 +3225,11 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION api.update_state (
   pId		    numeric,
-  pClass	    numeric default null,
-  pType		    numeric default null,
-  pCode		    varchar default null,
-  pLabel	    text default null,
-  pSequence	    integer default null,
+  pClass	    numeric DEFAULT null,
+  pType		    numeric DEFAULT null,
+  pCode		    varchar DEFAULT null,
+  pLabel	    text DEFAULT null,
+  pSequence	    integer DEFAULT null,
   OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
@@ -3324,14 +3428,14 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION api.update_method (
   pId		    numeric,
-  pParent	    numeric default null,
-  pClass	    numeric default null,
-  pState	    numeric default null,
-  pAction	    numeric default null,
-  pCode		    varchar default null,
-  pLabel	    text default null,
-  pSequence	    integer default null,
-  pVisible	    boolean default null,
+  pParent	    numeric DEFAULT null,
+  pClass	    numeric DEFAULT null,
+  pState	    numeric DEFAULT null,
+  pAction	    numeric DEFAULT null,
+  pCode		    varchar DEFAULT null,
+  pLabel	    text DEFAULT null,
+  pSequence	    integer DEFAULT null,
+  pVisible	    boolean DEFAULT null,
   OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
@@ -3409,8 +3513,8 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION api.get_method (
   pClass		    numeric,
-  pState		    numeric default null,
-  pAction		    numeric default null,
+  pState		    numeric DEFAULT null,
+  pAction		    numeric DEFAULT null,
   OUT id		    numeric,
   OUT parent		numeric,
   OUT action		numeric,
@@ -3534,9 +3638,9 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION api.update_transition (
   pId		    numeric,
-  pState	    numeric default null,
-  pMethod	    numeric default null,
-  pNewState	    numeric default null,
+  pState	    numeric DEFAULT null,
+  pMethod	    numeric DEFAULT null,
+  pNewState	    numeric DEFAULT null,
   OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
@@ -3713,13 +3817,13 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION api.update_event (
   pId		    numeric,
-  pClass	    numeric default null,
-  pType		    numeric default null,
-  pAction	    numeric default null,
-  pLabel	    text default null,
-  pText		    text default null,
-  pSequence	    integer default null,
-  pEnabled	    boolean default null,
+  pClass	    numeric DEFAULT null,
+  pType		    numeric DEFAULT null,
+  pAction	    numeric DEFAULT null,
+  pLabel	    text DEFAULT null,
+  pText		    text DEFAULT null,
+  pSequence	    integer DEFAULT null,
+  pEnabled	    boolean DEFAULT null,
   OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
@@ -3811,7 +3915,7 @@ $$ LANGUAGE SQL
 CREATE OR REPLACE FUNCTION api.run_action (
   pObject	    numeric,
   pAction	    numeric,
-  pForm		    jsonb default null,
+  pForm		    jsonb DEFAULT null,
   OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
@@ -3870,7 +3974,7 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION api.run_action (
   pObject	    numeric,
   pCode		    varchar,
-  pForm		    jsonb default null,
+  pForm		    jsonb DEFAULT null,
   OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
@@ -3919,7 +4023,7 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION api.run_method (
   pObject	    numeric,
   pMethod	    numeric,
-  pForm		    jsonb default null,
+  pForm		    jsonb DEFAULT null,
   OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
@@ -4055,7 +4159,7 @@ CREATE OR REPLACE FUNCTION api.add_type (
   pClass	    numeric,
   pCode		    varchar,
   pName		    varchar,
-  pDescription	text default null,
+  pDescription	text DEFAULT null,
   OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
@@ -4095,10 +4199,10 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION api.update_type (
   pId		    numeric,
-  pClass	    numeric default null,
-  pCode		    varchar default null,
-  pName		    varchar default null,
-  pDescription	text default null,
+  pClass	    numeric DEFAULT null,
+  pCode		    varchar DEFAULT null,
+  pName		    varchar DEFAULT null,
+  pDescription	text DEFAULT null,
   OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
@@ -4367,11 +4471,11 @@ $$ LANGUAGE SQL
  * @return {SETOF api.object_file}
  */
 CREATE OR REPLACE FUNCTION api.list_object_file (
-  pSearch	jsonb default null,
-  pFilter	jsonb default null,
-  pLimit	integer default null,
-  pOffSet	integer default null,
-  pOrderBy	jsonb default null
+  pSearch	jsonb DEFAULT null,
+  pFilter	jsonb DEFAULT null,
+  pLimit	integer DEFAULT null,
+  pOffSet	integer DEFAULT null,
+  pOrderBy	jsonb DEFAULT null
 ) RETURNS	SETOF api.object_file
 AS $$
 BEGIN
@@ -4626,11 +4730,11 @@ $$ LANGUAGE SQL
  * @return {SETOF api.object_data}
  */
 CREATE OR REPLACE FUNCTION api.list_object_data (
-  pSearch	jsonb default null,
-  pFilter	jsonb default null,
-  pLimit	integer default null,
-  pOffSet	integer default null,
-  pOrderBy	jsonb default null
+  pSearch	jsonb DEFAULT null,
+  pFilter	jsonb DEFAULT null,
+  pLimit	integer DEFAULT null,
+  pOffSet	integer DEFAULT null,
+  pOrderBy	jsonb DEFAULT null
 ) RETURNS	SETOF api.object_data
 AS $$
 BEGIN
@@ -4781,11 +4885,11 @@ BEGIN
           PERFORM DeleteObjectCoordinates(r.id);
         ELSE
           PERFORM EditObjectCoordinates(r.id, pObject, r.code, r.name, r.latitude, r.longitude, r.accuracy, r.description);
-          PERFORM EditObjectData(nDataId, pObject, nType, 'geo',pCoordinates::text);
+          PERFORM EditObjectData(nDataId, pObject, nType, 'geo', pCoordinates::text);
         END IF;
       ELSE
         nId := AddObjectCoordinates(pObject, r.code, r.name, r.latitude, r.longitude, r.accuracy, r.description);
-        nDataId := AddObjectData(pObject, nType, 'geo',pCoordinates::text);
+        nDataId := AddObjectData(pObject, nType, 'geo', pCoordinates::text);
       END IF;
     END LOOP;
 
@@ -4880,11 +4984,11 @@ $$ LANGUAGE SQL
  * @return {SETOF api.object_coordinates}
  */
 CREATE OR REPLACE FUNCTION api.list_object_coordinates (
-  pSearch	jsonb default null,
-  pFilter	jsonb default null,
-  pLimit	integer default null,
-  pOffSet	integer default null,
-  pOrderBy	jsonb default null
+  pSearch	jsonb DEFAULT null,
+  pFilter	jsonb DEFAULT null,
+  pLimit	integer DEFAULT null,
+  pOffSet	integer DEFAULT null,
+  pOrderBy	jsonb DEFAULT null
 ) RETURNS	SETOF api.object_coordinates
 AS $$
 BEGIN
@@ -5043,7 +5147,7 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION api.set_object_address (
   pObject	    numeric,
   pAddress	    numeric,
-  pDateFrom	    timestamp default oper_date(),
+  pDateFrom	    timestamp DEFAULT oper_date(),
   OUT id        numeric,
   OUT result	boolean,
   OUT message	text
@@ -5097,11 +5201,11 @@ $$ LANGUAGE SQL
  * @return {SETOF api.object_address}
  */
 CREATE OR REPLACE FUNCTION api.list_object_address (
-  pSearch	jsonb default null,
-  pFilter	jsonb default null,
-  pLimit	integer default null,
-  pOffSet	integer default null,
-  pOrderBy	jsonb default null
+  pSearch	jsonb DEFAULT null,
+  pFilter	jsonb DEFAULT null,
+  pLimit	integer DEFAULT null,
+  pOffSet	integer DEFAULT null,
+  pOrderBy	jsonb DEFAULT null
 ) RETURNS	SETOF api.object_address
 AS $$
 BEGIN
@@ -5544,10 +5648,10 @@ CREATE OR REPLACE FUNCTION api.add_client (
   pCode         varchar,
   pUserId       numeric,
   pName         jsonb,
-  pPhone        jsonb default null,
-  pEmail        jsonb default null,
-  pInfo         jsonb default null,
-  pDescription  text default null,
+  pPhone        jsonb DEFAULT null,
+  pEmail        jsonb DEFAULT null,
+  pInfo         jsonb DEFAULT null,
+  pDescription  text DEFAULT null,
   OUT id        numeric,
   OUT result    boolean,
   OUT message   text
@@ -5622,10 +5726,10 @@ CREATE OR REPLACE FUNCTION api.update_client (
   pCode         varchar,
   pUserId       numeric,
   pName         jsonb,
-  pPhone        jsonb default null,
-  pEmail        jsonb default null,
-  pInfo         jsonb default null,
-  pDescription  text default null,
+  pPhone        jsonb DEFAULT null,
+  pEmail        jsonb DEFAULT null,
+  pInfo         jsonb DEFAULT null,
+  pDescription  text DEFAULT null,
   OUT id        numeric,
   OUT result	boolean,
   OUT message	text
@@ -5711,11 +5815,11 @@ $$ LANGUAGE SQL
  * @return {SETOF api.client} - Клиенты
  */
 CREATE OR REPLACE FUNCTION api.list_client (
-  pSearch	jsonb default null,
-  pFilter	jsonb default null,
-  pLimit	integer default null,
-  pOffSet	integer default null,
-  pOrderBy	jsonb default null
+  pSearch	jsonb DEFAULT null,
+  pFilter	jsonb DEFAULT null,
+  pLimit	integer DEFAULT null,
+  pOffSet	integer DEFAULT null,
+  pOrderBy	jsonb DEFAULT null
 ) RETURNS	SETOF api.client
 AS $$
 BEGIN
@@ -7041,7 +7145,7 @@ CREATE OR REPLACE FUNCTION api.add_calendar (
   pWorkCount    interval,
   pRestStart    interval,
   pRestCount    interval,
-  pDescription  text default null,
+  pDescription  text DEFAULT null,
   OUT id        numeric,
   OUT result    boolean,
   OUT message   text
@@ -7112,16 +7216,16 @@ $$ LANGUAGE plpgsql
  */
 CREATE OR REPLACE FUNCTION api.update_calendar (
   pId		    numeric,
-  pCode		    varchar default null,
-  pName		    varchar default null,
-  pWeek		    numeric default null,
-  pDayOff	    jsonb default null,
-  pHoliday	    jsonb default null,
-  pWorkStart	interval default null,
-  pWorkCount    interval default null,
-  pRestStart	interval default null,
-  pRestCount    interval default null,
-  pDescription	text default null,
+  pCode		    varchar DEFAULT null,
+  pName		    varchar DEFAULT null,
+  pWeek		    numeric DEFAULT null,
+  pDayOff	    jsonb DEFAULT null,
+  pHoliday	    jsonb DEFAULT null,
+  pWorkStart	interval DEFAULT null,
+  pWorkCount    interval DEFAULT null,
+  pRestStart	interval DEFAULT null,
+  pRestCount    interval DEFAULT null,
+  pDescription	text DEFAULT null,
   OUT id	    numeric,
   OUT result	boolean,
   OUT message	text
@@ -7205,11 +7309,11 @@ $$ LANGUAGE SQL
  * @return {SETOF api.calendar} - Календари
  */
 CREATE OR REPLACE FUNCTION api.list_calendar (
-  pSearch	jsonb default null,
-  pFilter	jsonb default null,
-  pLimit	integer default null,
-  pOffSet	integer default null,
-  pOrderBy	jsonb default null
+  pSearch	jsonb DEFAULT null,
+  pFilter	jsonb DEFAULT null,
+  pLimit	integer DEFAULT null,
+  pOffSet	integer DEFAULT null,
+  pOrderBy	jsonb DEFAULT null
 ) RETURNS	SETOF api.calendar
 AS $$
 BEGIN
@@ -7236,7 +7340,7 @@ CREATE OR REPLACE FUNCTION api.fill_calendar (
   pCalendar     numeric,
   pDateFrom     date,
   pDateTo       date,
-  pUserId       numeric default null,
+  pUserId       numeric DEFAULT null,
   OUT result	boolean,
   OUT message	text
 ) RETURNS 	    record
@@ -7294,7 +7398,7 @@ CREATE OR REPLACE FUNCTION api.list_calendar_date (
   pCalendar	numeric,
   pDateFrom	date,
   pDateTo	date,
-  pUserId	numeric default null
+  pUserId	numeric DEFAULT null
 ) RETURNS	SETOF api.calendar_date
 AS $$
   SELECT * FROM calendar_date(pCalendar, coalesce(pDateFrom, date_trunc('year', now())::date), coalesce(pDateTo, (date_trunc('year', now()) + INTERVAL '1 year' - INTERVAL '1 day')::date), pUserId) ORDER BY date;
@@ -7317,14 +7421,14 @@ CREATE OR REPLACE FUNCTION api.list_calendar_user (
   pCalendar	numeric,
   pDateFrom	date,
   pDateTo	date,
-  pUserId	numeric default null
+  pUserId	numeric DEFAULT null
 ) RETURNS	SETOF api.calendar_date
 AS $$
-  SELECT * 
-    FROM calendar_date 
-   WHERE calendar = pCalendar 
-     AND (date >= coalesce(pDateFrom, date_trunc('year', now())::date) AND 
-          date <= coalesce(pDateTo, (date_trunc('year', now()) + INTERVAL '1 year' - INTERVAL '1 day')::date)) 
+  SELECT *
+    FROM calendar_date
+   WHERE calendar = pCalendar
+     AND (date >= coalesce(pDateFrom, date_trunc('year', now())::date) AND
+          date <= coalesce(pDateTo, (date_trunc('year', now()) + INTERVAL '1 year' - INTERVAL '1 day')::date))
      AND userid = coalesce(pUserId, userid)
 $$ LANGUAGE SQL
    SECURITY DEFINER
@@ -7343,7 +7447,7 @@ $$ LANGUAGE SQL
 CREATE OR REPLACE FUNCTION api.get_calendar_date (
   pCalendar	numeric,
   pDate		date,
-  pUserId	numeric default null
+  pUserId	numeric DEFAULT null
 ) RETURNS	api.calendar_date
 AS $$
   SELECT * FROM calendar_date(pCalendar, pDate, pDate, pUserId);
@@ -7372,12 +7476,12 @@ $$ LANGUAGE SQL
 CREATE OR REPLACE FUNCTION api.set_calendar_date (
   pCalendar     numeric,
   pDate         date,
-  pFlag         bit default null,
-  pWorkStart	interval default null,
-  pWorkCount	interval default null,
-  pRestStart	interval default null,
-  pRestCount	interval default null,
-  pUserId       numeric default null,
+  pFlag         bit DEFAULT null,
+  pWorkStart	interval DEFAULT null,
+  pWorkCount	interval DEFAULT null,
+  pRestStart	interval DEFAULT null,
+  pRestCount	interval DEFAULT null,
+  pUserId       numeric DEFAULT null,
   OUT id        numeric,
   OUT result	boolean,
   OUT message	text
@@ -7435,7 +7539,7 @@ $$ LANGUAGE plpgsql
 CREATE OR REPLACE FUNCTION api.del_calendar_date (
   pCalendar     numeric,
   pDate         date,
-  pUserId       numeric default null,
+  pUserId       numeric DEFAULT null,
   OUT id        numeric,
   OUT result	boolean,
   OUT message	text

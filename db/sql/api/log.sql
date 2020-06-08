@@ -54,7 +54,7 @@ BEGIN
     SELECT username INTO vUserName FROM db.user WHERE id = nUserId;
   END IF;
 
-  IF lower(pRoute) = '/login' THEN
+  IF lower(pRoute) = '/sign/in' THEN
     pJson := pJson - 'password';
   END IF;
 
@@ -137,7 +137,7 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE VIEW ApiLog (Id, DateTime, UserName, ApiSession, ApiUserName,
-  Route, JSON, RunTime, EventId, Error) 
+  Path, JSON, RunTime, EventId, Error)
 AS
   SELECT al.id, al.datetime, al.username, al.api_session, al.api_username,
          al.route, al.json, round(extract(second from runtime)::numeric, 3), al.eventid, el.text

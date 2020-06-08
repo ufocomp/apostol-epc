@@ -10,7 +10,7 @@ DECLARE
   nEssence		numeric;
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole(1000) THEN
+    IF NOT IsUserRole(1001) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
@@ -167,7 +167,7 @@ DECLARE
   rec_class	record;
 BEGIN
   IF session_user <> 'kernel' THEN
-    IF NOT IsUserRole(1000) THEN
+    IF NOT IsUserRole(1001) THEN
       PERFORM AccessDenied();
     END IF;
   END IF;
