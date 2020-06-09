@@ -976,11 +976,16 @@ namespace Apostol {
             SQL.Add(CString());
 
             if (Path == "/sign/in") {
-                SignIn(AConnection, Payload, Agent, Host);
-                return;
+                SQL.Add(CString().Format("SELECT * FROM daemon.SignIn('%s'::jsonb, %s, %s);",
+                                         Payload.IsEmpty() ? "{}" : Payload.c_str(),
+                                         PQQuoteLiteral(Agent).c_str(),
+                                         PQQuoteLiteral(Host).c_str()
+                ));
             } else if (Path == "/sign/up") {
-                SignUp(AConnection, Payload);
-                return;
+                SQL.Add(CString().Format("SELECT * FROM daemon.SignUp('admin', %s, '%s'::jsonb);",
+                                         m_Password.c_str(),
+                                         Payload.IsEmpty() ? "{}" : Payload.c_str()
+                ));
             } else {
                 SQL.Last().Format("SELECT * FROM daemon.SignFetch(%s, '%s'::json, %s, %s, %s, %s, %s, INTERVAL '%d milliseconds');",
                                   PQQuoteLiteral(Path).c_str(),
