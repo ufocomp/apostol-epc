@@ -973,7 +973,6 @@ namespace Apostol {
                 const CString &Host, long int ReceiveWindow) {
 
             CStringList SQL;
-            SQL.Add(CString());
 
             if (Path == "/sign/in") {
                 SQL.Add(CString().Format("SELECT * FROM daemon.SignIn('%s'::jsonb, %s, %s);",
@@ -987,16 +986,16 @@ namespace Apostol {
                                          Payload.IsEmpty() ? "{}" : Payload.c_str()
                 ));
             } else {
-                SQL.Last().Format("SELECT * FROM daemon.SignFetch(%s, '%s'::json, %s, %s, %s, %s, %s, INTERVAL '%d milliseconds');",
-                                  PQQuoteLiteral(Path).c_str(),
-                                  Payload.IsEmpty() ? "{}" : Payload.c_str(),
-                                  PQQuoteLiteral(Session).c_str(),
-                                  PQQuoteLiteral(Nonce).c_str(),
-                                  PQQuoteLiteral(Signature).c_str(),
-                                  PQQuoteLiteral(Agent).c_str(),
-                                  PQQuoteLiteral(Host).c_str(),
-                                  ReceiveWindow
-                );
+                SQL.Add(CString().Format("SELECT * FROM daemon.SignFetch(%s, '%s'::json, %s, %s, %s, %s, %s, INTERVAL '%d milliseconds');",
+                                         PQQuoteLiteral(Path).c_str(),
+                                         Payload.IsEmpty() ? "{}" : Payload.c_str(),
+                                         PQQuoteLiteral(Session).c_str(),
+                                         PQQuoteLiteral(Nonce).c_str(),
+                                         PQQuoteLiteral(Signature).c_str(),
+                                         PQQuoteLiteral(Agent).c_str(),
+                                         PQQuoteLiteral(Host).c_str(),
+                                         ReceiveWindow
+                ));
             }
 
             AConnection->Data().Values("signature", "true");
