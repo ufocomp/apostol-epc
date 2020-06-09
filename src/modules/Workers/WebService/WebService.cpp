@@ -1343,7 +1343,7 @@ namespace Apostol {
                 lpSession->IP() = GetHost(AConnection);
                 lpSession->Agent() = GetUserAgent(AConnection);
 
-                if (LAuthorization.IsEmpty())
+                if (!LAuthorization.IsEmpty())
                     lpSession->Authorization() << LAuthorization;
 
 #if defined(_GLIBCXX_RELEASE) && (_GLIBCXX_RELEASE >= 9)
