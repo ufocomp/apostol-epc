@@ -141,54 +141,6 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        void CWebService::PQResultToList(CPQResult *Result, CStringList &List) {
-            for (int Row = 0; Row < Result->nTuples(); ++Row) {
-                List.Add(Result->GetValue(Row, 0));
-            }
-        }
-        //--------------------------------------------------------------------------------------------------------------
-
-        void CWebService::ListToJson(const CStringList &List, CString &Json) {
-            if (List.Count() > 1)
-                Json = _T("[");
-
-            for (int i = 0; i < List.Count(); ++i) {
-                const auto& Line = List[i];
-                if (!Line.IsEmpty()) {
-                    if (i > 0)
-                        Json += _T(",");
-                    Json += Line;
-                }
-            }
-
-            if (List.Count() > 1)
-                Json += _T("]");
-        }
-        //--------------------------------------------------------------------------------------------------------------
-
-        void CWebService::PQResultToJson(CPQResult *Result, CString &Json) {
-
-            if (Result->nTuples() == 0) {
-                Json = _T("{}");
-                return;
-            }
-
-            if (Result->nTuples() > 1)
-                Json = _T("[");
-
-            for (int Row = 0; Row < Result->nTuples(); ++Row) {
-                if (!Result->GetIsNull(Row, 0)) {
-                    if (Row > 0)
-                        Json += _T(",");
-                    Json += Result->GetValue(Row, 0);
-                }
-            }
-
-            if (Result->nTuples() > 1)
-                Json += _T("]");
-        }
-        //--------------------------------------------------------------------------------------------------------------
-
         void CWebService::AfterQueryWS(CHTTPServerConnection *AConnection, const CString &Path, const CJSON &Payload) {
 
             auto lpSession = CSession::FindOfConnection(AConnection);
@@ -362,6 +314,9 @@ namespace Apostol {
 
             if (LConnection != nullptr) {
 
+                const auto& Path = LConnection->Data()["path"].Lower();
+                const auto IsArray = Path.Find(_T("/list")) != CString::npos;
+
                 if (LConnection->Protocol() == pWebSocket ) {
 
                     auto LWSRequest = LConnection->WSRequest();
@@ -377,7 +332,7 @@ namespace Apostol {
 
                     try {
                         CString jsonString;
-                        PQResultToJson(LResult, jsonString);
+                        PQResultToJson(LResult, jsonString, IsArray);
 
                         wsmResponse.Payload << jsonString;
                         AfterQueryWS(LConnection, wsmRequest.Action, wsmResponse.Payload);
@@ -403,7 +358,6 @@ namespace Apostol {
                     auto LReply = LConnection->Reply();
 
                     const auto& LGrandType = LConnection->Data()["grant_type"];
-                    const auto& LPath = LConnection->Data()["path"];
 
                     CReply::CStatusType LStatus = CReply::internal_server_error;
 
@@ -422,13 +376,13 @@ namespace Apostol {
                                 if (List.Count() == 0) {
                                     LReply->Content =_T("{}");
                                 } else {
-                                    ListToJson(List, LReply->Content);
-                                    AfterQuery(LReply, LPath, LReply->Content);
+                                    ListToJson(List, LReply->Content, IsArray);
+                                    AfterQuery(LReply, Path, LReply->Content);
                                 }
                             }
                         } else {
-                            PQResultToJson(LResult, LReply->Content);
-                            AfterQuery(LReply, LPath, LReply->Content);
+                            PQResultToJson(LResult, LReply->Content, IsArray);
+                            AfterQuery(LReply, Path, LReply->Content);
                             LStatus = CReply::ok;
                         }
                     } catch (Delphi::Exception::Exception &E) {
@@ -448,8 +402,10 @@ namespace Apostol {
                     return;
                 }
 
-                const auto& LGrandType = LConnection->Data()["grant_type"];
-                const auto& LPath = LJob->Data()["path"];
+                const auto& LGrandType = LJob->Data()["grant_type"];
+
+                const auto& Path = LConnection->Data()["path"].Lower();
+                const auto IsArray = Path.Find(_T("/list")) != CString::npos;
 
                 auto LReply = &LJob->Reply();
 
@@ -465,13 +421,13 @@ namespace Apostol {
                             if (List.Count() == 0) {
                                 LReply->Content =_T("{}");
                             } else {
-                                ListToJson(List, LReply->Content);
-                                AfterQuery(LReply, LPath, LReply->Content);
+                                ListToJson(List, LReply->Content, IsArray);
+                                AfterQuery(LReply, Path, LReply->Content);
                             }
                         }
                     } else {
-                        PQResultToJson(LResult, LReply->Content);
-                        AfterQuery(LReply, LPath, LReply->Content);
+                        PQResultToJson(LResult, LReply->Content, IsArray);
+                        AfterQuery(LReply, Path, LReply->Content);
                     }
                 } catch (Delphi::Exception::Exception &E) {
                     LReply->Content.Clear();
@@ -1595,8 +1551,8 @@ namespace Apostol {
         }
         //--------------------------------------------------------------------------------------------------------------
 
-        void CWebService::BeforeExecute(Pointer Data) {
-            CApostolModule::BeforeExecute(Data);
+        void CWebService::Initialization(CModuleProcess *AProcess) {
+            CApostolModule::Initialization(AProcess);
 
             if (m_Password.IsEmpty()) {
                 const auto& connInfo = Config()->PostgresConnInfo();

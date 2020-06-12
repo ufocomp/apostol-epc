@@ -51,11 +51,6 @@ namespace Apostol {
             static void AfterQueryWS(CHTTPServerConnection *AConnection, const CString &Path, const CJSON &Payload);
             static void AfterQuery(CReply *AReply, const CString &Path, const CString &Content);
 
-            static void ListToJson(const CStringList &List, CString &Json);
-
-            static void PQResultToList(CPQResult *Result, CStringList &List);
-            static void PQResultToJson(CPQResult *Result, CString &Json);
-
             void QueryException(CPQPollQuery *APollQuery, const std::exception &e);
 
             void LoadProviders();
@@ -93,7 +88,7 @@ namespace Apostol {
                 return new CWebService(AProcess);
             }
 
-            void BeforeExecute(Pointer Data) override;
+            void Initialization(CModuleProcess *AProcess) override;
 
             void Heartbeat() override;
             void Execute(CHTTPServerConnection *AConnection) override;
